@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
 import { Dashboard } from "@/pages/Dashboard";
 import { PromptLibrary } from "@/pages/PromptLibrary";
+import { PromptDetail } from "@/pages/PromptDetail";
 import { CraftPrompt } from "@/pages/CraftPrompt";
+import { ManualImport } from "@/pages/ManualImport";
+import { Settings } from "@/pages/Settings";
 import { Placeholder } from "@/pages/Placeholder";
 
 const queryClient = new QueryClient({
@@ -23,14 +26,14 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/library" element={<PromptLibrary />} />
-            <Route path="/library/:id" element={<Placeholder title="Prompt Detail" subtitle="FULL PROMPT ASSET" />} />
+            <Route path="/library/:id" element={<PromptDetail />} />
             <Route path="/craft" element={<CraftPrompt />} />
             <Route path="/craft/:id" element={<CraftPrompt />} />
             <Route path="/recipes" element={<Placeholder title="Recipe Library" subtitle="REUSABLE PROMPT STRUCTURES" />} />
-            <Route path="/import" element={<Placeholder title="Manual Import" subtitle="COLLECT EXTERNAL PROMPTS" />} />
-            <Route path="/srefs" element={<Placeholder title="SREF / Profile Library" subtitle="STYLE REFERENCE ASSETS" />} />
+            <Route path="/import" element={<ManualImport />} />
+            <Route path="/srefs" element={<Placeholder title="SREF Library" subtitle="STYLE REFERENCE ASSETS" />} />
             <Route path="/results/:promptId" element={<Placeholder title="Result Review" subtitle="CONNECT OUTPUT TO PROMPT" />} />
-            <Route path="/settings" element={<Placeholder title="Settings" subtitle="APPLICATION CONFIGURATION" />} />
+            <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>
       </BrowserRouter>

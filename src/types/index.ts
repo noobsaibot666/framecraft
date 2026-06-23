@@ -172,27 +172,18 @@ export interface DashboardStats {
   total_prompts: number;
   total_results: number;
   total_recipes: number;
-  total_srefs: number;
-  winners: number;
-  avg_rating: number;
+  total_winners: number;
+  recent_prompts: Prompt[];
+  top_rated: Prompt[];
 }
 
 export interface LibraryFilters {
   provider?: Provider;
   category?: Category;
-  min_rating?: number;
-  max_ai_risk?: number;
-  is_winner?: boolean;
-  is_failed?: boolean;
-  is_recipe?: boolean;
-  tags?: string[];
+  minRating?: number;
+  isWinner?: boolean;
+  isFailed?: boolean;
+  isRecipe?: boolean;
 }
 
-export type SortOption =
-  | "newest"
-  | "oldest"
-  | "rating_high"
-  | "rating_low"
-  | "ai_risk_high"
-  | "ai_risk_low"
-  | "most_used";
+export type SortOption = "newest" | "oldest" | "rating_desc" | "rating_asc" | "most_used";

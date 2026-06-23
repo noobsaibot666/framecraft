@@ -93,66 +93,70 @@
   --duration-panel:  280ms;
 }
 
-/* ─── Base Reset ─────────────────────────────────────────── */
+/* ─── Base (inside @layer so Tailwind utilities can override) */
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
-}
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
 
-body {
-  font-family: var(--font-family-sans);
-  background-color: var(--color-black);
-  color: var(--color-white);
-  min-height: 100vh;
-  overflow: hidden;
-  user-select: none;
-}
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-black);
+    color: var(--color-white);
+    min-height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
 
-/* Allow text selection in specific contexts */
-.selectable,
-textarea,
-input,
-pre,
-code {
-  user-select: text;
-}
+  .selectable,
+  textarea,
+  input,
+  pre,
+  code {
+    user-select: text;
+  }
 
-/* ─── Scrollbar Styling ──────────────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
 
-::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
-}
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 2px;
+  }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-line);
-  border-radius: 2px;
-}
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-dim);
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-dim);
-}
+  :focus-visible {
+    outline: 1px solid rgba(215, 25, 33, 0.6);
+    outline-offset: 2px;
+  }
 
-/* ─── Focus Styles ───────────────────────────────────────── */
-
-:focus-visible {
-  outline: 1px solid rgba(215, 25, 33, 0.6);
-  outline-offset: 2px;
+  #root {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 }
 
 /* ─── Typography Utilities ───────────────────────────────── */
@@ -229,11 +233,3 @@ code {
   background-size: 20px 20px;
 }
 
-/* ─── App Layout ─────────────────────────────────────────── */
-
-#root {
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}

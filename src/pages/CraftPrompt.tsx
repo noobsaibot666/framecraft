@@ -370,8 +370,10 @@ export function CraftPrompt() {
   const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [saving, setSaving] = useState(false);
+  const [savingNewVersion, setSavingNewVersion] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
+  const [originalVersion, setOriginalVersion] = useState(1);
 
   // For editable assembled output
   const [outputOverride, setOutputOverride] = useState<string | null>(null);
@@ -396,6 +398,7 @@ export function CraftPrompt() {
       if (p.aspect_ratio || p.model_version) {
         setMjParams((prev) => ({ ...prev, aspect_ratio: p.aspect_ratio ?? "", model_version: p.model_version ?? "", sref_code: p.style_ref ?? "" }));
       }
+      setOriginalVersion(p.version ?? 1);
       setMode("manual");
     });
   }, [id, getById]);
@@ -447,40 +450,56 @@ export function CraftPrompt() {
     return Object.keys(errs).length === 0;
   };
 
+  const buildData = (asRecipe = false): CreatePromptInput => ({
+    title: fields.title.trim(),
+    description: fields.description || undefined,
+    provider: fields.provider,
+    category: (fields.category as Category) || undefined,
+    use_case: fields.use_case || undefined,
+    prompt_text: assembled,
+    avoidance_text: fields.avoidance_text || undefined,
+    aspect_ratio: mjParams.aspect_ratio || undefined,
+    model_version: mjParams.model_version || undefined,
+    camera: fields.camera || undefined,
+    lens: fields.lens || undefined,
+    lighting: fields.lighting || undefined,
+    tags: fields.tags.length ? fields.tags : undefined,
+    rating: fields.rating,
+    ai_look_risk: fields.ai_look_risk,
+    is_winner: fields.is_winner,
+    is_failed: fields.is_failed,
+    is_recipe: asRecipe,
+    notes: fields.notes || undefined,
+  });
+
   const handleSave = async (asRecipe = false) => {
     if (!validate()) return;
     setSaving(true);
-    const data: CreatePromptInput = {
-      title: fields.title.trim(),
-      description: fields.description || undefined,
-      provider: fields.provider,
-      category: (fields.category as Category) || undefined,
-      use_case: fields.use_case || undefined,
-      prompt_text: assembled,
-      avoidance_text: fields.avoidance_text || undefined,
-      aspect_ratio: mjParams.aspect_ratio || undefined,
-      model_version: mjParams.model_version || undefined,
-      camera: fields.camera || undefined,
-      lens: fields.lens || undefined,
-      lighting: fields.lighting || undefined,
-      tags: fields.tags.length ? fields.tags : undefined,
-      rating: fields.rating,
-      ai_look_risk: fields.ai_look_risk,
-      is_winner: fields.is_winner,
-      is_failed: fields.is_failed,
-      is_recipe: asRecipe,
-      notes: fields.notes || undefined,
-    };
     try {
       if (isEdit && id) {
-        await update(id, data);
+        await update(id, buildData(asRecipe));
         navigate(`/library/${id}`);
       } else {
-        const newId = await create(data);
+        const newId = await create(buildData(asRecipe));
         navigate(`/library/${newId}`);
       }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveNewVersion = async () => {
+    if (!validate()) return;
+    setSavingNewVersion(true);
+    try {
+      const newId = await create({
+        ...buildData(false),
+        parent_id: id,
+        version: originalVersion + 1,
+      });
+      navigate(`/library/${newId}`);
+    } finally {
+      setSavingNewVersion(false);
     }
   };
 
@@ -510,7 +529,7 @@ export function CraftPrompt() {
   return (
     <PageContainer
       title={isEdit ? "Edit Prompt" : "Craft Prompt"}
-      subtitle={isEdit ? "UPDATE EXISTING PROMPT" : "BUILD A PROVIDER-READY PROMPT"}
+      subtitle={isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(isEdit && id ? `/library/${id}` : "/library")}>
@@ -525,9 +544,23 @@ export function CraftPrompt() {
               Save as Recipe
             </Button>
           )}
-          <Button variant="primary" size="md" onClick={() => handleSave(false)} disabled={saving}>
+          {isEdit && (
+            <Button variant="ghost" size="sm" onClick={() => handleSave(false)} disabled={saving || savingNewVersion}>
+              <Save size={10} />
+              {saving ? "Saving…" : "Update"}
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            size="md"
+            onClick={isEdit ? handleSaveNewVersion : () => handleSave(false)}
+            disabled={saving || savingNewVersion}
+          >
             <Save size={11} />
-            {saving ? "Saving…" : isEdit ? "Update" : "Save to Library"}
+            {isEdit
+              ? savingNewVersion ? "Saving…" : `New Version v${originalVersion + 1}`
+              : saving ? "Saving…" : "Save to Library"
+            }
           </Button>
         </div>
       }
@@ -804,14 +837,41 @@ export function CraftPrompt() {
 
           {/* Save */}
           <div className="flex flex-col gap-2">
-            <Button variant="primary" size="md" onClick={() => handleSave(false)} disabled={saving} className="w-full justify-center">
-              <Save size={11} />
-              {saving ? "Saving…" : isEdit ? "Update Prompt" : "Save to Library"}
-            </Button>
-            {!isEdit && (
-              <Button variant="ghost" size="sm" onClick={() => handleSave(true)} disabled={saving} className="w-full justify-center">
-                Save as Recipe
-              </Button>
+            {isEdit ? (
+              <>
+                <Button
+                  variant="primary"
+                  size="md"
+                  onClick={handleSaveNewVersion}
+                  disabled={saving || savingNewVersion}
+                  className="w-full justify-center"
+                >
+                  <Save size={11} />
+                  {savingNewVersion ? "Saving…" : `New Version v${originalVersion + 1}`}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleSave(false)}
+                  disabled={saving || savingNewVersion}
+                  className="w-full justify-center"
+                >
+                  {saving ? "Saving…" : "Overwrite Current"}
+                </Button>
+                <p className="font-mono text-[8px] text-dim/40 text-center leading-relaxed">
+                  New Version saves a copy linked to v{originalVersion}
+                </p>
+              </>
+            ) : (
+              <>
+                <Button variant="primary" size="md" onClick={() => handleSave(false)} disabled={saving} className="w-full justify-center">
+                  <Save size={11} />
+                  {saving ? "Saving…" : "Save to Library"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => handleSave(true)} disabled={saving} className="w-full justify-center">
+                  Save as Recipe
+                </Button>
+              </>
             )}
           </div>
         </div>

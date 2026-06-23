@@ -27,6 +27,12 @@ pub fn run() {
             sql: include_str!("../migrations/004_token_seeds.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "notion_library",
+            sql: include_str!("../migrations/005_notion_library.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

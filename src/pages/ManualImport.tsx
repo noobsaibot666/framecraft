@@ -16,6 +16,7 @@ interface DetectedParams {
   model_version?: string;
   stylize?: string;
   sref?: string;
+  profile?: string;
   chaos?: string;
   quality?: string;
   weird?: string;
@@ -32,6 +33,8 @@ function detectMidjourneyParams(text: string): DetectedParams {
   if (s) params.stylize = s[1];
   const sref = text.match(/--sref\s+(\S+)/);
   if (sref) params.sref = sref[1];
+  const p = text.match(/--p\s+(\S+)/);
+  if (p) params.profile = p[1];
   const chaos = text.match(/--chaos\s+(\d+)/);
   if (chaos) params.chaos = chaos[1];
   const q = text.match(/--q(?:uality)?\s+(\S+)/);
@@ -49,6 +52,7 @@ function stripParams(text: string): string {
     .replace(/--v\s+\S+/g, "")
     .replace(/--s(?:tylize)?\s+\d+/g, "")
     .replace(/--sref\s+\S+/g, "")
+    .replace(/--p\s+\S+/g, "")
     .replace(/--chaos\s+\d+/g, "")
     .replace(/--q(?:uality)?\s+\S+/g, "")
     .replace(/--weird\s+\d+/g, "")
@@ -182,12 +186,22 @@ export function ManualImport() {
     const params = detectMidjourneyParams(raw);
 
     try {
+      const extraParams: Record<string, string> = {};
+      if (params.stylize) extraParams.stylize = params.stylize;
+      if (params.chaos) extraParams.chaos = params.chaos;
+      if (params.quality) extraParams.quality = params.quality;
+      if (params.weird) extraParams.weird = params.weird;
+      if (params.profile) extraParams.profile = params.profile;
+      if (params.no) extraParams.no = params.no;
+
       const id = await create({
         title: title.trim(),
         provider,
         prompt_text: clean || raw,
         aspect_ratio: params.aspect_ratio,
         model_version: params.model_version,
+        style_ref: params.sref,
+        parameters: Object.keys(extraParams).length ? extraParams : undefined,
         tags: tags.length ? tags : undefined,
       });
       navigate(`/library/${id}`);
@@ -271,6 +285,12 @@ export function ManualImport() {
                   <div className="flex items-center gap-1.5">
                     <Badge variant="default">--sref</Badge>
                     <span className="font-mono text-[10px] text-soft-white">{detected.sref}</span>
+                  </div>
+                )}
+                {detected.profile && (
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="default">--p</Badge>
+                    <span className="font-mono text-[10px] text-soft-white">{detected.profile}</span>
                   </div>
                 )}
                 {detected.chaos && (

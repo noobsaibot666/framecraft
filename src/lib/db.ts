@@ -1,4 +1,4 @@
-import type { Prompt, DashboardStats } from "@/types";
+import type { Prompt, DashboardStats, TokenCategory, Token } from "@/types";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -93,6 +93,8 @@ export interface CreatePromptInput {
   camera?: string;
   lens?: string;
   lighting?: string;
+  style_ref?: string;
+  parameters?: Record<string, string>;
   tags?: string[];
   rating?: number;
   ai_look_risk?: number;
@@ -141,9 +143,10 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
       `INSERT INTO prompts
         (id, title, description, provider, category, use_case, prompt_text,
          avoidance_text, aspect_ratio, model_version, camera, lens, lighting,
+         style_ref, parameters,
          tags, rating, ai_look_risk, reuse_potential, is_recipe, is_winner, is_failed,
          failure_notes, notes, version, parent_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,0,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,0,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
       [
         id,
         data.title,
@@ -158,6 +161,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.camera ?? null,
         data.lens ?? null,
         data.lighting ?? null,
+        data.style_ref ?? null,
+        data.parameters ? JSON.stringify(data.parameters) : null,
         data.tags ? JSON.stringify(data.tags) : null,
         data.rating ?? 0,
         data.ai_look_risk ?? 0,
@@ -368,4 +373,69 @@ export async function clearAllData(): Promise<void> {
     return;
   }
   localStorage.removeItem("framecraft_dev");
+}
+
+// ─── Token Library ────────────────────────────────────────────
+
+const STATIC_CATEGORIES: TokenCategory[] = [
+  { id: "subject",     name: "subject",     label: "Subject",              sort_order: 1 },
+  { id: "action",      name: "action",      label: "Action",               sort_order: 2 },
+  { id: "environment", name: "environment", label: "Environment",          sort_order: 3 },
+  { id: "camera",      name: "camera",      label: "Camera",               sort_order: 4 },
+  { id: "lens",        name: "lens",        label: "Lens",                 sort_order: 5 },
+  { id: "composition", name: "composition", label: "Composition",          sort_order: 6 },
+  { id: "lighting",    name: "lighting",    label: "Lighting",             sort_order: 7 },
+  { id: "mood",        name: "mood",        label: "Mood",                 sort_order: 8 },
+  { id: "material",    name: "material",    label: "Material",             sort_order: 9 },
+  { id: "color",       name: "color",       label: "Color",                sort_order: 10 },
+  { id: "realism",     name: "realism",     label: "Realism",              sort_order: 11 },
+  { id: "brand_tone",  name: "brand_tone",  label: "Brand Tone",           sort_order: 12 },
+  { id: "motion",      name: "motion",      label: "Motion",               sort_order: 13 },
+  { id: "avoidance",   name: "avoidance",   label: "Avoidance",            sort_order: 14 },
+  { id: "parameters",  name: "parameters",  label: "Provider Parameters",  sort_order: 15 },
+];
+
+function rowToCategory(row: Record<string, unknown>): TokenCategory {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    label: row.label as string,
+    description: row.description as string | undefined,
+    sort_order: row.sort_order as number,
+  };
+}
+
+function rowToToken(row: Record<string, unknown>): Token {
+  return {
+    id: row.id as string,
+    text: row.text as string,
+    category_id: row.category_id as string,
+    provider: row.provider as Token["provider"] | undefined,
+    use_count: (row.use_count as number) ?? 0,
+    quality_score: (row.quality_score as number) ?? 0,
+    is_builtin: Boolean(row.is_builtin),
+  };
+}
+
+export async function getTokenCategories(): Promise<TokenCategory[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM token_categories ORDER BY sort_order"
+    )) as Record<string, unknown>[];
+    return rows.map(rowToCategory);
+  }
+  return STATIC_CATEGORIES;
+}
+
+export async function getTokensByCategory(categoryId: string): Promise<Token[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM tokens WHERE category_id = $1 ORDER BY use_count DESC, text ASC",
+      [categoryId]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToToken);
+  }
+  return [];
 }

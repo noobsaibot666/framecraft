@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
+import { TokenCloud } from "@/components/ui/TokenCloud";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { cn } from "@/lib/utils";
-import type { Provider, Category } from "@/types";
+import type { Provider, Category, Token } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
-// ─── Field Select ─────────────────────────────────────────────
+// ─── Shared sub-components ────────────────────────────────────
 
 function FieldSelect({
   label,
@@ -30,13 +31,7 @@ function FieldSelect({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={cn(
-            "w-full appearance-none pr-7 h-8 px-3",
-            "font-mono text-[12px] text-white",
-            "bg-dark rounded-sm",
-            "focus:outline-none focus:border-red/50 transition-precise",
-            "cursor-pointer"
-          )}
+          className="w-full appearance-none pr-7 h-8 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise cursor-pointer"
           style={{ border: "1px solid rgba(255,255,255,0.10)" }}
         >
           {options.map((o) => (
@@ -45,16 +40,41 @@ function FieldSelect({
             </option>
           ))}
         </select>
-        <ChevronDown
-          size={10}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none"
-        />
+        <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
       </div>
     </div>
   );
 }
 
-// ─── Rating Picker ────────────────────────────────────────────
+function FieldInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between">
+        <label className="system-label">{label}</label>
+        {hint && <span className="font-mono text-[8px] text-dim/60">{hint}</span>}
+      </div>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
+        style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+      />
+    </div>
+  );
+}
 
 function RatingPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
@@ -68,9 +88,7 @@ function RatingPicker({ value, onChange }: { value: number; onChange: (n: number
             onClick={() => onChange(i + 1 === value ? 0 : i + 1)}
             className={cn(
               "w-4 h-4 rounded-full border transition-precise",
-              i < value
-                ? "bg-white/50 border-white/40"
-                : "bg-transparent border-white/15 hover:border-white/30"
+              i < value ? "bg-white/50 border-white/40" : "bg-transparent border-white/15 hover:border-white/30"
             )}
           />
         ))}
@@ -79,8 +97,6 @@ function RatingPicker({ value, onChange }: { value: number; onChange: (n: number
     </div>
   );
 }
-
-// ─── Risk Slider ──────────────────────────────────────────────
 
 function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const colorClass = value >= 8 ? "text-red" : value >= 6 ? "text-red/70" : value >= 4 ? "text-muted" : "text-dim";
@@ -91,31 +107,22 @@ function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) 
         <span className={cn("font-mono text-[10px]", colorClass)}>{value}/10</span>
       </div>
       <input
-        type="range"
-        min={0}
-        max={10}
-        value={value}
+        type="range" min={0} max={10} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-px cursor-pointer accent-white/60"
-        style={{
-          background: `linear-gradient(to right, rgba(255,255,255,0.4) ${value * 10}%, rgba(255,255,255,0.08) ${value * 10}%)`,
-        }}
+        style={{ background: `linear-gradient(to right, rgba(255,255,255,0.4) ${value * 10}%, rgba(255,255,255,0.08) ${value * 10}%)` }}
       />
     </div>
   );
 }
 
-// ─── Tag Input ────────────────────────────────────────────────
-
 function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
   const [input, setInput] = useState("");
-
   const commit = (raw: string) => {
     const parts = raw.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
     onChange([...new Set([...tags, ...parts])]);
     setInput("");
   };
-
   return (
     <div className="flex flex-col gap-1.5">
       <label className="system-label">TAGS</label>
@@ -124,18 +131,9 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
         style={{ border: "1px solid rgba(255,255,255,0.10)", background: "var(--color-dark)" }}
       >
         {tags.map((tag) => (
-          <span
-            key={tag}
-            className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-1.5 py-0.5 rounded border border-white/10 text-dim"
-          >
+          <span key={tag} className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-1.5 py-0.5 rounded border border-white/10 text-dim">
             {tag}
-            <button
-              type="button"
-              onClick={() => onChange(tags.filter((t) => t !== tag))}
-              className="text-dim/50 hover:text-red transition-precise leading-none"
-            >
-              ×
-            </button>
+            <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="text-dim/50 hover:text-red transition-precise leading-none">×</button>
           </span>
         ))}
         <input
@@ -154,24 +152,153 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   );
 }
 
-// ─── Assemble prompt from builder fields ──────────────────────
+// ─── Provider Parameter Panels ────────────────────────────────
 
-function assemblePrompt(f: {
-  subject: string; environment: string; camera: string; lens: string;
-  lighting: string; mood: string; realism: string;
-  provider: string; aspect_ratio: string; model_version: string;
-  stylize: string; sref_code: string;
-}): string {
+interface MJParams { aspect_ratio: string; model_version: string; stylize: string; chaos: string; weird: string; quality: string; no_prompt: string; sref_code: string; profile: string; }
+interface DalleParams { size: string; quality: string; style: string; }
+interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
+
+const MJ_ASPECT_RATIOS = [
+  { value: "", label: "Select ratio…" },
+  { value: "1:1", label: "1:1 — Square" },
+  { value: "16:9", label: "16:9 — Landscape" },
+  { value: "9:16", label: "9:16 — Portrait" },
+  { value: "4:3", label: "4:3 — Standard" },
+  { value: "3:2", label: "3:2 — Photo" },
+  { value: "2:3", label: "2:3 — Vertical" },
+  { value: "21:9", label: "21:9 — Ultra-wide" },
+  { value: "4:5", label: "4:5 — Instagram" },
+];
+
+const MJ_VERSIONS = [
+  { value: "", label: "Default" },
+  { value: "7", label: "v7 (latest)" },
+  { value: "6.1", label: "v6.1" },
+  { value: "6", label: "v6" },
+  { value: "5.2", label: "v5.2" },
+  { value: "niji 7", label: "Niji 7" },
+  { value: "niji 6", label: "Niji 6" },
+];
+
+const MJ_QUALITY = [
+  { value: "", label: "Default (1)" },
+  { value: "1", label: "1 — Standard" },
+  { value: ".5", label: ".5 — Half" },
+  { value: ".25", label: ".25 — Quarter" },
+  { value: "2", label: "2 — Double (v5 only)" },
+];
+
+const DALLE_SIZES = [
+  { value: "", label: "Default" },
+  { value: "1024x1024", label: "1024×1024 — Square" },
+  { value: "1792x1024", label: "1792×1024 — Landscape" },
+  { value: "1024x1792", label: "1024×1792 — Portrait" },
+];
+
+const DALLE_QUALITY_OPTS = [
+  { value: "", label: "Standard" },
+  { value: "hd", label: "HD" },
+];
+
+const DALLE_STYLE_OPTS = [
+  { value: "", label: "Vivid" },
+  { value: "natural", label: "Natural" },
+];
+
+const SD_SAMPLERS = [
+  { value: "", label: "Default" },
+  { value: "Euler a", label: "Euler a" },
+  { value: "DPM++ 2M Karras", label: "DPM++ 2M Karras" },
+  { value: "DDIM", label: "DDIM" },
+  { value: "UniPC", label: "UniPC" },
+  { value: "LMS", label: "LMS" },
+];
+
+function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v: string) => void }) {
+  return (
+    <>
+      <FieldSelect label="ASPECT RATIO" value={p.aspect_ratio} onChange={(v) => set("aspect_ratio", v)} options={MJ_ASPECT_RATIOS} />
+      <FieldSelect label="VERSION --v" value={p.model_version} onChange={(v) => set("model_version", v)} options={MJ_VERSIONS} />
+      <FieldSelect label="QUALITY --q" value={p.quality} onChange={(v) => set("quality", v)} options={MJ_QUALITY} />
+      <FieldInput label="STYLIZE --s" value={p.stylize} onChange={(v) => set("stylize", v)} placeholder="400" hint="0–1000" />
+      <FieldInput label="CHAOS --c" value={p.chaos} onChange={(v) => set("chaos", v)} placeholder="0" hint="0–100" />
+      <FieldInput label="WEIRD --w" value={p.weird} onChange={(v) => set("weird", v)} placeholder="0" hint="0–3000" />
+      <FieldInput label="SREF CODE" value={p.sref_code} onChange={(v) => set("sref_code", v)} placeholder="12345" />
+      <FieldInput label="PROFILE --p" value={p.profile} onChange={(v) => set("profile", v)} placeholder="profile-id" />
+      <FieldInput label="NEGATIVE --no" value={p.no_prompt} onChange={(v) => set("no_prompt", v)} placeholder="text in frame, blur" />
+    </>
+  );
+}
+
+function DalleParamsPanel({ p, set }: { p: DalleParams; set: (k: keyof DalleParams, v: string) => void }) {
+  return (
+    <>
+      <FieldSelect label="SIZE" value={p.size} onChange={(v) => set("size", v)} options={DALLE_SIZES} />
+      <FieldSelect label="QUALITY" value={p.quality} onChange={(v) => set("quality", v)} options={DALLE_QUALITY_OPTS} />
+      <FieldSelect label="STYLE" value={p.style} onChange={(v) => set("style", v)} options={DALLE_STYLE_OPTS} />
+    </>
+  );
+}
+
+function SDParamsPanel({ p, set }: { p: SDParams; set: (k: keyof SDParams, v: string) => void }) {
+  return (
+    <>
+      <FieldInput label="STEPS" value={p.steps} onChange={(v) => set("steps", v)} placeholder="30" hint="20–60" />
+      <FieldInput label="CFG SCALE" value={p.cfg_scale} onChange={(v) => set("cfg_scale", v)} placeholder="7" hint="1–20" />
+      <FieldSelect label="SAMPLER" value={p.sampler} onChange={(v) => set("sampler", v)} options={SD_SAMPLERS} />
+      <FieldInput label="SEED" value={p.seed} onChange={(v) => set("seed", v)} placeholder="-1 (random)" />
+      <div className="flex flex-col gap-1.5">
+        <label className="system-label">NEGATIVE PROMPT</label>
+        <textarea
+          value={p.negative_prompt}
+          onChange={(e) => set("negative_prompt", e.target.value)}
+          placeholder="ugly, bad anatomy, blurry…"
+          rows={3}
+          className="w-full px-3 py-2 font-mono text-[10px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise resize-none"
+          style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+        />
+      </div>
+    </>
+  );
+}
+
+// ─── Prompt assembly ──────────────────────────────────────────
+
+function assembleMJ(f: Fields, mj: MJParams): string {
   const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   let out = parts.join(", ");
-  if (f.provider === "midjourney") {
-    if (f.aspect_ratio) out += ` --ar ${f.aspect_ratio}`;
-    if (f.model_version) out += ` --v ${f.model_version}`;
-    if (f.stylize) out += ` --s ${f.stylize}`;
-    if (f.sref_code) out += ` --sref ${f.sref_code}`;
-  }
+  if (mj.aspect_ratio) out += ` --ar ${mj.aspect_ratio}`;
+  if (mj.model_version) out += ` --v ${mj.model_version}`;
+  if (mj.quality) out += ` --q ${mj.quality}`;
+  if (mj.stylize) out += ` --s ${mj.stylize}`;
+  if (mj.chaos) out += ` --c ${mj.chaos}`;
+  if (mj.weird) out += ` --w ${mj.weird}`;
+  if (mj.sref_code) out += ` --sref ${mj.sref_code}`;
+  if (mj.profile) out += ` --p ${mj.profile}`;
+  if (mj.no_prompt) out += ` --no ${mj.no_prompt}`;
   return out;
+}
+
+function assembleDalle(f: Fields, dalle: DalleParams): string {
+  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+    .map((s) => s.trim()).filter(Boolean);
+  let out = parts.join(", ");
+  if (dalle.size) out += ` [size: ${dalle.size}]`;
+  if (dalle.quality) out += ` [quality: ${dalle.quality}]`;
+  if (dalle.style) out += ` [style: ${dalle.style}]`;
+  return out;
+}
+
+function assembleSD(f: Fields, _sd: SDParams): string {
+  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+    .map((s) => s.trim()).filter(Boolean);
+  return parts.join(", ");
+}
+
+function assembleGeneric(f: Fields): string {
+  return [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+    .map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -200,18 +327,6 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-const ASPECT_RATIOS: { value: string; label: string }[] = [
-  { value: "", label: "Select ratio…" },
-  { value: "1:1", label: "1:1 — Square" },
-  { value: "16:9", label: "16:9 — Landscape" },
-  { value: "9:16", label: "9:16 — Portrait" },
-  { value: "4:3", label: "4:3 — Standard" },
-  { value: "3:2", label: "3:2 — Photo" },
-  { value: "2:3", label: "2:3 — Vertical" },
-  { value: "21:9", label: "21:9 — Ultra-wide" },
-  { value: "4:5", label: "4:5 — Instagram" },
-];
-
 // ─── Form state ───────────────────────────────────────────────
 
 interface Fields {
@@ -220,7 +335,6 @@ interface Fields {
   prompt_text: string; avoidance_text: string;
   subject: string; environment: string; camera: string; lens: string;
   lighting: string; mood: string; realism: string;
-  aspect_ratio: string; model_version: string; stylize: string; sref_code: string;
   rating: number; ai_look_risk: number;
   tags: string[]; notes: string;
   is_winner: boolean; is_failed: boolean;
@@ -232,11 +346,14 @@ const EMPTY: Fields = {
   prompt_text: "", avoidance_text: "",
   subject: "", environment: "", camera: "", lens: "",
   lighting: "", mood: "", realism: "",
-  aspect_ratio: "", model_version: "", stylize: "", sref_code: "",
   rating: 0, ai_look_risk: 0,
   tags: [], notes: "",
   is_winner: false, is_failed: false,
 };
+
+const EMPTY_MJ: MJParams = { aspect_ratio: "", model_version: "", stylize: "", chaos: "", weird: "", quality: "", no_prompt: "", sref_code: "", profile: "" };
+const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
+const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
 // ─── Component ────────────────────────────────────────────────
 
@@ -246,11 +363,20 @@ export function CraftPrompt() {
   const { create, update, getById } = usePromptStore();
 
   const isEdit = Boolean(id);
+
   const [fields, setFields] = useState<Fields>(EMPTY);
+  const [mjParams, setMjParams] = useState<MJParams>(EMPTY_MJ);
+  const [dalleParams, setDalleParams] = useState<DalleParams>(EMPTY_DALLE);
+  const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
+
+  // For editable assembled output
+  const [outputOverride, setOutputOverride] = useState<string | null>(null);
+  const [includeAvoidance, setIncludeAvoidance] = useState(false);
+  const [tokenAdditions, setTokenAdditions] = useState<Token[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -263,25 +389,55 @@ export function CraftPrompt() {
         use_case: p.use_case ?? "", prompt_text: p.prompt_text,
         avoidance_text: p.avoidance_text ?? "",
         camera: p.camera ?? "", lens: p.lens ?? "", lighting: p.lighting ?? "",
-        aspect_ratio: p.aspect_ratio ?? "", model_version: p.model_version ?? "",
-        sref_code: p.style_ref ?? "",
         rating: p.rating, ai_look_risk: p.ai_look_risk,
         tags: p.tags ?? [], notes: p.notes ?? "",
         is_winner: p.is_winner, is_failed: p.is_failed,
       });
+      if (p.aspect_ratio || p.model_version) {
+        setMjParams((prev) => ({ ...prev, aspect_ratio: p.aspect_ratio ?? "", model_version: p.model_version ?? "", sref_code: p.style_ref ?? "" }));
+      }
       setMode("manual");
     });
   }, [id, getById]);
 
-  const set = <K extends keyof Fields>(key: K, val: Fields[K]) => {
+  const setF = <K extends keyof Fields>(key: K, val: Fields[K]) => {
     setFields((f) => ({ ...f, [key]: val }));
     if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+    setOutputOverride(null);
   };
 
-  const assembled =
-    mode === "builder"
-      ? assemblePrompt(fields)
-      : fields.prompt_text;
+  const setMJ = (k: keyof MJParams, v: string) => { setMjParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
+  const setDalle = (k: keyof DalleParams, v: string) => { setDalleParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
+  const setSD = (k: keyof SDParams, v: string) => { setSDParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
+
+  const handleTokenToggle = (token: Token) => {
+    setTokenAdditions((prev) => {
+      const exists = prev.some((t) => t.id === token.id);
+      return exists ? prev.filter((t) => t.id !== token.id) : [...prev, token];
+    });
+    setOutputOverride(null);
+  };
+
+  const tokenTexts = tokenAdditions.map((t) => t.text);
+
+  const builtAssembled = (() => {
+    if (mode === "manual") return fields.prompt_text;
+    const extras = tokenTexts.length ? `, ${tokenTexts.join(", ")}` : "";
+    switch (fields.provider) {
+      case "midjourney": return assembleMJ(fields, mjParams) + extras;
+      case "dalle": return assembleDalle(fields, dalleParams) + extras;
+      case "stable_diffusion": return assembleSD(fields, sdParams) + extras;
+      default: return assembleGeneric(fields) + extras;
+    }
+  })();
+
+  const assembled = outputOverride ?? builtAssembled;
+
+  const fullCopyText = includeAvoidance && fields.avoidance_text
+    ? `${assembled}\n\n${fields.avoidance_text}`
+    : assembled;
+
+  const charCount = assembled.length;
 
   const validate = (): boolean => {
     const errs: typeof errors = {};
@@ -302,8 +458,8 @@ export function CraftPrompt() {
       use_case: fields.use_case || undefined,
       prompt_text: assembled,
       avoidance_text: fields.avoidance_text || undefined,
-      aspect_ratio: fields.aspect_ratio || undefined,
-      model_version: fields.model_version || undefined,
+      aspect_ratio: mjParams.aspect_ratio || undefined,
+      model_version: mjParams.model_version || undefined,
       camera: fields.camera || undefined,
       lens: fields.lens || undefined,
       lighting: fields.lighting || undefined,
@@ -312,6 +468,7 @@ export function CraftPrompt() {
       ai_look_risk: fields.ai_look_risk,
       is_winner: fields.is_winner,
       is_failed: fields.is_failed,
+      is_recipe: asRecipe,
       notes: fields.notes || undefined,
     };
     try {
@@ -319,7 +476,7 @@ export function CraftPrompt() {
         await update(id, data);
         navigate(`/library/${id}`);
       } else {
-        const newId = await create({ ...data, is_recipe: asRecipe });
+        const newId = await create(data);
         navigate(`/library/${newId}`);
       }
     } finally {
@@ -328,8 +485,8 @@ export function CraftPrompt() {
   };
 
   const handleCopy = async () => {
-    if (!assembled) return;
-    await navigator.clipboard.writeText(assembled);
+    if (!fullCopyText) return;
+    await navigator.clipboard.writeText(fullCopyText);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -341,21 +498,26 @@ export function CraftPrompt() {
     </div>
   );
 
+  const builderFields: { key: keyof Fields; label: string; placeholder: string }[] = [
+    { key: "subject", label: "SUBJECT / ACTION", placeholder: "woman running through field" },
+    { key: "environment", label: "ENVIRONMENT", placeholder: "golden hour forest" },
+    { key: "camera", label: "CAMERA", placeholder: "low angle tracking shot" },
+    { key: "lens", label: "LENS", placeholder: "14mm ultra-wide" },
+    { key: "lighting", label: "LIGHTING", placeholder: "natural morning sunlight" },
+    { key: "mood", label: "MOOD / BRAND TONE", placeholder: "documentary realism" },
+  ];
+
   return (
     <PageContainer
       title={isEdit ? "Edit Prompt" : "Craft Prompt"}
       subtitle={isEdit ? "UPDATE EXISTING PROMPT" : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate(isEdit && id ? `/library/${id}` : "/library")}
-          >
+          <Button variant="ghost" size="sm" onClick={() => navigate(isEdit && id ? `/library/${id}` : "/library")}>
             <ArrowLeft size={11} /> {isEdit ? "Cancel" : "Library"}
           </Button>
           <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled}>
-            <Copy size={10} />
+            {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? "Copied!" : "Copy"}
           </Button>
           {!isEdit && (
@@ -371,7 +533,7 @@ export function CraftPrompt() {
       }
     >
       <div className="flex gap-6 min-w-0">
-        {/* ── Left: Main form ─────────────────────── */}
+        {/* ── Left: Main form ─────────────────────────────── */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
 
           {/* Identity */}
@@ -381,48 +543,39 @@ export function CraftPrompt() {
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
                   <label className="system-label">TITLE</label>
-                  {errors.title && <span className="font-mono text-[9px] text-red/80">{errors.title}</span>}
+                  {errors.title && <span className="font-mono text-[9px] text-red/80 flex items-center gap-1"><AlertCircle size={8} />{errors.title}</span>}
                 </div>
                 <input
                   value={fields.title}
-                  onChange={(e) => set("title", e.target.value)}
+                  onChange={(e) => setF("title", e.target.value)}
                   placeholder="Give this prompt a unique name…"
-                  className={cn(
-                    "w-full h-8 px-3 font-sans text-[13px] text-white placeholder:text-dim",
-                    "bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise",
-                    errors.title ? "border-red/60" : ""
-                  )}
+                  className="w-full h-8 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
                   style={{ border: errors.title ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.10)" }}
                 />
               </div>
               <Input
                 value={fields.description}
-                onChange={(e) => set("description", e.target.value)}
+                onChange={(e) => setF("description", e.target.value)}
                 placeholder="Brief description of what this produces…"
               />
               <div className="grid grid-cols-2 gap-3">
                 <FieldSelect
                   label="PROVIDER"
                   value={fields.provider}
-                  onChange={(v) => set("provider", v as Provider)}
+                  onChange={(v) => { setF("provider", v as Provider); setOutputOverride(null); }}
                   options={PROVIDERS}
                 />
-                <FieldSelect
-                  label="CATEGORY"
-                  value={fields.category}
-                  onChange={(v) => set("category", v)}
-                  options={CATEGORIES}
-                />
+                <FieldSelect label="CATEGORY" value={fields.category} onChange={(v) => setF("category", v)} options={CATEGORIES} />
               </div>
               <Input
                 value={fields.use_case}
-                onChange={(e) => set("use_case", e.target.value)}
+                onChange={(e) => setF("use_case", e.target.value)}
                 placeholder="Use case: hero banner, product page, social…"
               />
             </div>
           </div>
 
-          {/* Prompt Builder */}
+          {/* Prompt */}
           <div>
             <SectionHeader label="PROMPT" />
             <div className="flex items-center gap-2 mb-4">
@@ -430,7 +583,7 @@ export function CraftPrompt() {
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setMode(m)}
+                  onClick={() => { setMode(m); setOutputOverride(null); }}
                   className={cn(
                     "font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded transition-precise",
                     mode === m ? "text-white" : "text-dim hover:text-muted"
@@ -440,26 +593,19 @@ export function CraftPrompt() {
                     background: mode === m ? "rgba(255,255,255,0.05)" : "transparent",
                   }}
                 >
-                  {m === "builder" ? "Builder Mode" : "Manual Mode"}
+                  {m === "builder" ? "Builder" : "Manual"}
                 </button>
               ))}
             </div>
 
             {mode === "builder" ? (
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: "subject" as const, label: "SUBJECT / ACTION", placeholder: "woman running through field" },
-                  { key: "environment" as const, label: "ENVIRONMENT", placeholder: "golden hour forest" },
-                  { key: "camera" as const, label: "CAMERA", placeholder: "low angle tracking shot" },
-                  { key: "lens" as const, label: "LENS", placeholder: "14mm ultra-wide" },
-                  { key: "lighting" as const, label: "LIGHTING", placeholder: "natural morning sunlight" },
-                  { key: "mood" as const, label: "MOOD / BRAND TONE", placeholder: "documentary realism" },
-                ].map(({ key, label, placeholder }) => (
+                {builderFields.map(({ key, label, placeholder }) => (
                   <div key={key} className="flex flex-col gap-1.5">
                     <label className="system-label">{label}</label>
                     <input
-                      value={fields[key]}
-                      onChange={(e) => set(key, e.target.value)}
+                      value={fields[key] as string}
+                      onChange={(e) => setF(key, e.target.value)}
                       placeholder={placeholder}
                       className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
                       style={{ border: "1px solid rgba(255,255,255,0.10)" }}
@@ -470,8 +616,8 @@ export function CraftPrompt() {
                   <label className="system-label">REALISM NOTES</label>
                   <input
                     value={fields.realism}
-                    onChange={(e) => set("realism", e.target.value)}
-                    placeholder="authentic skin texture, real terrain imperfections, wind-affected clothing"
+                    onChange={(e) => setF("realism", e.target.value)}
+                    placeholder="authentic skin texture, real terrain imperfections…"
                     className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
                     style={{ border: "1px solid rgba(255,255,255,0.10)" }}
                   />
@@ -485,7 +631,7 @@ export function CraftPrompt() {
                 </div>
                 <Textarea
                   value={fields.prompt_text}
-                  onChange={(e) => set("prompt_text", e.target.value)}
+                  onChange={(e) => setF("prompt_text", e.target.value)}
                   placeholder="Paste or type your full prompt here…"
                   rows={6}
                   mono
@@ -494,87 +640,94 @@ export function CraftPrompt() {
             )}
           </div>
 
+          {/* Token Cloud — builder mode only */}
+          {mode === "builder" && (
+            <div>
+              <SectionHeader label="TOKEN LIBRARY" />
+              <div
+                className="flex flex-col gap-3 p-4 rounded-card"
+                style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+              >
+                <TokenCloud
+                  selectedTexts={tokenTexts}
+                  onToggle={handleTokenToggle}
+                  providerFilter={fields.provider}
+                />
+                {tokenAdditions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-2" style={{ borderTop: "var(--border-dim)" }}>
+                    {tokenAdditions.map((t) => (
+                      <span
+                        key={t.id}
+                        className="inline-flex items-center gap-1 font-mono text-[9px] tracking-wide px-2 py-0.5 rounded-sm text-white/80"
+                        style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.06)" }}
+                      >
+                        {t.text}
+                        <button
+                          type="button"
+                          onClick={() => handleTokenToggle(t)}
+                          className="text-dim/60 hover:text-red transition-precise leading-none ml-0.5"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => { setTokenAdditions([]); setOutputOverride(null); }}
+                      className="font-mono text-[8px] text-dim/50 hover:text-red transition-precise"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Avoidance */}
           <div>
             <SectionHeader label="AI-LOOK AVOIDANCE" />
-            <div className="flex flex-col gap-1.5">
-              <label className="system-label">AVOIDANCE CORRECTIONS</label>
-              <Textarea
-                value={fields.avoidance_text}
-                onChange={(e) => set("avoidance_text", e.target.value)}
-                placeholder="Add avoidance corrections here. These will be appended to your prompt."
-                rows={3}
-                mono
-              />
-            </div>
+            <Textarea
+              value={fields.avoidance_text}
+              onChange={(e) => setF("avoidance_text", e.target.value)}
+              placeholder="Add avoidance corrections here. These will be appended to your prompt when copying."
+              rows={3}
+              mono
+            />
           </div>
 
           {/* Meta */}
           <div>
             <SectionHeader label="META" />
             <div className="flex flex-col gap-3">
-              <TagInput tags={fields.tags} onChange={(t) => set("tags", t)} />
-              <div className="flex flex-col gap-1.5">
-                <label className="system-label">NOTES</label>
-                <Textarea
-                  value={fields.notes}
-                  onChange={(e) => set("notes", e.target.value)}
-                  placeholder="Production notes, context, intended usage…"
-                  rows={2}
-                />
-              </div>
+              <TagInput tags={fields.tags} onChange={(t) => setF("tags", t)} />
+              <Textarea
+                value={fields.notes}
+                onChange={(e) => setF("notes", e.target.value)}
+                placeholder="Production notes, context, intended usage…"
+                rows={2}
+              />
             </div>
           </div>
         </div>
 
-        {/* ── Right: Parameters + Preview ─────────── */}
+        {/* ── Right: Parameters + Preview ─────────────────── */}
         <div className="flex flex-col gap-4 w-64 shrink-0">
 
-          {/* Parameters */}
+          {/* Provider Parameters */}
           <div
-            className="flex flex-col gap-4 p-4 rounded-card"
+            className="flex flex-col gap-3 p-4 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <span className="system-label">PARAMETERS</span>
-            <FieldSelect
-              label="ASPECT RATIO"
-              value={fields.aspect_ratio}
-              onChange={(v) => set("aspect_ratio", v)}
-              options={ASPECT_RATIOS}
-            />
-            {fields.provider === "midjourney" && (
-              <>
-                <div className="flex flex-col gap-1.5">
-                  <label className="system-label">MODEL VERSION</label>
-                  <input
-                    value={fields.model_version}
-                    onChange={(e) => set("model_version", e.target.value)}
-                    placeholder="7"
-                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-                    style={{ border: "1px solid rgba(255,255,255,0.10)" }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="system-label">STYLIZE</label>
-                  <input
-                    value={fields.stylize}
-                    onChange={(e) => set("stylize", e.target.value)}
-                    placeholder="400"
-                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-                    style={{ border: "1px solid rgba(255,255,255,0.10)" }}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="system-label">SREF CODE</label>
-                  <input
-                    value={fields.sref_code}
-                    onChange={(e) => set("sref_code", e.target.value)}
-                    placeholder="--sref 12345"
-                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-                    style={{ border: "1px solid rgba(255,255,255,0.10)" }}
-                  />
-                </div>
-              </>
+            <div className="flex items-center justify-between">
+              <span className="system-label">PARAMETERS</span>
+              <span className="font-mono text-[9px] text-dim/60 uppercase tracking-widest">{fields.provider}</span>
+            </div>
+            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} />}
+            {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
+            {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
+            {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (
+              <p className="font-mono text-[10px] text-dim leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
           </div>
 
@@ -584,82 +737,79 @@ export function CraftPrompt() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <span className="system-label">SCORING</span>
-            <RatingPicker value={fields.rating} onChange={(n) => set("rating", n)} />
-            <RiskSlider value={fields.ai_look_risk} onChange={(n) => set("ai_look_risk", n)} />
+            <RatingPicker value={fields.rating} onChange={(n) => setF("rating", n)} />
+            <RiskSlider value={fields.ai_look_risk} onChange={(n) => setF("ai_look_risk", n)} />
             <div className="flex items-center gap-4 pt-1">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={fields.is_winner}
-                  onChange={(e) => set("is_winner", e.target.checked)}
-                  className="accent-white"
-                />
+                <input type="checkbox" checked={fields.is_winner} onChange={(e) => setF("is_winner", e.target.checked)} className="accent-white" />
                 <span className="system-label">WINNER</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={fields.is_failed}
-                  onChange={(e) => set("is_failed", e.target.checked)}
-                  className="accent-red"
-                />
+                <input type="checkbox" checked={fields.is_failed} onChange={(e) => setF("is_failed", e.target.checked)} className="accent-red" />
                 <span className="system-label text-dim/60">FAILED</span>
               </label>
             </div>
           </div>
 
-          {/* Prompt Output */}
+          {/* Prompt Output — editable */}
           <div
             className="flex flex-col gap-3 p-4 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-center justify-between">
               <span className="system-label">PROMPT OUTPUT</span>
+              <span className={cn("font-mono text-[9px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
+                {charCount} chars
+              </span>
+            </div>
+
+            {/* Editable textarea */}
+            <textarea
+              value={assembled}
+              onChange={(e) => setOutputOverride(e.target.value)}
+              placeholder="Assembled prompt will appear here…"
+              rows={7}
+              className="w-full px-3 py-2 font-mono text-[10px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
+              style={{ border: "var(--border-dim)" }}
+            />
+
+            {outputOverride !== null && (
               <button
                 type="button"
-                onClick={handleCopy}
-                disabled={!assembled}
-                className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white transition-precise disabled:opacity-30"
+                onClick={() => setOutputOverride(null)}
+                className="font-mono text-[9px] text-dim/60 hover:text-white transition-precise text-left"
               >
-                <Copy size={9} /> {copied ? "Copied" : "Copy"}
+                ↺ Reset to assembled
               </button>
-            </div>
-            <div
-              className="p-3 rounded-sm min-h-24"
-              style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
-            >
-              {assembled ? (
-                <pre className="font-mono text-[10px] text-soft-white/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
-                  {assembled}
-                </pre>
-              ) : (
-                <p className="font-mono text-[10px] text-dim/50 italic leading-relaxed">
-                  Assembled prompt will appear here as you fill the fields above.
-                </p>
-              )}
-            </div>
+            )}
+
+            {/* Avoidance toggle */}
+            {fields.avoidance_text && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeAvoidance}
+                  onChange={(e) => setIncludeAvoidance(e.target.checked)}
+                  className="accent-white/60"
+                />
+                <span className="system-label text-[8px]">INCLUDE AVOIDANCE ON COPY</span>
+              </label>
+            )}
+
+            <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">
+              {copied ? <Check size={10} /> : <Copy size={10} />}
+              {copied ? "Copied!" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
+            </Button>
           </div>
 
-          {/* Save actions */}
+          {/* Save */}
           <div className="flex flex-col gap-2">
-            <Button
-              variant="primary"
-              size="md"
-              onClick={() => handleSave(false)}
-              disabled={saving}
-              className="w-full justify-center"
-            >
+            <Button variant="primary" size="md" onClick={() => handleSave(false)} disabled={saving} className="w-full justify-center">
               <Save size={11} />
               {saving ? "Saving…" : isEdit ? "Update Prompt" : "Save to Library"}
             </Button>
             {!isEdit && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleSave(true)}
-                disabled={saving}
-                className="w-full justify-center"
-              >
+              <Button variant="ghost" size="sm" onClick={() => handleSave(true)} disabled={saving} className="w-full justify-center">
                 Save as Recipe
               </Button>
             )}

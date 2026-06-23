@@ -6,19 +6,25 @@ pub fn run() {
         Migration {
             version: 1,
             description: "initial_schema",
-            sql: include_str!("../../migrations/001_initial.sql"),
+            sql: include_str!("../migrations/001_initial.sql"),
             kind: MigrationKind::Up,
         },
         Migration {
             version: 2,
             description: "tokens",
-            sql: include_str!("../../migrations/002_tokens.sql"),
+            sql: include_str!("../migrations/002_tokens.sql"),
             kind: MigrationKind::Up,
         },
         Migration {
             version: 3,
             description: "meta_and_seeds",
-            sql: include_str!("../../migrations/003_meta.sql"),
+            sql: include_str!("../migrations/003_meta.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "token_seeds",
+            sql: include_str!("../migrations/004_token_seeds.sql"),
             kind: MigrationKind::Up,
         },
     ];

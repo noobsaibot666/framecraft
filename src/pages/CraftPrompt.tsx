@@ -6,6 +6,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { TokenCloud } from "@/components/ui/TokenCloud";
+import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token } from "@/types";
@@ -378,7 +379,8 @@ export function CraftPrompt() {
   // For editable assembled output
   const [outputOverride, setOutputOverride] = useState<string | null>(null);
   const [includeAvoidance, setIncludeAvoidance] = useState(false);
-  const [tokenAdditions, setTokenAdditions] = useState<Token[]>([]);
+  const [tokenSequence, setTokenSequence] = useState<Token[]>([]);
+  const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -414,14 +416,30 @@ export function CraftPrompt() {
   const setSD = (k: keyof SDParams, v: string) => { setSDParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
 
   const handleTokenToggle = (token: Token) => {
-    setTokenAdditions((prev) => {
+    setTokenSequence((prev) => {
       const exists = prev.some((t) => t.id === token.id);
       return exists ? prev.filter((t) => t.id !== token.id) : [...prev, token];
     });
     setOutputOverride(null);
   };
 
-  const tokenTexts = tokenAdditions.map((t) => t.text);
+  const handleTokenReorder = (reordered: Token[]) => {
+    setTokenSequence(reordered);
+    setOutputOverride(null);
+  };
+
+  const handleTokenRemove = (tokenId: string) => {
+    setTokenSequence((prev) => prev.filter((t) => t.id !== tokenId));
+    setTokenOverrides((prev) => { const next = { ...prev }; delete next[tokenId]; return next; });
+    setOutputOverride(null);
+  };
+
+  const handleTokenEditCommit = (tokenId: string, text: string) => {
+    setTokenOverrides((prev) => ({ ...prev, [tokenId]: text }));
+    setOutputOverride(null);
+  };
+
+  const tokenTexts = tokenSequence.map((t) => tokenOverrides[t.id] ?? t.text);
 
   const builtAssembled = (() => {
     if (mode === "manual") return fields.prompt_text;
@@ -673,46 +691,46 @@ export function CraftPrompt() {
             )}
           </div>
 
-          {/* Token Cloud — builder mode only */}
+          {/* Token Library — builder mode only */}
           {mode === "builder" && (
             <div>
               <SectionHeader label="TOKEN LIBRARY" />
               <div
-                className="flex flex-col gap-3 p-4 rounded-card"
+                className="flex flex-col gap-4 p-4 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
               >
+                {/* Sequence builder */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="system-label text-[8px]">SEQUENCE</span>
+                    {tokenSequence.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setTokenSequence([]); setTokenOverrides({}); setOutputOverride(null); }}
+                        className="font-mono text-[8px] text-dim/50 hover:text-red transition-precise"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <SequenceBuilder
+                    tokens={tokenSequence}
+                    overrides={tokenOverrides}
+                    onReorder={handleTokenReorder}
+                    onRemove={handleTokenRemove}
+                    onEditCommit={handleTokenEditCommit}
+                  />
+                </div>
+
+                {/* Divider */}
+                <div className="h-px bg-white/7" />
+
+                {/* Token cloud */}
                 <TokenCloud
                   selectedTexts={tokenTexts}
                   onToggle={handleTokenToggle}
                   providerFilter={fields.provider}
                 />
-                {tokenAdditions.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-2" style={{ borderTop: "var(--border-dim)" }}>
-                    {tokenAdditions.map((t) => (
-                      <span
-                        key={t.id}
-                        className="inline-flex items-center gap-1 font-mono text-[9px] tracking-wide px-2 py-0.5 rounded-sm text-white/80"
-                        style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.06)" }}
-                      >
-                        {t.text}
-                        <button
-                          type="button"
-                          onClick={() => handleTokenToggle(t)}
-                          className="text-dim/60 hover:text-red transition-precise leading-none ml-0.5"
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => { setTokenAdditions([]); setOutputOverride(null); }}
-                      className="font-mono text-[8px] text-dim/50 hover:text-red transition-precise"
-                    >
-                      Clear all
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           )}

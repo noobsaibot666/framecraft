@@ -432,10 +432,36 @@ export async function getTokensByCategory(categoryId: string): Promise<Token[]> 
   if (isTauri) {
     const db = await getDb();
     const rows = (await db.select(
-      "SELECT * FROM tokens WHERE category_id = $1 ORDER BY use_count DESC, text ASC",
+      "SELECT * FROM tokens WHERE category_id = $1 ORDER BY use_count DESC, quality_score DESC, text ASC",
       [categoryId]
     )) as Record<string, unknown>[];
     return rows.map(rowToToken);
   }
   return [];
+}
+
+export async function createToken(text: string, categoryId: string): Promise<Token> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Token text cannot be empty");
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute(
+      "INSERT INTO tokens (text, category_id, is_builtin) VALUES ($1, $2, 0)",
+      [trimmed, categoryId]
+    );
+    const rows = (await db.select(
+      "SELECT * FROM tokens WHERE text = $1 AND category_id = $2 ORDER BY rowid DESC LIMIT 1",
+      [trimmed, categoryId]
+    )) as Record<string, unknown>[];
+    return rowToToken(rows[0]);
+  }
+  // Dev mode: return a synthetic token
+  return {
+    id: `dev_${Date.now()}`,
+    text: trimmed,
+    category_id: categoryId,
+    use_count: 0,
+    quality_score: 0,
+    is_builtin: false,
+  };
 }

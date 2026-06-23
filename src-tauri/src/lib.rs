@@ -33,6 +33,12 @@ pub fn run() {
             sql: include_str!("../migrations/005_notion_library.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "avoidance_seed",
+            sql: include_str!("../migrations/006_avoidance_seed.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

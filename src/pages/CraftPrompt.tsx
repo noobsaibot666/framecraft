@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
 import { TokenCloud } from "@/components/ui/TokenCloud";
 import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
+import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token } from "@/types";
@@ -738,13 +739,22 @@ export function CraftPrompt() {
           {/* Avoidance */}
           <div>
             <SectionHeader label="AI-LOOK AVOIDANCE" />
-            <Textarea
-              value={fields.avoidance_text}
-              onChange={(e) => setF("avoidance_text", e.target.value)}
-              placeholder="Add avoidance corrections here. These will be appended to your prompt when copying."
-              rows={3}
-              mono
-            />
+            <div className="flex flex-col gap-3">
+              <AvoidancePanel
+                promptText={assembled}
+                onAddCorrection={(text) => {
+                  setF("avoidance_text", fields.avoidance_text ? `${fields.avoidance_text}, ${text}` : text);
+                }}
+                onRiskScoreChange={(score) => setF("ai_look_risk", Math.round(score))}
+              />
+              <Textarea
+                value={fields.avoidance_text}
+                onChange={(e) => setF("avoidance_text", e.target.value)}
+                placeholder="Avoidance corrections appear here. Edit freely — this is appended to your prompt on copy."
+                rows={3}
+                mono
+              />
+            </div>
           </div>
 
           {/* Meta */}

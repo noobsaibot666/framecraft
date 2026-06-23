@@ -1,4 +1,4 @@
-import type { Prompt, DashboardStats, TokenCategory, Token } from "@/types";
+import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern } from "@/types";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -464,4 +464,50 @@ export async function createToken(text: string, categoryId: string): Promise<Tok
     quality_score: 0,
     is_builtin: false,
   };
+}
+
+// ─── Avoidance Patterns ──────────────────────────────────────
+
+function rowToAvoidancePattern(row: Record<string, unknown>): AvoidancePattern {
+  return {
+    id: row.id as string,
+    artifact_type: row.artifact_type as string,
+    label: row.label as string,
+    category: row.category as string,
+    description: row.description as string | undefined,
+    correction_prompt: row.correction_prompt as string | undefined,
+    severity: row.severity as AvoidancePattern["severity"],
+    provider: row.provider as AvoidancePattern["provider"] | undefined,
+    is_builtin: Boolean(row.is_builtin),
+  };
+}
+
+const STATIC_AVOIDANCE_PATTERNS: AvoidancePattern[] = [
+  { id: "bad_hands", artifact_type: "bad_hands", label: "Bad Hands / Fingers", category: "all", severity: "critical", correction_prompt: "anatomically correct hands, natural finger joints", is_builtin: true },
+  { id: "plastic_skin", artifact_type: "plastic_skin", label: "Plastic Skin / Waxy Texture", category: "portrait", severity: "high", correction_prompt: "authentic skin texture, real pore detail", is_builtin: true },
+  { id: "gibberish_text", artifact_type: "gibberish_text", label: "Gibberish Text / Fake Signage", category: "all", severity: "high", correction_prompt: "avoid visible text in frame", is_builtin: true },
+  { id: "eye_inconsistency", artifact_type: "eye_inconsistency", label: "Eye / Pupil Inconsistency", category: "portrait", severity: "high", correction_prompt: "consistent pupil size, natural iris detail", is_builtin: true },
+  { id: "ai_glow", artifact_type: "ai_glow", label: "AI Glow / Fake Luminance", category: "all", severity: "medium", correction_prompt: "no artificial glow, practical light sources only", is_builtin: true },
+  { id: "jewelry_mismatch", artifact_type: "jewelry_mismatch", label: "Jewelry Mismatch", category: "portrait", severity: "medium", correction_prompt: "physically attached jewelry, symmetric earrings", is_builtin: true },
+  { id: "background_melting", artifact_type: "background_melting", label: "Background Melting", category: "all", severity: "medium", correction_prompt: "clear subject-background separation", is_builtin: true },
+  { id: "floating_objects", artifact_type: "floating_objects", label: "Floating Objects", category: "product", severity: "medium", correction_prompt: "grounded objects, correct shadow casting", is_builtin: true },
+  { id: "texture_blending", artifact_type: "texture_blending", label: "Texture Blending", category: "all", severity: "medium", correction_prompt: "distinct material boundaries", is_builtin: true },
+  { id: "impossible_architecture", artifact_type: "impossible_architecture", label: "Impossible Architecture", category: "architecture", severity: "medium", correction_prompt: "structurally plausible design", is_builtin: true },
+  { id: "unreal_reflections", artifact_type: "unreal_reflections", label: "Unreal Reflections", category: "all", severity: "low", correction_prompt: "accurate surface reflections", is_builtin: true },
+  { id: "fake_dof", artifact_type: "fake_dof", label: "Fake Depth of Field", category: "all", severity: "low", correction_prompt: "consistent focal plane, natural lens blur falloff", is_builtin: true },
+  { id: "over_sharpened", artifact_type: "over_sharpened", label: "Over-Sharpened Detail", category: "all", severity: "low", correction_prompt: "natural sharpness level, realistic detail density", is_builtin: true },
+  { id: "perfect_symmetry", artifact_type: "perfect_symmetry", label: "Perfect Symmetry (Unnatural)", category: "portrait", severity: "low", correction_prompt: "natural asymmetry, slightly off-center composition", is_builtin: true },
+  { id: "generic_luxury_mood", artifact_type: "generic_luxury_mood", label: "Generic Luxury Mood", category: "advertising", severity: "low", correction_prompt: "specific brand visual language, intentional mood", is_builtin: true },
+  { id: "fake_cinematic_sheen", artifact_type: "fake_cinematic_sheen", label: "Fake Cinematic Sheen", category: "all", severity: "low", correction_prompt: "motivated camera style, specific film reference", is_builtin: true },
+];
+
+export async function getAvoidancePatterns(): Promise<AvoidancePattern[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM avoidance_patterns ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, label ASC"
+    )) as Record<string, unknown>[];
+    return rows.map(rowToAvoidancePattern);
+  }
+  return STATIC_AVOIDANCE_PATTERNS;
 }

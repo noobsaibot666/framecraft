@@ -3,7 +3,7 @@ import { AlertTriangle, Download, Upload, Database, Info, Eye, EyeOff, Cpu, Chec
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { clearAllData, getPrompts } from "@/lib/db";
+import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
 import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI } from "@/lib/aiConfig";
 import type { Prompt } from "@/types";
 
@@ -84,6 +84,7 @@ export function Settings() {
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const [importStatus, setImportStatus] = useState<{ done: number; total: number; finished: boolean } | null>(null);
 
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
@@ -112,18 +113,51 @@ export function Settings() {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
+      let data: { version: number; prompts: Prompt[] };
       try {
-        const text = await file.text();
-        const data = JSON.parse(text) as { version: number; prompts: Prompt[] };
-        if (!data.prompts || !Array.isArray(data.prompts)) {
-          alert("Invalid export file format.");
-          return;
-        }
-        // Future: batch import prompts
-        alert(`Found ${data.prompts.length} prompts in export. Full import will be available in a future update.`);
+        data = JSON.parse(await file.text()) as { version: number; prompts: Prompt[] };
       } catch {
         alert("Failed to read import file.");
+        return;
       }
+      if (!data.prompts || !Array.isArray(data.prompts)) {
+        alert("Invalid export file format.");
+        return;
+      }
+      const total = data.prompts.length;
+      setImportStatus({ done: 0, total, finished: false });
+      let done = 0;
+      for (const p of data.prompts) {
+        await createPrompt({
+          title: p.title,
+          description: p.description ?? undefined,
+          provider: p.provider,
+          category: p.category ?? undefined,
+          use_case: p.use_case ?? undefined,
+          prompt_text: p.prompt_text,
+          avoidance_text: p.avoidance_text ?? undefined,
+          aspect_ratio: p.aspect_ratio ?? undefined,
+          model_version: p.model_version ?? undefined,
+          camera: p.camera ?? undefined,
+          lens: p.lens ?? undefined,
+          lighting: p.lighting ?? undefined,
+          style_ref: p.style_ref ?? undefined,
+          parameters: p.parameters ?? undefined,
+          tags: p.tags ?? undefined,
+          rating: p.rating ?? undefined,
+          ai_look_risk: p.ai_look_risk ?? undefined,
+          is_winner: p.is_winner ?? undefined,
+          is_failed: p.is_failed ?? undefined,
+          is_recipe: p.is_recipe ?? undefined,
+          failure_notes: p.failure_notes ?? undefined,
+          notes: p.notes ?? undefined,
+          version: p.version ?? undefined,
+        });
+        done++;
+        setImportStatus({ done, total, finished: false });
+      }
+      setImportStatus({ done, total, finished: true });
+      fetchStats();
     };
     input.click();
   };
@@ -159,8 +193,8 @@ export function Settings() {
               <Info size={12} className="text-dim" />
               <span className="font-sans text-[11px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
-            <InfoRow label="VERSION" value="0.1.0" />
-            <InfoRow label="BUILD" value="Phase 01 Foundation" />
+            <InfoRow label="VERSION" value="1.0.0" />
+            <InfoRow label="BUILD" value="V1 · All Phases Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>
@@ -230,11 +264,19 @@ export function Settings() {
                 <Download size={11} />
                 {exporting ? "Exporting…" : `Export Library (${stats.total_prompts} prompts)`}
               </Button>
-              <Button variant="ghost" size="sm" onClick={handleImport}>
+              <Button variant="ghost" size="sm" onClick={handleImport}
+                disabled={importStatus !== null && !importStatus.finished}>
                 <Upload size={11} />
                 Import JSON
               </Button>
             </div>
+            {importStatus && (
+              <div className="font-mono text-[10px] text-white/50">
+                {importStatus.finished
+                  ? <span className="flex items-center gap-1.5"><Check size={10} className="text-white/40" /> Imported {importStatus.done} of {importStatus.total} prompts.</span>
+                  : `Importing… ${importStatus.done} / ${importStatus.total}`}
+              </div>
+            )}
           </div>
         </Section>
 

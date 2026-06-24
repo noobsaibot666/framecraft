@@ -61,7 +61,8 @@ function detectMidjourneyParams(text: string): DetectedParams {
   // --sref with optional value (bare --sref at end of string is valid)
   const sr  = m(/--sref(?:\s+([^\s-]\S*))?/);               if (sr)  dp.sref          = sr[1] ?? "";
   const pr  = m(/--profile\s+(\S+)|--p\s+(\S+)/);           if (pr)  dp.profile       = pr[1] ?? pr[2];
-  const no  = m(/--no\s+([^-]+)/);                          if (no)  dp.no            = no[1].trim();
+  // --no: capture everything until next --param or end of string (allow hyphens inside words)
+  const no  = m(/--no\s+(.*?)(?=\s--[a-zA-Z]|$)/s);         if (no)  dp.no            = no[1].trim();
   // Boolean flags: \b doesn't work before -- (- is non-word char), use negative lookahead instead
   if (/--raw(?!\w)/.test(text))     dp.raw     = true;
   if (/--hd(?!\w)/.test(text))      dp.hd      = true;
@@ -91,7 +92,7 @@ function stripParams(text: string): string {
     .replace(/--sref(?:\s+\S+)?/g, "")
     .replace(/--profile\s+\S+/g, "")
     .replace(/--p\s+\S+/g, "")
-    .replace(/--no\s+[^-]+/g, "")
+    .replace(/--no\s+.*?(?=\s--[a-zA-Z]|$)/gs, "")
     .replace(/--raw(?!\w)/g, "")
     .replace(/--hd(?!\w)/g, "")
     .replace(/--tile(?!\w)/g, "")

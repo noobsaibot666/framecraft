@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Download, Upload, Database, Info, Eye, EyeOff, Cpu } from "lucide-react";
+import { AlertTriangle, Download, Upload, Database, Info, Eye, EyeOff, Cpu, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
+import { AI_MODELS, AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_MODEL_KEY, DEFAULT_MODEL_ID } from "@/lib/aiConfig";
+import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -27,33 +29,72 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-const API_KEY_STORAGE = "fc_anthropic_key";
+// ─── API Key Sub-component ────────────────────────────────────
+
+function ApiKeyField({ label, storageKey, placeholder, mask }: {
+  label: string; storageKey: string; placeholder: string;
+  mask: (v: string) => string;
+}) {
+  const [value, setValue] = useState(() => localStorage.getItem(storageKey) ?? "");
+  const [show, setShow] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    if (value.trim()) localStorage.setItem(storageKey, value.trim());
+    else localStorage.removeItem(storageKey);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60">{label}</span>
+        {value && <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-white/40"
+          style={{ border: "1px solid rgba(255,255,255,0.10)" }}>CONFIGURED</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            type={show ? "text" : "password"}
+            value={show ? value : mask(value)}
+            onChange={(e) => setValue(e.target.value)}
+            onFocus={() => setShow(true)}
+            placeholder={placeholder}
+            className="w-full h-8 pl-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none transition-precise"
+            style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+          />
+          <button type="button" onClick={() => setShow((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise">
+            {show ? <EyeOff size={10} /> : <Eye size={10} />}
+          </button>
+        </div>
+        <Button variant="ghost" size="sm" onClick={handleSave}>
+          {saved ? <><Check size={9} /> Saved</> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────
 
 export function Settings() {
   const { stats, fetchStats } = useDashboardStore();
   const [confirmClear, setConfirmClear] = useState(false);
-
-  // API key state
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) ?? "");
-  const [showKey, setShowKey] = useState(false);
-  const [keySaved, setKeySaved] = useState(false);
-
-  const handleSaveKey = () => {
-    if (apiKey.trim()) {
-      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
-    } else {
-      localStorage.removeItem(API_KEY_STORAGE);
-    }
-    setKeySaved(true);
-    setTimeout(() => setKeySaved(false), 2000);
-  };
-
-  const maskedKey = apiKey.length > 8
-    ? `sk-ant-${"·".repeat(16)}${apiKey.slice(-4)}`
-    : apiKey;
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
+
+  // Model selection
+  const [activeModel, setActiveModel] = useState(() => localStorage.getItem(AI_MODEL_KEY) ?? DEFAULT_MODEL_ID);
+  const handleModelSelect = (id: string) => {
+    setActiveModel(id);
+    localStorage.setItem(AI_MODEL_KEY, id);
+  };
+
+  const anthropicModels = AI_MODELS.filter((m) => m.provider === "anthropic");
+  const openaiModels    = AI_MODELS.filter((m) => m.provider === "openai");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -155,38 +196,58 @@ export function Settings() {
 
         {/* AI Integration */}
         <Section label="AI INTEGRATION">
-          <div className="flex flex-col gap-4 p-4 rounded-card"
+          <div className="flex flex-col gap-5 p-4 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center gap-2 mb-1">
-              <Cpu size={12} className="text-dim" />
-              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">ANTHROPIC API KEY</span>
-              {apiKey && (
-                <span className="ml-auto font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-white/50"
-                  style={{ border: "1px solid rgba(255,255,255,0.12)" }}>CONFIGURED</span>
-              )}
-            </div>
-            <p className="font-mono text-[10px] text-muted leading-relaxed">
-              Required for the Image Analyzer (Phase 09). Your key is stored locally and never leaves your device.
-            </p>
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  type={showKey ? "text" : "password"}
-                  value={showKey ? apiKey : maskedKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  onFocus={() => setShowKey(true)}
-                  placeholder="sk-ant-api03-…"
-                  className="w-full h-8 pl-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none transition-precise"
-                  style={{ border: "1px solid rgba(255,255,255,0.10)" }}
-                />
-                <button type="button" onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise">
-                  {showKey ? <EyeOff size={10} /> : <Eye size={10} />}
-                </button>
+              <Cpu size={12} className="text-dim" />
+              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">API KEYS</span>
+            </div>
+            <p className="font-mono text-[10px] text-muted leading-relaxed -mt-2">
+              Keys are stored locally and never leave your device.
+            </p>
+            <ApiKeyField
+              label="Anthropic"
+              storageKey={AI_KEY_ANTHROPIC}
+              placeholder="sk-ant-api03-…"
+              mask={(v) => v.length > 8 ? `sk-ant-${"·".repeat(14)}${v.slice(-4)}` : v}
+            />
+            <ApiKeyField
+              label="OpenAI"
+              storageKey={AI_KEY_OPENAI}
+              placeholder="sk-proj-…"
+              mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}
+            />
+
+            {/* Model selector */}
+            <div className="flex flex-col gap-2 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+              <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60 pt-1">ACTIVE MODEL</span>
+              <div className="flex flex-col gap-1">
+                {[{ label: "ANTHROPIC", models: anthropicModels }, { label: "OPENAI", models: openaiModels }].map(({ label, models }) => (
+                  <div key={label} className="flex flex-col gap-1">
+                    <span className="font-mono text-[8px] tracking-widest text-dim/30 uppercase mt-1">{label}</span>
+                    {models.map((model) => (
+                      <button key={model.id} type="button"
+                        onClick={() => handleModelSelect(model.id)}
+                        className={cn(
+                          "flex items-center justify-between px-3 py-2 rounded-sm text-left transition-precise",
+                          activeModel === model.id
+                            ? "bg-white/6 text-white"
+                            : "text-dim hover:text-muted hover:bg-white/3"
+                        )}
+                        style={{ border: activeModel === model.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid transparent" }}>
+                        <span className="font-mono text-[10px]">{model.label}</span>
+                        <span className={cn(
+                          "font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm",
+                          model.tier === "powerful" ? "text-white/40" : model.tier === "balanced" ? "text-white/30" : "text-white/20"
+                        )}
+                          style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                          {model.tier}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
               </div>
-              <Button variant="ghost" size="sm" onClick={handleSaveKey}>
-                {keySaved ? "Saved ✓" : "Save"}
-              </Button>
             </div>
           </div>
         </Section>

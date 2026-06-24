@@ -5,6 +5,7 @@ import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings } f
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
+import { getActiveModel, getApiKey } from "@/lib/aiConfig";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -37,44 +38,68 @@ Analyze this image and return ONLY a valid JSON object (no markdown, no explanat
 quality_tier must be one of: commercial, editorial, concept, reference.
 Return only the JSON object — no markdown fences, no preamble.`;
 
-async function analyzeImage(
-  base64: string,
-  mimeType: string,
-  apiKey: string
-): Promise<AnalysisResult> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      messages: [
-        {
+async function analyzeImage(base64: string, mimeType: string): Promise<AnalysisResult> {
+  const model = getActiveModel();
+  const apiKey = getApiKey(model.provider);
+  if (!apiKey) throw new Error(`No API key configured for ${model.provider}. Add it in Settings.`);
+
+  let text: string;
+
+  if (model.provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: 1024,
+        messages: [{
           role: "user",
           content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mimeType, data: base64 },
-            },
+            { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } },
             { type: "text", text: ANALYSIS_PROMPT },
           ],
-        },
-      ],
-    }),
-  });
+        }],
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `Anthropic API error ${res.status}`);
+    }
+    const data = await res.json() as { content: { type: string; text: string }[] };
+    text = data.content.find((c) => c.type === "text")?.text ?? "";
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
-    throw new Error(err?.error?.message ?? `API error ${res.status}`);
+  } else {
+    // OpenAI vision
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: 1024,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+            { type: "text", text: ANALYSIS_PROMPT },
+          ],
+        }],
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({})) as { error?: { message?: string } };
+      throw new Error(err?.error?.message ?? `OpenAI API error ${res.status}`);
+    }
+    const data = await res.json() as { choices: { message: { content: string } }[] };
+    text = data.choices[0]?.message?.content ?? "";
   }
 
-  const data = await res.json() as { content: { type: string; text: string }[] };
-  const text = data.content.find((c) => c.type === "text")?.text ?? "";
-  // Strip any accidental markdown fences
   const clean = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
   return JSON.parse(clean) as AnalysisResult;
 }
@@ -118,7 +143,8 @@ export function ImageAnalyzer() {
   const navigate = useNavigate();
   const { create } = usePromptStore();
 
-  const apiKey = localStorage.getItem("fc_anthropic_key") ?? "";
+  const activeModel = getActiveModel();
+  const apiKey = getApiKey(activeModel.provider);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>("");
@@ -152,7 +178,7 @@ export function ImageAnalyzer() {
     setResult(null);
     try {
       const { base64, mimeType } = await fileToBase64(imageFile);
-      const analysis = await analyzeImage(base64, mimeType, apiKey);
+      const analysis = await analyzeImage(base64, mimeType);
       setResult(analysis);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed. Check your API key in Settings.");
@@ -228,16 +254,21 @@ export function ImageAnalyzer() {
             </div>
           )}
 
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleAnalyze}
-            disabled={!imageFile || !apiKey || analyzing}
-            className="w-full justify-center"
-          >
-            <Scan size={11} />
-            {analyzing ? "Analyzing…" : "Analyze Image"}
-          </Button>
+          <div className="flex flex-col gap-1.5">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleAnalyze}
+              disabled={!imageFile || !apiKey || analyzing}
+              className="w-full justify-center"
+            >
+              <Scan size={11} />
+              {analyzing ? "Analyzing…" : "Analyze Image"}
+            </Button>
+            <span className="font-mono text-[8px] text-dim/30 text-center">
+              via {activeModel.label}
+            </span>
+          </div>
 
           {imageUrl && (
             <button type="button" onClick={() => { setImageFile(null); setImageUrl(""); setResult(null); setError(""); setImported(false); }}

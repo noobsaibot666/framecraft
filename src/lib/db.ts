@@ -850,6 +850,13 @@ function tryParseJson<T>(raw: string, fallback: T): T {
   try { return JSON.parse(raw) as T; } catch { return fallback; }
 }
 
+export async function getSREFByCode(code: string): Promise<SREF | null> {
+  if (!isTauri) return null;
+  const db = await getDb();
+  const rows = (await db.select("SELECT * FROM srefs WHERE code = $1 LIMIT 1", [code])) as Record<string, unknown>[];
+  return rows.length ? rowToSREF(rows[0]) : null;
+}
+
 export async function getSREFs(): Promise<SREF[]> {
   if (isTauri) {
     const db = await getDb();

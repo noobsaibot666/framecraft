@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
+import { getSREFByCode, createSREF } from "@/lib/db";
 import { findSimilarPrompts } from "@/lib/memoryEngine";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
@@ -34,6 +35,7 @@ interface DetectedParams {
   tile?: boolean;
   fast?: boolean;
   relax?: boolean;
+  preview?: boolean;
   exp?: boolean;
 }
 
@@ -56,15 +58,18 @@ function detectMidjourneyParams(text: string): DetectedParams {
   const zo  = m(/--zoom\s+(\S+)/);                          if (zo)  dp.zoom          = zo[1];
   const sp  = m(/--stop\s+(\d+)/);                          if (sp)  dp.stop          = sp[1];
   const rp  = m(/--r(?:epeat)?\s+(\d+)/);                   if (rp)  dp.repeat        = rp[1];
-  const sr  = m(/--sref\s+(\S+)/);                          if (sr)  dp.sref          = sr[1];
+  // --sref with optional value (bare --sref at end of string is valid)
+  const sr  = m(/--sref(?:\s+([^\s-]\S*))?/);               if (sr)  dp.sref          = sr[1] ?? "";
   const pr  = m(/--profile\s+(\S+)|--p\s+(\S+)/);           if (pr)  dp.profile       = pr[1] ?? pr[2];
   const no  = m(/--no\s+([^-]+)/);                          if (no)  dp.no            = no[1].trim();
-  if (/\b--raw\b/.test(text))      dp.raw   = true;
-  if (/\b--hd\b/.test(text))       dp.hd    = true;
-  if (/\b--tile\b/.test(text))     dp.tile  = true;
-  if (/\b--fast\b/.test(text))     dp.fast  = true;
-  if (/\b--relax\b/.test(text))    dp.relax = true;
-  if (/\b-{1,2}exp\b/.test(text))  dp.exp   = true;
+  // Boolean flags: \b doesn't work before -- (- is non-word char), use negative lookahead instead
+  if (/--raw(?!\w)/.test(text))     dp.raw     = true;
+  if (/--hd(?!\w)/.test(text))      dp.hd      = true;
+  if (/--tile(?!\w)/.test(text))    dp.tile    = true;
+  if (/--fast(?!\w)/.test(text))    dp.fast    = true;
+  if (/--relax(?!\w)/.test(text))   dp.relax   = true;
+  if (/--preview(?!\w)/.test(text)) dp.preview = true;
+  if (/-{1,2}exp(?!\w)/.test(text)) dp.exp     = true;
   return dp;
 }
 
@@ -83,16 +88,17 @@ function stripParams(text: string): string {
     .replace(/--zoom\s+\S+/g, "")
     .replace(/--stop\s+\d+/g, "")
     .replace(/--r(?:epeat)?\s+\d+/g, "")
-    .replace(/--sref\s+\S+/g, "")
+    .replace(/--sref(?:\s+\S+)?/g, "")
     .replace(/--profile\s+\S+/g, "")
     .replace(/--p\s+\S+/g, "")
     .replace(/--no\s+[^-]+/g, "")
-    .replace(/\b--raw\b/g, "")
-    .replace(/\b--hd\b/g, "")
-    .replace(/\b--tile\b/g, "")
-    .replace(/\b--fast\b/g, "")
-    .replace(/\b--relax\b/g, "")
-    .replace(/\b-{1,2}exp\b/g, "")
+    .replace(/--raw(?!\w)/g, "")
+    .replace(/--hd(?!\w)/g, "")
+    .replace(/--tile(?!\w)/g, "")
+    .replace(/--fast(?!\w)/g, "")
+    .replace(/--relax(?!\w)/g, "")
+    .replace(/--preview(?!\w)/g, "")
+    .replace(/-{1,2}exp(?!\w)/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -307,7 +313,14 @@ export function ManualImport() {
       if (params.tile)    extraParams.tile    = true;
       if (params.fast)    extraParams.fast    = true;
       if (params.relax)   extraParams.relax   = true;
+      if (params.preview) extraParams.preview = true;
       if (params.exp)     extraParams.exp     = true;
+      // Auto-save SREF to library if a code was detected and doesn't already exist
+      if (params.sref) {
+        getSREFByCode(params.sref).then((existing) => {
+          if (!existing) createSREF({ code: params.sref! }).catch(() => {});
+        }).catch(() => {});
+      }
       const notes = source ? `Source: ${source}` : undefined;
       const id = await create({
         title: title.trim(),
@@ -437,13 +450,18 @@ export function ManualImport() {
                   {detected.zoom          && <ParamBadge label="--zoom"    value={detected.zoom} />}
                   {detected.stop          && <ParamBadge label="--stop"    value={detected.stop} />}
                   {detected.repeat        && <ParamBadge label="--repeat"  value={detected.repeat} />}
-                  {detected.sref          && <ParamBadge label="--sref"    value={detected.sref} />}
+                  {detected.sref !== undefined && (
+                    detected.sref
+                      ? <ParamBadge label="--sref" value={detected.sref} />
+                      : <FlagBadge label="--sref (no code)" />
+                  )}
                   {detected.profile       && <ParamBadge label="--profile" value={detected.profile} />}
                   {detected.raw           && <FlagBadge label="--raw" />}
                   {detected.hd            && <FlagBadge label="--hd" />}
                   {detected.tile          && <FlagBadge label="--tile" />}
                   {detected.fast          && <FlagBadge label="--fast" />}
                   {detected.relax         && <FlagBadge label="--relax" />}
+                  {detected.preview       && <FlagBadge label="--preview" />}
                   {detected.exp           && <FlagBadge label="-exp" />}
                 </div>
                 {detected.no && (

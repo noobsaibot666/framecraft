@@ -554,6 +554,7 @@ export async function deleteAvoidancePattern(id: string): Promise<void> {
 // ─── Results ─────────────────────────────────────────────────
 
 export interface CreateResultInput {
+  id?: string;
   prompt_id: string;
   file_path?: string;
   thumbnail_path?: string;
@@ -598,14 +599,16 @@ const _devResults: (Result & { prompt_title?: string })[] = [];
 export async function createResult(data: CreateResultInput): Promise<string> {
   if (isTauri) {
     const db = await getDb();
+    const id = data.id ?? crypto.randomUUID().replace(/-/g, "");
     await db.execute(
       `INSERT INTO results
-        (prompt_id, file_path, thumbnail_path, provider,
+        (id, prompt_id, file_path, thumbnail_path, provider,
          score_overall, score_realism, score_brand_fit, score_composition,
          score_lighting, score_ai_risk, reuse_potential,
          is_winner, is_failed, artifacts, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [
+        id,
         data.prompt_id,
         data.file_path ?? null,
         data.thumbnail_path ?? null,
@@ -623,13 +626,9 @@ export async function createResult(data: CreateResultInput): Promise<string> {
         data.notes ?? null,
       ]
     );
-    const rows = (await db.select(
-      "SELECT id FROM results WHERE prompt_id = $1 ORDER BY rowid DESC LIMIT 1",
-      [data.prompt_id]
-    )) as Record<string, unknown>[];
-    return rows[0].id as string;
+    return id;
   }
-  const id = `dev_result_${Date.now()}`;
+  const id = data.id ?? `dev_result_${Date.now()}`;
   _devResults.push({
     id,
     prompt_id: data.prompt_id,

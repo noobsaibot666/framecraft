@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown } from "lucide-react";
+import { saveReferenceImage, toDisplaySrc } from "@/lib/fileStore";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import {
@@ -241,6 +242,7 @@ export function ReferenceDetail() {
   const [notes, setNotes] = useState("");
   const [fileData, setFileData] = useState<string | undefined>();
   const [thumbData, setThumbData] = useState<string | undefined>();
+  const [pendingDataUrl, setPendingDataUrl] = useState<string | undefined>();
 
   // Linked items
   const [linkedPrompts, setLinkedPrompts] = useState<{ id: string; label: string; role: ReferenceRole }[]>([]);
@@ -270,6 +272,7 @@ export function ReferenceDetail() {
       setNotes(ref.notes ?? "");
       setFileData(ref.file_data);
       setThumbData(ref.thumbnail_data);
+      setPendingDataUrl(undefined);
 
       setLinkedPrompts(prompts.map((p) => ({ id: p.id, label: p.title, role: p.role })));
       setLinkedResults(results.map((r) => ({ id: r.id, label: `Result ${r.id.slice(0, 6)}`, role: r.role })));
@@ -297,11 +300,39 @@ export function ReferenceDetail() {
     if (!title.trim()) return;
     setSaving(true);
     try {
+      let resolvedFile = fileData;
+      let resolvedThumb = thumbData;
+
+      if (pendingDataUrl) {
+        const refId = isNew ? crypto.randomUUID().replace(/-/g, "") : id!;
+        const { filePath, thumbPath } = await saveReferenceImage(refId, pendingDataUrl);
+        resolvedFile = filePath;
+        resolvedThumb = thumbPath;
+        setFileData(filePath);
+        setThumbData(thumbPath);
+        setPendingDataUrl(undefined);
+
+        if (isNew) {
+          const newId = await createReference({
+            ...buildInput(),
+            id: refId,
+            file_data: resolvedFile,
+            thumbnail_data: resolvedThumb,
+          });
+          navigate(`/references/${newId}`, { replace: true });
+          return;
+        }
+      }
+
       if (isNew) {
         const newId = await createReference(buildInput());
         navigate(`/references/${newId}`, { replace: true });
       } else {
-        await updateReference(id!, buildInput());
+        await updateReference(id!, {
+          ...buildInput(),
+          file_data: resolvedFile,
+          thumbnail_data: resolvedThumb,
+        });
       }
     } finally {
       setSaving(false);
@@ -360,8 +391,12 @@ export function ReferenceDetail() {
           <div className="flex flex-col gap-2">
             <FieldLabel>IMAGE</FieldLabel>
             <ImageDropZone
-              src={fileData}
-              onFile={(full, thumb) => { setFileData(full); setThumbData(thumb); }}
+              src={toDisplaySrc(fileData) ?? fileData}
+              onFile={(full, thumb) => {
+                setFileData(full);
+                setThumbData(thumb);
+                setPendingDataUrl(full);
+              }}
             />
           </div>
 

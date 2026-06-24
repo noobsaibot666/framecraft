@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink } from "lucide-react";
+import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { getReferences, searchReferences, deleteReference } from "@/lib/references";
+import { getReferences, searchReferences, deleteReference, createReference } from "@/lib/references";
+import { saveReferenceImage, toDisplaySrc } from "@/lib/fileStore";
+import { fileToDataUrl } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
 import type { Reference, ReferenceKind, ReferenceFilters } from "@/types";
 
@@ -65,7 +67,8 @@ function StarRow({ value }: { value: number }) {
 }
 
 function Thumbnail({ src, title }: { src?: string; title: string }) {
-  if (!src) {
+  const resolved = toDisplaySrc(src) ?? src;
+  if (!resolved) {
     return (
       <div className="w-full aspect-video rounded-sm flex items-center justify-center"
         style={{ background: "rgba(255,255,255,0.04)" }}>
@@ -74,7 +77,7 @@ function Thumbnail({ src, title }: { src?: string; title: string }) {
     );
   }
   return (
-    <img src={src} alt={title}
+    <img src={resolved} alt={title}
       className="w-full aspect-video object-cover rounded-sm"
       style={{ background: "rgba(255,255,255,0.04)" }} />
   );
@@ -180,6 +183,9 @@ export function ReferenceLibrary() {
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
   const [ratingFilter, setRatingFilter] = useState("all");
+  const [dropping, setDropping] = useState(false);
+  const [dropImporting, setDropImporting] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   const buildFilters = (): ReferenceFilters => {
     const f: ReferenceFilters = {};
@@ -215,6 +221,31 @@ export function ReferenceLibrary() {
     setRefs((prev) => prev.filter((r) => r.id !== id));
   };
 
+  const handleDropFiles = async (files: FileList) => {
+    const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (!imageFiles.length) return;
+    setDropImporting(true);
+    try {
+      for (const file of imageFiles) {
+        const refId = crypto.randomUUID().replace(/-/g, "");
+        const dataUrl = await fileToDataUrl(file);
+        const { filePath, thumbPath } = await saveReferenceImage(refId, dataUrl);
+        const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+        const newId = await createReference({
+          id: refId,
+          title,
+          kind: "image",
+          file_data: filePath,
+          thumbnail_data: thumbPath,
+        });
+        navigate(`/references/${newId}`);
+        return; // navigate to first dropped file for confirmation
+      }
+    } finally {
+      setDropImporting(false);
+    }
+  };
+
   return (
     <PageContainer
       title="References"
@@ -240,6 +271,26 @@ export function ReferenceLibrary() {
 
         <div className="flex-1" />
         <span className="font-mono text-[9px] text-dim/40">{refs.length} references</span>
+      </div>
+
+      {/* Drop zone */}
+      <div
+        ref={dropRef}
+        onDragOver={(e) => { e.preventDefault(); setDropping(true); }}
+        onDragLeave={(e) => { if (!dropRef.current?.contains(e.relatedTarget as Node)) setDropping(false); }}
+        onDrop={(e) => { e.preventDefault(); setDropping(false); handleDropFiles(e.dataTransfer.files); }}
+        className={cn(
+          "flex items-center justify-center gap-3 h-12 rounded-card mb-4 transition-precise cursor-default",
+          dropping
+            ? "border-white/30 bg-white/5"
+            : "border-white/8 hover:border-white/15"
+        )}
+        style={{ border: "2px dashed" }}
+      >
+        <Upload size={11} className={cn("shrink-0", dropping ? "text-white/60" : "text-dim/30")} />
+        <span className={cn("font-mono text-[9px] tracking-widest uppercase", dropping ? "text-white/60" : "text-dim/30")}>
+          {dropImporting ? "Importing…" : "Drop images to add as references"}
+        </span>
       </div>
 
       {/* Content */}

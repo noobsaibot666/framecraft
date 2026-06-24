@@ -8,7 +8,8 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { createReference } from "@/lib/references";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
-import { generateThumbnail, fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
+import { saveResultImage, saveReferenceImage } from "@/lib/fileStore";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -141,13 +142,14 @@ export function ResultReview() {
 
   const handleSaveAsRef = async () => {
     if (!file || !prompt) return;
-    const { fileToDataUrl, generateThumbnail } = await import("@/lib/imageUtils");
-    const [full, thumb] = await Promise.all([fileToDataUrl(file), generateThumbnail(file, 400)]);
+    const dataUrl = await fileToDataUrl(file);
+    const refId = crypto.randomUUID().replace(/-/g, "");
+    const { filePath, thumbPath } = await saveReferenceImage(refId, dataUrl);
     await createReference({
       title: `${prompt.title} — result`,
       kind: "result",
-      file_data: full,
-      thumbnail_data: thumb,
+      file_data: filePath,
+      thumbnail_data: thumbPath,
       provider: prompt.provider,
       category: prompt.category,
       tags: prompt.tags,
@@ -159,15 +161,21 @@ export function ResultReview() {
     if (!promptId) return;
     setSaving(true);
     try {
-      let thumbnail: string | undefined;
-      let originalImage: string | undefined;
-      if (file) thumbnail = await generateThumbnail(file, 400);
-      if (file) originalImage = await fileToDataUrl(file);
+      const resultId = crypto.randomUUID().replace(/-/g, "");
+      let filePath: string | undefined;
+      let thumbPath: string | undefined;
+      if (file) {
+        const dataUrl = await fileToDataUrl(file);
+        const saved = await saveResultImage(resultId, dataUrl);
+        filePath = saved.filePath;
+        thumbPath = saved.thumbPath;
+      }
 
-      const resultId = await createResult({
+      await createResult({
+        id: resultId,
         prompt_id: promptId,
-        file_path: originalImage,
-        thumbnail_path: thumbnail,
+        file_path: filePath,
+        thumbnail_path: thumbPath,
         provider: prompt?.provider,
         score_overall: scores.overall,
         score_realism: scores.realism,

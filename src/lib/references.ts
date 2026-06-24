@@ -53,6 +53,7 @@ const _devStore: Reference[] = [];
 // ─── CRUD ─────────────────────────────────────────────────────
 
 export interface CreateReferenceInput {
+  id?: string;
   title: string;
   description?: string;
   kind: ReferenceKind;
@@ -69,7 +70,7 @@ export interface CreateReferenceInput {
 }
 
 export async function createReference(data: CreateReferenceInput): Promise<string> {
-  const id = generateId();
+  const id = data.id ?? generateId();
   const ts = now();
 
   if (isTauri) {

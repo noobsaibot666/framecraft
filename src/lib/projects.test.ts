@@ -7,14 +7,14 @@ import {
   updateProject,
   deleteProject,
 } from "./projects";
-import type { ProjectStatus } from "@/types";
+import type { ProjectStatus, Category } from "@/types";
 
 // isTauri is false in Vitest — all calls use the in-memory _devStore
 
 function proj(overrides: {
   title?: string;
   status?: ProjectStatus;
-  category?: string;
+  category?: Category;
   client?: string;
 } = {}) {
   return {

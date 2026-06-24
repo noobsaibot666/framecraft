@@ -659,7 +659,12 @@ export function ProjectWorkspace() {
             />
           </div>
 
-          {/* Quick action */}
+          {/* Quick actions */}
+          <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/compare/${id}`)}
+            className="w-full justify-center text-dim">
+            Compare Results
+          </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/craft?project=${id}`)}
             className="w-full justify-center text-dim">

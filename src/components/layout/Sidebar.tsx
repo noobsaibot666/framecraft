@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { num: "09", label: "FRAMES",     to: "/frames" },
   { num: "10", label: "REFS",       to: "/references" },
   { num: "11", label: "PROJECTS",   to: "/projects" },
+  { num: "12", label: "COMPARE",    to: "/compare" },
 ] as const;
 
 function NavItem({

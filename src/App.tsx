@@ -18,6 +18,7 @@ import { ReferenceDetail } from "@/pages/ReferenceDetail";
 import { ProjectLibrary } from "@/pages/ProjectLibrary";
 import { ProjectWorkspace } from "@/pages/ProjectWorkspace";
 import { LineageView } from "@/pages/LineageView";
+import { ComparisonLab } from "@/pages/ComparisonLab";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,8 @@ export default function App() {
             <Route path="/projects" element={<ProjectLibrary />} />
             <Route path="/projects/:id" element={<ProjectWorkspace />} />
             <Route path="/lineage/:promptId" element={<LineageView />} />
+            <Route path="/compare" element={<ComparisonLab />} />
+            <Route path="/compare/:projectId" element={<ComparisonLab />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

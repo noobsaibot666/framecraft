@@ -271,3 +271,68 @@ export interface ReferenceFilters {
   provider?: Provider;
   minRating?: number;
 }
+
+// ─── V4: Comparison Lab ───────────────────────────────────────
+
+export interface ComparisonSession {
+  id: string;
+  title: string;
+  project_id?: string;
+  notes?: string;
+  item_count: number;
+  winner_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ComparisonItem {
+  id: string;
+  session_id: string;
+  result_id: string;
+  position: number;
+  is_winner: boolean;
+  is_rejected: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+/** Enriched result data used in comparison slots. */
+export interface ComparisonResult {
+  result_id: string;
+  prompt_id: string;
+  prompt_title: string;
+  prompt_provider: Provider;
+  prompt_version: number;
+  thumbnail_path?: string;
+  file_path?: string;
+  score_overall: number;
+  score_realism: number;
+  score_brand_fit: number;
+  score_composition: number;
+  score_lighting: number;
+  score_ai_risk: number;
+  is_winner: boolean;
+  is_failed: boolean;
+  artifacts?: string[];
+  created_at: string;
+}
+
+// ─── V4: Deliverable Board ────────────────────────────────────
+
+export type DeliverableStatus = "todo" | "in_progress" | "review" | "done" | "cancelled";
+
+export interface Deliverable {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string;
+  status: DeliverableStatus;
+  position: number;
+  prompt_id?: string;
+  result_id?: string;
+  reference_id?: string;
+  notes?: string;
+  due_date?: string;
+  created_at: string;
+  updated_at: string;
+}

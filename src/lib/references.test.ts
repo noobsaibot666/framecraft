@@ -7,11 +7,11 @@ import {
   updateReference,
   deleteReference,
 } from "./references";
-import type { ReferenceKind } from "@/types";
+import type { ReferenceKind, Category } from "@/types";
 
 // isTauri is false in Vitest — all calls use the in-memory _devStore
 
-function ref(overrides: { title?: string; kind?: ReferenceKind; category?: string; rating?: number; tags?: string[] } = {}) {
+function ref(overrides: { title?: string; kind?: ReferenceKind; category?: Category; rating?: number; tags?: string[] } = {}) {
   return {
     title: overrides.title ?? "Test ref",
     kind: overrides.kind ?? ("moodboard" as ReferenceKind),

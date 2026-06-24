@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag } from "lucide-react";
+import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -188,9 +188,15 @@ export function VideoFrames() {
   const [selectedModel, setSelectedModel] = useState<AIModel>(AI_MODELS[0]);
   const apiKey = getApiKey(selectedModel.provider);
 
-  // Video state
+  // Video file state
   const [videoFile, setVideoFile]     = useState<File | null>(null);
   const [videoObjUrl, setVideoObjUrl] = useState("");
+
+  // Player state
+  const [isPlaying, setIsPlaying]   = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration]     = useState(0);
+  const [isMuted, setIsMuted]       = useState(false);
 
   // Extraction state
   const [frameCount, setFrameCount]     = useState<6 | 12 | 18>(12);
@@ -205,6 +211,28 @@ export function VideoFrames() {
   const [results, setResults]           = useState<FrameResult[]>([]);
   const [importedIds, setImportedIds]   = useState<Set<number>>(new Set());
 
+  // Player controls
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+  };
+  const toggleMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setIsMuted(v.muted);
+  };
+  const handleSeek = (t: number) => {
+    if (videoRef.current) videoRef.current.currentTime = t;
+    setCurrentTime(t);
+  };
+  const skip = (secs: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = Math.max(0, Math.min(duration, v.currentTime + secs));
+  };
+
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
     if (!file) return;
@@ -212,6 +240,9 @@ export function VideoFrames() {
     const url = URL.createObjectURL(file);
     setVideoFile(file);
     setVideoObjUrl(url);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
     setFrames([]);
     setSelected(new Set());
     setResults([]);
@@ -223,6 +254,7 @@ export function VideoFrames() {
     accept: { "video/*": [".mp4", ".mov", ".webm", ".avi", ".mkv"] },
     maxFiles: 1,
     multiple: false,
+    noClick: !!videoFile, // video click = play/pause; file picker via Replace button
   });
 
   const handleExtract = async () => {
@@ -313,23 +345,25 @@ export function VideoFrames() {
               <video
                 ref={videoRef}
                 src={videoObjUrl}
-                muted
+                muted={isMuted}
                 playsInline
-                className="w-full h-full object-contain bg-black"
-                onMouseEnter={(e) => (e.currentTarget as HTMLVideoElement).play()}
-                onMouseLeave={(e) => {
-                  const v = e.currentTarget as HTMLVideoElement;
-                  v.pause();
-                  v.currentTime = 0;
-                }}
+                className="w-full h-full object-contain bg-black cursor-pointer"
+                onClick={togglePlay}
+                onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLVideoElement).currentTime)}
+                onLoadedMetadata={(e) => setDuration((e.currentTarget as HTMLVideoElement).duration)}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
               />
-              {/* Hover cue */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-precise pointer-events-none">
-                <span className="font-mono text-[9px] tracking-widest uppercase text-white/50 px-3 py-1.5 rounded-sm"
-                  style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.10)" }}>
-                  Hover to preview · Drop to replace
-                </span>
-              </div>
+              {/* Play/Pause overlay — shown briefly on toggle */}
+              {!isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-14 h-14 rounded-full flex items-center justify-center"
+                    style={{ background: "rgba(0,0,0,0.55)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                    <Play size={22} className="text-white ml-1" />
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -359,7 +393,72 @@ export function VideoFrames() {
           )}
         </div>
 
-        {/* ── Controls bar ── */}
+        {/* ── Player controls ── */}
+        {videoFile && (
+          <div className="flex items-center gap-3 px-1 py-2 rounded-sm"
+            style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
+
+            {/* Skip back */}
+            <button type="button" onClick={() => skip(-5)}
+              className="text-dim hover:text-white transition-precise shrink-0" title="-5s">
+              <SkipBack size={14} />
+            </button>
+
+            {/* Play / Pause */}
+            <button type="button" onClick={togglePlay}
+              className="text-white hover:text-white/70 transition-precise shrink-0">
+              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+            </button>
+
+            {/* Skip forward */}
+            <button type="button" onClick={() => skip(5)}
+              className="text-dim hover:text-white transition-precise shrink-0" title="+5s">
+              <SkipForward size={14} />
+            </button>
+
+            {/* Scrubber */}
+            <div className="flex-1 flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                step={0.05}
+                value={currentTime}
+                onChange={(e) => handleSeek(Number(e.target.value))}
+                className="w-full h-0.5 rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, rgba(255,255,255,0.75) ${duration ? (currentTime / duration) * 100 : 0}%, rgba(255,255,255,0.12) 0%)`,
+                  accentColor: "white",
+                }}
+              />
+            </div>
+
+            {/* Time */}
+            <span className="font-mono text-[9px] text-dim/60 shrink-0 tabular-nums">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+
+            {/* Mute */}
+            <button type="button" onClick={toggleMute}
+              className="text-dim hover:text-white transition-precise shrink-0">
+              {isMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+            </button>
+
+            <div className="w-px h-4 bg-white/10 shrink-0" />
+
+            {/* Replace video */}
+            <label className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise cursor-pointer shrink-0 px-2 py-1 rounded-sm"
+              style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+              <Upload size={9} /> Replace
+              <input type="file" accept="video/*" className="hidden" onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onDrop([f]);
+              }} />
+            </label>
+          </div>
+        )}
+
+        {/* ── Action controls bar ── */}
         <div className="flex items-center gap-3 flex-wrap py-1">
           {/* Filename */}
           {videoFile && (

@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { num: "04", label: "RECIPES",    to: "/recipes" },
   { num: "05", label: "IMPORT",     to: "/import" },
   { num: "06", label: "SREFS",      to: "/srefs" },
+  { num: "07", label: "ANALYZE",    to: "/analyze" },
 ] as const;
 
 function NavItem({

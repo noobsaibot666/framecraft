@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Download, Upload, Database, Info } from "lucide-react";
+import { AlertTriangle, Download, Upload, Database, Info, Eye, EyeOff, Cpu } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
@@ -27,9 +27,30 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+const API_KEY_STORAGE = "fc_anthropic_key";
+
 export function Settings() {
   const { stats, fetchStats } = useDashboardStore();
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // API key state
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) ?? "");
+  const [showKey, setShowKey] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+
+  const handleSaveKey = () => {
+    if (apiKey.trim()) {
+      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
+    } else {
+      localStorage.removeItem(API_KEY_STORAGE);
+    }
+    setKeySaved(true);
+    setTimeout(() => setKeySaved(false), 2000);
+  };
+
+  const maskedKey = apiKey.length > 8
+    ? `sk-ant-${"·".repeat(16)}${apiKey.slice(-4)}`
+    : apiKey;
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
@@ -129,6 +150,44 @@ export function Settings() {
             <InfoRow label="TOTAL RESULTS" value={stats.total_results} />
             <InfoRow label="TOTAL RECIPES" value={stats.total_recipes} />
             <InfoRow label="WINNERS" value={stats.total_winners} />
+          </div>
+        </Section>
+
+        {/* AI Integration */}
+        <Section label="AI INTEGRATION">
+          <div className="flex flex-col gap-4 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Cpu size={12} className="text-dim" />
+              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">ANTHROPIC API KEY</span>
+              {apiKey && (
+                <span className="ml-auto font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-white/50"
+                  style={{ border: "1px solid rgba(255,255,255,0.12)" }}>CONFIGURED</span>
+              )}
+            </div>
+            <p className="font-mono text-[10px] text-muted leading-relaxed">
+              Required for the Image Analyzer (Phase 09). Your key is stored locally and never leaves your device.
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={showKey ? apiKey : maskedKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  onFocus={() => setShowKey(true)}
+                  placeholder="sk-ant-api03-…"
+                  className="w-full h-8 pl-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none transition-precise"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+                />
+                <button type="button" onClick={() => setShowKey((v) => !v)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise">
+                  {showKey ? <EyeOff size={10} /> : <Eye size={10} />}
+                </button>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleSaveKey}>
+                {keySaved ? "Saved ✓" : "Save"}
+              </Button>
+            </div>
           </div>
         </Section>
 

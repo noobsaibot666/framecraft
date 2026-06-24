@@ -157,7 +157,13 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 
 // ─── Provider Parameter Panels ────────────────────────────────
 
-interface MJParams { aspect_ratio: string; model_version: string; stylize: string; chaos: string; weird: string; quality: string; no_prompt: string; sref_code: string; profile: string; raw: boolean; }
+interface MJParams {
+  aspect_ratio: string; model_version: string; quality: string;
+  stylize: string; chaos: string; weird: string; stop: string; repeat: string;
+  seed: string; zoom: string; style: string; sw: string; sv: string;
+  sref_code: string; profile: string; no_prompt: string;
+  raw: boolean; hd: boolean; tile: boolean; fast: boolean; relax: boolean; exp: boolean;
+}
 interface DalleParams { size: string; quality: string; style: string; }
 interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
 
@@ -193,6 +199,15 @@ const MJ_QUALITY = [
   { value: "2", label: "2 — Double (v5 only)" },
 ];
 
+const MJ_STYLE = [
+  { value: "", label: "Default" },
+  { value: "raw", label: "raw" },
+  { value: "cute", label: "cute (Niji)" },
+  { value: "expressive", label: "expressive (Niji)" },
+  { value: "original", label: "original (Niji)" },
+  { value: "scenic", label: "scenic (Niji)" },
+];
+
 const DALLE_SIZES = [
   { value: "", label: "Default" },
   { value: "1024x1024", label: "1024×1024 — Square" },
@@ -219,22 +234,48 @@ const SD_SAMPLERS = [
   { value: "LMS", label: "LMS" },
 ];
 
-function MidjourneyParams({ p, set, setRaw }: { p: MJParams; set: (k: keyof MJParams, v: string) => void; setRaw: (v: boolean) => void }) {
+function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v: string | boolean) => void }) {
+  const flag = (k: keyof MJParams, label: string) => (
+    <label className="flex items-center gap-1.5 cursor-pointer">
+      <input type="checkbox" checked={p[k] as boolean} onChange={(e) => set(k, e.target.checked)} className="accent-white w-3 h-3" />
+      <span className="system-label">{label}</span>
+    </label>
+  );
   return (
     <>
+      {/* Core */}
       <FieldSelect label="ASPECT RATIO" value={p.aspect_ratio} onChange={(v) => set("aspect_ratio", v)} options={MJ_ASPECT_RATIOS} />
       <FieldSelect label="VERSION --v" value={p.model_version} onChange={(v) => set("model_version", v)} options={MJ_VERSIONS} />
       <FieldSelect label="QUALITY --q" value={p.quality} onChange={(v) => set("quality", v)} options={MJ_QUALITY} />
       <FieldInput label="STYLIZE --s" value={p.stylize} onChange={(v) => set("stylize", v)} placeholder="400" hint="0–1000" />
       <FieldInput label="CHAOS --c" value={p.chaos} onChange={(v) => set("chaos", v)} placeholder="0" hint="0–100" />
       <FieldInput label="WEIRD --w" value={p.weird} onChange={(v) => set("weird", v)} placeholder="0" hint="0–3000" />
+      {/* Style */}
+      <FieldSelect label="STYLE --style" value={p.style} onChange={(v) => set("style", v)} options={MJ_STYLE} />
+      <FieldInput label="STYLE WEIGHT --sw" value={p.sw} onChange={(v) => set("sw", v)} placeholder="100" hint="0–1000" />
+      <FieldInput label="STYLE VERSION --sv" value={p.sv} onChange={(v) => set("sv", v)} placeholder="4" hint="1–4" />
+      {/* Reference */}
       <FieldInput label="SREF CODE" value={p.sref_code} onChange={(v) => set("sref_code", v)} placeholder="12345" />
       <FieldInput label="PROFILE --profile" value={p.profile} onChange={(v) => set("profile", v)} placeholder="e.g. og9pmia" />
+      {/* Output tuning */}
+      <FieldInput label="SEED --seed" value={p.seed} onChange={(v) => set("seed", v)} placeholder="e.g. 4294967295" />
+      <FieldInput label="ZOOM --zoom" value={p.zoom} onChange={(v) => set("zoom", v)} placeholder="1.5" hint="1–2" />
+      <FieldInput label="STOP --stop" value={p.stop} onChange={(v) => set("stop", v)} placeholder="80" hint="10–100" />
+      <FieldInput label="REPEAT --repeat" value={p.repeat} onChange={(v) => set("repeat", v)} placeholder="4" hint="1–40" />
+      {/* Negative */}
       <FieldInput label="NEGATIVE --no" value={p.no_prompt} onChange={(v) => set("no_prompt", v)} placeholder="text in frame, blur" />
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" checked={p.raw} onChange={(e) => setRaw(e.target.checked)} className="accent-white w-3 h-3" />
-        <span className="system-label">--raw (disable auto-styling)</span>
-      </label>
+      {/* Flags */}
+      <div className="flex flex-col gap-1 pt-1">
+        <span className="system-label text-[8px] text-dim/40">FLAGS</span>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {flag("raw",   "--raw")}
+          {flag("hd",    "--hd")}
+          {flag("tile",  "--tile")}
+          {flag("fast",  "--fast")}
+          {flag("relax", "--relax")}
+          {flag("exp",   "-exp")}
+        </div>
+      </div>
     </>
   );
 }
@@ -277,16 +318,28 @@ function assembleMJ(f: Fields, mj: MJParams): string {
   const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   let out = parts.join(", ");
-  if (mj.aspect_ratio) out += ` --ar ${mj.aspect_ratio}`;
+  if (mj.aspect_ratio)  out += ` --ar ${mj.aspect_ratio}`;
   if (mj.model_version) out += ` --v ${mj.model_version}`;
-  if (mj.quality) out += ` --q ${mj.quality}`;
-  if (mj.stylize) out += ` --s ${mj.stylize}`;
-  if (mj.chaos) out += ` --c ${mj.chaos}`;
-  if (mj.weird) out += ` --w ${mj.weird}`;
-  if (mj.sref_code) out += ` --sref ${mj.sref_code}`;
-  if (mj.profile) out += ` --profile ${mj.profile}`;
-  if (mj.raw) out += ` --raw`;
-  if (mj.no_prompt) out += ` --no ${mj.no_prompt}`;
+  if (mj.quality)       out += ` --q ${mj.quality}`;
+  if (mj.stylize)       out += ` --s ${mj.stylize}`;
+  if (mj.chaos)         out += ` --c ${mj.chaos}`;
+  if (mj.weird)         out += ` --w ${mj.weird}`;
+  if (mj.style)         out += ` --style ${mj.style}`;
+  if (mj.sw)            out += ` --sw ${mj.sw}`;
+  if (mj.sv)            out += ` --sv ${mj.sv}`;
+  if (mj.seed)          out += ` --seed ${mj.seed}`;
+  if (mj.zoom)          out += ` --zoom ${mj.zoom}`;
+  if (mj.stop)          out += ` --stop ${mj.stop}`;
+  if (mj.repeat)        out += ` --repeat ${mj.repeat}`;
+  if (mj.sref_code)     out += ` --sref ${mj.sref_code}`;
+  if (mj.profile)       out += ` --profile ${mj.profile}`;
+  if (mj.raw)           out += ` --raw`;
+  if (mj.hd)            out += ` --hd`;
+  if (mj.tile)          out += ` --tile`;
+  if (mj.fast)          out += ` --fast`;
+  if (mj.relax)         out += ` --relax`;
+  if (mj.exp)           out += ` -exp`;
+  if (mj.no_prompt)     out += ` --no ${mj.no_prompt}`;
   return out;
 }
 
@@ -361,7 +414,13 @@ const EMPTY: Fields = {
   is_winner: false, is_failed: false,
 };
 
-const EMPTY_MJ: MJParams = { aspect_ratio: "", model_version: "", stylize: "", chaos: "", weird: "", quality: "", no_prompt: "", sref_code: "", profile: "", raw: false };
+const EMPTY_MJ: MJParams = {
+  aspect_ratio: "", model_version: "", quality: "",
+  stylize: "", chaos: "", weird: "", stop: "", repeat: "",
+  seed: "", zoom: "", style: "", sw: "", sv: "",
+  sref_code: "", profile: "", no_prompt: "",
+  raw: false, hd: false, tile: false, fast: false, relax: false, exp: false,
+};
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
@@ -425,8 +484,7 @@ export function CraftPrompt() {
     setOutputOverride(null);
   };
 
-  const setMJ = (k: keyof MJParams, v: string) => { setMjParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
-  const setMJRaw = (v: boolean) => { setMjParams((p) => ({ ...p, raw: v })); setOutputOverride(null); };
+  const setMJ = (k: keyof MJParams, v: string | boolean) => { setMjParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
   const setDalle = (k: keyof DalleParams, v: string) => { setDalleParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
   const setSD = (k: keyof SDParams, v: string) => { setSDParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
 
@@ -850,7 +908,7 @@ export function CraftPrompt() {
               <span className="system-label">PARAMETERS</span>
               <span className="font-mono text-[9px] text-dim/60 uppercase tracking-widest">{fields.provider}</span>
             </div>
-            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} setRaw={setMJRaw} />}
+            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} />}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
             {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
             {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (

@@ -94,7 +94,7 @@ export interface CreatePromptInput {
   lens?: string;
   lighting?: string;
   style_ref?: string;
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string | boolean | number>;
   tags?: string[];
   rating?: number;
   ai_look_risk?: number;

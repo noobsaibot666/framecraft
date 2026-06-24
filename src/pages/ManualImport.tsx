@@ -16,43 +16,83 @@ interface DetectedParams {
   aspect_ratio?: string;
   model_version?: string;
   stylize?: string;
+  chaos?: string;
+  weird?: string;
+  quality?: string;
+  style?: string;
+  sw?: string;
+  sv?: string;
+  seed?: string;
+  zoom?: string;
+  stop?: string;
+  repeat?: string;
   sref?: string;
   profile?: string;
-  chaos?: string;
-  quality?: string;
-  weird?: string;
   no?: string;
   raw?: boolean;
+  hd?: boolean;
+  tile?: boolean;
+  fast?: boolean;
+  relax?: boolean;
+  exp?: boolean;
 }
 
+// All params support both long and short MJ aliases:
+//   --chaos / --c   --weird / --w   --stylize / --s   --quality / --q
+//   --repeat / --r  --version / --v   --profile / --p
 function detectMidjourneyParams(text: string): DetectedParams {
-  const params: DetectedParams = {};
-  const ar = text.match(/--ar\s+([\d:]+)/);              if (ar)    params.aspect_ratio  = ar[1];
-  const v  = text.match(/--v\s+(\S+)/);                  if (v)     params.model_version = v[1];
-  const s  = text.match(/--s(?:tylize)?\s+(\d+)/);       if (s)     params.stylize       = s[1];
-  const sr = text.match(/--sref\s+(\S+)/);               if (sr)    params.sref          = sr[1];
-  const p  = text.match(/--profile\s+(\S+)|--p\s+(\S+)/); if (p)    params.profile       = p[1] ?? p[2];
-  const c  = text.match(/--chaos\s+(\d+)/);              if (c)     params.chaos         = c[1];
-  const q  = text.match(/--q(?:uality)?\s+(\S+)/);       if (q)     params.quality       = q[1];
-  const w  = text.match(/--weird\s+(\d+)/);              if (w)     params.weird         = w[1];
-  const no = text.match(/--no\s+([^-]+)/);               if (no)    params.no            = no[1].trim();
-  if (/\b--raw\b/.test(text)) params.raw = true;
-  return params;
+  const dp: DetectedParams = {};
+  const m = (re: RegExp) => text.match(re);
+  const ar  = m(/--ar\s+([\d:]+)/);                         if (ar)  dp.aspect_ratio  = ar[1];
+  const v   = m(/--v(?:ersion)?\s+(\S+)/);                  if (v)   dp.model_version = v[1];
+  const s   = m(/--s(?:tylize)?\s+(\d+)/);                  if (s)   dp.stylize       = s[1];
+  const c   = m(/--c(?:haos)?\s+(\d+)/);                    if (c)   dp.chaos         = c[1];
+  const w   = m(/--w(?:eird)?\s+(\d+)/);                    if (w)   dp.weird         = w[1];
+  const q   = m(/--q(?:uality)?\s+(\S+)/);                  if (q)   dp.quality       = q[1];
+  const st  = m(/--style\s+(\S+)/);                         if (st)  dp.style         = st[1];
+  const sw  = m(/--sw\s+(\d+)/);                            if (sw)  dp.sw            = sw[1];
+  const sv  = m(/--sv\s+(\d+)/);                            if (sv)  dp.sv            = sv[1];
+  const sd  = m(/--seed\s+(\d+)/);                          if (sd)  dp.seed          = sd[1];
+  const zo  = m(/--zoom\s+(\S+)/);                          if (zo)  dp.zoom          = zo[1];
+  const sp  = m(/--stop\s+(\d+)/);                          if (sp)  dp.stop          = sp[1];
+  const rp  = m(/--r(?:epeat)?\s+(\d+)/);                   if (rp)  dp.repeat        = rp[1];
+  const sr  = m(/--sref\s+(\S+)/);                          if (sr)  dp.sref          = sr[1];
+  const pr  = m(/--profile\s+(\S+)|--p\s+(\S+)/);           if (pr)  dp.profile       = pr[1] ?? pr[2];
+  const no  = m(/--no\s+([^-]+)/);                          if (no)  dp.no            = no[1].trim();
+  if (/\b--raw\b/.test(text))      dp.raw   = true;
+  if (/\b--hd\b/.test(text))       dp.hd    = true;
+  if (/\b--tile\b/.test(text))     dp.tile  = true;
+  if (/\b--fast\b/.test(text))     dp.fast  = true;
+  if (/\b--relax\b/.test(text))    dp.relax = true;
+  if (/\b-{1,2}exp\b/.test(text))  dp.exp   = true;
+  return dp;
 }
 
 function stripParams(text: string): string {
   return text
     .replace(/--ar\s+[\d:]+/g, "")
-    .replace(/--v\s+\S+/g, "")
+    .replace(/--v(?:ersion)?\s+\S+/g, "")
     .replace(/--s(?:tylize)?\s+\d+/g, "")
+    .replace(/--c(?:haos)?\s+\d+/g, "")
+    .replace(/--w(?:eird)?\s+\d+/g, "")
+    .replace(/--q(?:uality)?\s+\S+/g, "")
+    .replace(/--style\s+\S+/g, "")
+    .replace(/--sw\s+\d+/g, "")
+    .replace(/--sv\s+\d+/g, "")
+    .replace(/--seed\s+\d+/g, "")
+    .replace(/--zoom\s+\S+/g, "")
+    .replace(/--stop\s+\d+/g, "")
+    .replace(/--r(?:epeat)?\s+\d+/g, "")
     .replace(/--sref\s+\S+/g, "")
     .replace(/--profile\s+\S+/g, "")
     .replace(/--p\s+\S+/g, "")
-    .replace(/\b--raw\b/g, "")
-    .replace(/--chaos\s+\d+/g, "")
-    .replace(/--q(?:uality)?\s+\S+/g, "")
-    .replace(/--weird\s+\d+/g, "")
     .replace(/--no\s+[^-]+/g, "")
+    .replace(/\b--raw\b/g, "")
+    .replace(/\b--hd\b/g, "")
+    .replace(/\b--tile\b/g, "")
+    .replace(/\b--fast\b/g, "")
+    .replace(/\b--relax\b/g, "")
+    .replace(/\b-{1,2}exp\b/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -113,6 +153,24 @@ function parseBatchJson(raw: string): { items: BatchItem[]; error?: string } {
   } catch {
     return { items: [], error: "Invalid JSON. Check your formatting." };
   }
+}
+
+// ─── Param badge helpers ──────────────────────────────────────
+
+function ParamBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/70"
+        style={{ border: "var(--border-dim)" }}>{label}</span>
+      <span className="font-mono text-[10px] text-soft-white">{value}</span>
+    </div>
+  );
+}
+function FlagBadge({ label }: { label: string }) {
+  return (
+    <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-white/50"
+      style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}>{label}</span>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -230,13 +288,26 @@ export function ManualImport() {
     const clean = stripParams(raw);
     const params = detectMidjourneyParams(raw);
     try {
-      const extraParams: Record<string, string> = {};
+      const extraParams: Record<string, string | boolean> = {};
       if (params.stylize) extraParams.stylize = params.stylize;
-      if (params.chaos) extraParams.chaos = params.chaos;
+      if (params.chaos)   extraParams.chaos   = params.chaos;
+      if (params.weird)   extraParams.weird   = params.weird;
       if (params.quality) extraParams.quality = params.quality;
-      if (params.weird) extraParams.weird = params.weird;
+      if (params.style)   extraParams.style   = params.style;
+      if (params.sw)      extraParams.sw      = params.sw;
+      if (params.sv)      extraParams.sv      = params.sv;
+      if (params.seed)    extraParams.seed    = params.seed;
+      if (params.zoom)    extraParams.zoom    = params.zoom;
+      if (params.stop)    extraParams.stop    = params.stop;
+      if (params.repeat)  extraParams.repeat  = params.repeat;
       if (params.profile) extraParams.profile = params.profile;
-      if (params.no) extraParams.no = params.no;
+      if (params.no)      extraParams.no      = params.no;
+      if (params.raw)     extraParams.raw     = true;
+      if (params.hd)      extraParams.hd      = true;
+      if (params.tile)    extraParams.tile    = true;
+      if (params.fast)    extraParams.fast    = true;
+      if (params.relax)   extraParams.relax   = true;
+      if (params.exp)     extraParams.exp     = true;
       const notes = source ? `Source: ${source}` : undefined;
       const id = await create({
         title: title.trim(),
@@ -353,15 +424,27 @@ export function ManualImport() {
                 style={{ border: "var(--border-default)", background: "var(--surface-base)" }}>
                 <span className="system-label">DETECTED PARAMETERS</span>
                 <div className="flex flex-wrap gap-2">
-                  {detected.aspect_ratio  && <div className="flex items-center gap-1.5"><Badge variant="default">--ar</Badge><span className="font-mono text-[10px] text-soft-white">{detected.aspect_ratio}</span></div>}
-                  {detected.model_version && <div className="flex items-center gap-1.5"><Badge variant="default">--v</Badge><span className="font-mono text-[10px] text-soft-white">{detected.model_version}</span></div>}
-                  {detected.stylize       && <div className="flex items-center gap-1.5"><Badge variant="default">--s</Badge><span className="font-mono text-[10px] text-soft-white">{detected.stylize}</span></div>}
-                  {detected.sref          && <div className="flex items-center gap-1.5"><Badge variant="default">--sref</Badge><span className="font-mono text-[10px] text-soft-white">{detected.sref}</span></div>}
-                  {detected.profile       && <div className="flex items-center gap-1.5"><Badge variant="default">--profile</Badge><span className="font-mono text-[10px] text-soft-white">{detected.profile}</span></div>}
-                  {detected.raw           && <div className="flex items-center gap-1.5"><Badge variant="default">--raw</Badge><span className="font-mono text-[10px] text-soft-white">on</span></div>}
-                  {detected.chaos         && <div className="flex items-center gap-1.5"><Badge variant="default">--chaos</Badge><span className="font-mono text-[10px] text-soft-white">{detected.chaos}</span></div>}
-                  {detected.quality       && <div className="flex items-center gap-1.5"><Badge variant="default">--q</Badge><span className="font-mono text-[10px] text-soft-white">{detected.quality}</span></div>}
-                  {detected.weird         && <div className="flex items-center gap-1.5"><Badge variant="default">--weird</Badge><span className="font-mono text-[10px] text-soft-white">{detected.weird}</span></div>}
+                  {detected.aspect_ratio  && <ParamBadge label="--ar"      value={detected.aspect_ratio} />}
+                  {detected.model_version && <ParamBadge label="--v"       value={detected.model_version} />}
+                  {detected.stylize       && <ParamBadge label="--s"       value={detected.stylize} />}
+                  {detected.chaos         && <ParamBadge label="--c"       value={detected.chaos} />}
+                  {detected.weird         && <ParamBadge label="--w"       value={detected.weird} />}
+                  {detected.quality       && <ParamBadge label="--q"       value={detected.quality} />}
+                  {detected.style         && <ParamBadge label="--style"   value={detected.style} />}
+                  {detected.sw            && <ParamBadge label="--sw"      value={detected.sw} />}
+                  {detected.sv            && <ParamBadge label="--sv"      value={detected.sv} />}
+                  {detected.seed          && <ParamBadge label="--seed"    value={detected.seed} />}
+                  {detected.zoom          && <ParamBadge label="--zoom"    value={detected.zoom} />}
+                  {detected.stop          && <ParamBadge label="--stop"    value={detected.stop} />}
+                  {detected.repeat        && <ParamBadge label="--repeat"  value={detected.repeat} />}
+                  {detected.sref          && <ParamBadge label="--sref"    value={detected.sref} />}
+                  {detected.profile       && <ParamBadge label="--profile" value={detected.profile} />}
+                  {detected.raw           && <FlagBadge label="--raw" />}
+                  {detected.hd            && <FlagBadge label="--hd" />}
+                  {detected.tile          && <FlagBadge label="--tile" />}
+                  {detected.fast          && <FlagBadge label="--fast" />}
+                  {detected.relax         && <FlagBadge label="--relax" />}
+                  {detected.exp           && <FlagBadge label="-exp" />}
                 </div>
                 {detected.no && (
                   <div className="flex items-start gap-1.5">

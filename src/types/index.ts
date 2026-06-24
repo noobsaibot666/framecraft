@@ -38,7 +38,7 @@ export interface Prompt {
   style_ref?: string;
   character_ref?: string;
   image_ref?: string;
-  parameters?: Record<string, string>;
+  parameters?: Record<string, string | boolean | number>;
   tags?: string[];
   rating: number;
   ai_look_risk: number;

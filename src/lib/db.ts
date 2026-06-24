@@ -673,6 +673,26 @@ export async function deleteResult(id: string): Promise<void> {
   if (idx !== -1) _devResults.splice(idx, 1);
 }
 
+export async function getResultSummaryMap(): Promise<Record<string, { count: number; avg_score: number }>> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT prompt_id, COUNT(*) as count, AVG(score_overall) as avg_score FROM results GROUP BY prompt_id"
+    )) as Record<string, unknown>[];
+    return Object.fromEntries(
+      rows.map((r) => [r.prompt_id as string, { count: r.count as number, avg_score: r.avg_score as number }])
+    );
+  }
+  const map: Record<string, { count: number; avg_score: number }> = {};
+  for (const r of _devResults) {
+    if (!map[r.prompt_id]) map[r.prompt_id] = { count: 0, avg_score: 0 };
+    map[r.prompt_id].count++;
+    map[r.prompt_id].avg_score += r.score_overall;
+  }
+  for (const id in map) map[id].avg_score = map[id].avg_score / map[id].count;
+  return map;
+}
+
 export async function getRecentResults(limit = 10): Promise<(Result & { prompt_title: string })[]> {
   if (isTauri) {
     const db = await getDb();

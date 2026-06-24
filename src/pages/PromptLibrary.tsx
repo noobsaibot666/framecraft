@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
+import { getResultSummaryMap } from "@/lib/db";
 import { cn, formatDate } from "@/lib/utils";
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
@@ -56,8 +57,9 @@ function RatingDots({ rating }: { rating: number }) {
   );
 }
 
-function PromptCard({ prompt, onCopy, onDelete }: {
+function PromptCard({ prompt, resultSummary, onCopy, onDelete }: {
   prompt: Prompt;
+  resultSummary?: { count: number; avg_score: number };
   onCopy: (p: Prompt) => void;
   onDelete: (p: Prompt) => void;
 }) {
@@ -109,6 +111,12 @@ function PromptCard({ prompt, onCopy, onDelete }: {
         <div className="flex items-center gap-3">
           <RatingDots rating={prompt.rating} />
           {prompt.ai_look_risk > 0 && <RiskBadge score={prompt.ai_look_risk} />}
+          {resultSummary && resultSummary.count > 0 && (
+            <span className="font-mono text-[8px] text-dim/60">
+              {resultSummary.count} result{resultSummary.count !== 1 ? "s" : ""}
+              {resultSummary.avg_score > 0 && ` · ${resultSummary.avg_score.toFixed(1)} avg`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
           <button
@@ -190,8 +198,10 @@ export function PromptLibrary() {
   const [searchVal, setSearchVal] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Prompt | null>(null);
+  const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
+  useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -354,6 +364,7 @@ export function PromptLibrary() {
               <PromptCard
                 key={p.id}
                 prompt={p}
+                resultSummary={resultMap[p.id]}
                 onCopy={handleCopy}
                 onDelete={handleDelete}
               />

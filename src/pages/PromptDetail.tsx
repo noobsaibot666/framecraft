@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultsForPrompt } from "@/lib/db";
+import { getResultsForPrompt, deleteResult } from "@/lib/db";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -220,16 +220,28 @@ export function PromptDetail() {
                 {results.map((r) => (
                   <div
                     key={r.id}
-                    className="flex flex-col gap-2 rounded-card overflow-hidden"
+                    className="group flex flex-col gap-2 rounded-card overflow-hidden"
                     style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
                   >
                     {/* Thumbnail */}
-                    <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden">
+                    <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
                       {r.thumbnail_path ? (
                         <img src={r.thumbnail_path} alt="Result" className="w-full h-full object-cover" />
                       ) : (
                         <ImageOff size={16} className="text-dim/30" />
                       )}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await deleteResult(r.id);
+                          setResults((prev) => prev.filter((x) => x.id !== r.id));
+                        }}
+                        className="absolute top-1.5 right-1.5 p-1 rounded-sm opacity-0 group-hover:opacity-100 transition-precise text-dim/60 hover:text-red"
+                        style={{ background: "rgba(0,0,0,0.6)" }}
+                        title="Delete result"
+                      >
+                        <Trash2 size={10} />
+                      </button>
                     </div>
                     {/* Meta */}
                     <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">

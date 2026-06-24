@@ -389,6 +389,7 @@ export function ProjectWorkspace() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Form state
@@ -455,6 +456,8 @@ export function ProjectWorkspace() {
     setSaving(true);
     try {
       await updateProject(id, buildInput());
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
     } finally {
       setSaving(false);
     }
@@ -531,11 +534,16 @@ export function ProjectWorkspace() {
             <ArrowLeft size={11} /> Projects
           </Button>
           <Button variant="primary" size="sm" onClick={handleSave} disabled={!title.trim() || saving}>
-            <Save size={11} /> {saving ? "Saving…" : "Save"}
+            <Save size={11} /> {saving ? "Saving…" : saved ? "Saved" : "Save"}
           </Button>
         </div>
       }
     >
+      {saved && (
+        <div className="mb-4 saved-chip">
+          <Check size={10} /> Project saved
+        </div>
+      )}
       <div className="grid grid-cols-[1fr_300px] gap-6">
 
         {/* Left column — brief + details */}

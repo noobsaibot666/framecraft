@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check } from "lucide-react";
 import { saveReferenceImage, toDisplaySrc } from "@/lib/fileStore";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -226,6 +226,7 @@ export function ReferenceDetail() {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   // Form state
@@ -333,6 +334,8 @@ export function ReferenceDetail() {
           file_data: resolvedFile,
           thumbnail_data: resolvedThumb,
         });
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1800);
       }
     } finally {
       setSaving(false);
@@ -377,11 +380,16 @@ export function ReferenceDetail() {
             <ArrowLeft size={11} /> Back
           </Button>
           <Button variant="primary" size="sm" onClick={handleSave} disabled={!title.trim() || saving}>
-            <Save size={11} /> {saving ? "Saving…" : "Save"}
+            <Save size={11} /> {saving ? "Saving…" : saved ? "Saved" : "Save"}
           </Button>
         </div>
       }
     >
+      {saved && (
+        <div className="mb-4 saved-chip">
+          <Check size={10} /> Reference saved
+        </div>
+      )}
       <div className="grid grid-cols-[1fr_320px] gap-6">
 
         {/* Left column — form */}

@@ -23,7 +23,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             "h-8 px-4": size === "md",
             "h-9 px-5": size === "lg",
             // variants
-            "bg-white/5 border border-white/15 text-white hover:bg-white/10 hover:border-white/25 rounded-[6px]":
+            "bg-red/12 border border-red/55 text-white hover:bg-red/18 hover:border-red/75 rounded-[6px]":
               variant === "primary",
             "border border-white/10 text-muted hover:border-white/20 hover:text-white rounded-[6px]":
               variant === "ghost",

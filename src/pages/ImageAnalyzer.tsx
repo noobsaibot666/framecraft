@@ -45,6 +45,37 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
   );
 }
 
+function EditableTags({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const add = () => {
+    const next = input.trim().toLowerCase();
+    if (!next) return;
+    onChange([...new Set([...tags, next])]);
+    setInput("");
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5 items-center">
+      {tags.map((tag) => (
+        <span key={tag}
+          className="inline-flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/70"
+          style={{ border: "var(--border-dim)" }}>
+          {tag}
+          <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="text-dim/50 hover:text-red">x</button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+        onBlur={add}
+        placeholder="add tag"
+        className="h-6 w-24 px-2 bg-transparent font-mono text-[9px] text-soft-white placeholder:text-dim/35 rounded-sm focus:outline-none"
+        style={{ border: "var(--border-dim)" }}
+      />
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────
 
 export function ImageAnalyzer() {
@@ -58,6 +89,8 @@ export function ImageAnalyzer() {
   const [imageUrl, setImageUrl] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [editableTags, setEditableTags] = useState<string[]>([]);
+  const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
@@ -78,6 +111,7 @@ export function ImageAnalyzer() {
     setImported(false);
     setImportedVariation(false);
     setSavedAsRef(false);
+    setEditableTags([]);
   }, []);
 
   useEffect(() => () => {
@@ -93,6 +127,7 @@ export function ImageAnalyzer() {
     setImported(false);
     setImportedVariation(false);
     setSavedAsRef(false);
+    setEditableTags([]);
   };
 
   const handleSaveAsRef = async () => {
@@ -115,7 +150,7 @@ export function ImageAnalyzer() {
           kind: "image",
           file_data: full,
           thumbnail_data: canvas.toDataURL("image/jpeg", 0.75),
-          tags: result.tags,
+          tags: editableTags,
           best_use: result.style_notes,
           notes: result.suggested_prompt.slice(0, 200),
         });
@@ -142,6 +177,8 @@ export function ImageAnalyzer() {
       const { base64, mimeType } = await fileToBase64(imageFile);
       const analysis = await analyzeImage(base64, mimeType, selectedModel);
       setResult(analysis);
+      setEditableTags(analysis.tags);
+      setHistory((prev) => [analysis, ...prev.filter((item) => item.title !== analysis.title)].slice(0, 6));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed. Check your API key in Settings.");
     } finally {
@@ -157,7 +194,7 @@ export function ImageAnalyzer() {
         title: result.title,
         prompt_text: result.suggested_prompt,
         provider: (result.provider as "midjourney") ?? "midjourney",
-        tags: result.tags,
+        tags: editableTags,
         notes: result.style_notes,
         aspect_ratio: result.aspect_ratio ?? undefined,
         avoidance_text: result.avoidance_suggestions?.length
@@ -178,7 +215,7 @@ export function ImageAnalyzer() {
         title: `${result.title} — variation`,
         prompt_text: result.variation_prompt,
         provider: (result.provider as "midjourney") ?? "midjourney",
-        tags: result.tags,
+        tags: editableTags,
         aspect_ratio: result.aspect_ratio ?? undefined,
       });
       setImportedVariation(true);
@@ -250,7 +287,7 @@ export function ImageAnalyzer() {
                         onClick={() => setSelectedModel(m)}
                         className={cn(
                           "flex items-center justify-between px-2 py-1.5 rounded-sm text-left transition-precise",
-                          selectedModel.id === m.id ? "text-white" : "text-dim hover:text-muted"
+                          selectedModel.id === m.id ? "accent-selected" : "text-dim hover:text-muted"
                         )}
                         style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
                         <span className="font-mono text-[9px]">{m.label}</span>
@@ -284,6 +321,24 @@ export function ImageAnalyzer() {
 
         {/* Right: results */}
         <div className="flex-1 min-w-0">
+          {history.length > 0 && (
+            <div className="mb-4 flex flex-col gap-2 p-3 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="system-label">ANALYSIS HISTORY</span>
+                <span className="font-mono text-[8px] text-dim/40">{history.length}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {history.map((item) => (
+                  <button key={item.title} type="button" onClick={() => { setResult(item); setEditableTags(item.tags); }}
+                    className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white transition-precise"
+                    style={{ border: "var(--border-dim)" }}>
+                    {item.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {!result && !analyzing && !error && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <Scan size={24} className="text-dim/20" />
@@ -328,7 +383,7 @@ export function ImageAnalyzer() {
                 </div>
                 <div className="flex items-center gap-2">
                   {imported ? (
-                    <span className="flex items-center gap-1.5 font-mono text-[9px] text-white/50">
+                    <span className="saved-chip">
                       <Check size={10} /> Saved to library
                     </span>
                   ) : (
@@ -338,7 +393,7 @@ export function ImageAnalyzer() {
                     </Button>
                   )}
                   {savedAsRef ? (
-                    <span className="flex items-center gap-1 font-mono text-[8px] text-white/40">
+                    <span className="saved-chip">
                       <Check size={8} /> Ref saved
                     </span>
                   ) : (
@@ -457,13 +512,7 @@ export function ImageAnalyzer() {
                     <span className="system-label">SUGGESTED TAGS</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {result.tags.map((tag) => (
-                      <span key={tag}
-                        className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/60"
-                        style={{ border: "var(--border-dim)" }}>
-                        {tag}
-                      </span>
-                    ))}
+                    <EditableTags tags={editableTags} onChange={setEditableTags} />
                   </div>
                 </div>
               </div>

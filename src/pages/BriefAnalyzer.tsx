@@ -105,6 +105,7 @@ export function BriefAnalyzer() {
   // Analysis state
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<BriefResult | null>(null);
+  const [history, setHistory] = useState<BriefResult[]>([]);
   const [error, setError] = useState("");
   const [importedIds, setImportedIds] = useState<Set<number>>(new Set());
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<number>>(new Set());
@@ -148,7 +149,9 @@ export function BriefAnalyzer() {
       } else {
         content = { type: "text", text: briefText };
       }
-      setResult(await analyzeBrief(content, selectedModel));
+      const analysis = await analyzeBrief(content, selectedModel);
+      setResult(analysis);
+      setHistory((prev) => [analysis, ...prev.filter((item) => item.summary !== analysis.summary)].slice(0, 6));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed.");
     } finally {
@@ -299,7 +302,7 @@ export function BriefAnalyzer() {
                     <button key={m.id} type="button" onClick={() => setSelectedModel(m)}
                       className={cn(
                         "flex items-center justify-between px-2 py-1.5 rounded-sm text-left transition-precise",
-                        selectedModel.id === m.id ? "text-white" : "text-dim hover:text-muted"
+                        selectedModel.id === m.id ? "accent-selected" : "text-dim hover:text-muted"
                       )}
                       style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
                       <span className="font-mono text-[9px]">{m.label}</span>
@@ -321,6 +324,28 @@ export function BriefAnalyzer() {
 
         {/* Right: results */}
         <div className="flex-1 min-w-0 overflow-y-auto">
+          {history.length > 0 && (
+            <div className="mb-4 flex flex-col gap-2 p-3 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="system-label">BRIEF ANALYSIS HISTORY</span>
+                <span className="font-mono text-[8px] text-dim/40">{history.length}</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {history.map((item) => (
+                  <button
+                    key={item.summary}
+                    type="button"
+                    onClick={() => setResult(item)}
+                    className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white transition-precise max-w-72 truncate"
+                    style={{ border: "var(--border-dim)" }}
+                  >
+                    {item.production_goal || item.summary}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {!result && !analyzing && !error && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <FileText size={24} className="text-dim/20" />
@@ -436,7 +461,7 @@ export function BriefAnalyzer() {
                     </Button>
                   )}
                   {savedToProjectId ? (
-                    <span className="flex items-center gap-1 font-mono text-[9px] text-white/40">
+                    <span className="saved-chip">
                       <Check size={9} /> Saved to project
                     </span>
                   ) : (
@@ -474,7 +499,7 @@ export function BriefAnalyzer() {
                     </div>
                   )}
                   {importedIds.size === result.prompts.length && !savedToProjectId && (
-                    <span className="flex items-center gap-1 font-mono text-[9px] text-white/40">
+                    <span className="saved-chip">
                       <Check size={9} /> All saved
                     </span>
                   )}

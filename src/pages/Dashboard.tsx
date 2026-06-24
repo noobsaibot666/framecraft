@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked, ImageOff } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff, Search } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults } from "@/lib/db";
+import { toDisplaySrc } from "@/lib/fileStore";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -77,6 +78,7 @@ function EmptyState({
 
 function ResultThumb({ result, promptId }: { result: Result & { prompt_title: string }; promptId: string }) {
   const navigate = useNavigate();
+  const thumb = toDisplaySrc(result.thumbnail_path) ?? result.thumbnail_path;
   return (
     <button
       onClick={() => navigate(`/library/${promptId}`)}
@@ -84,8 +86,8 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
       style={{ borderBottom: "var(--border-dim)" }}
     >
       <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center" style={{ border: "var(--border-dim)" }}>
-        {result.thumbnail_path
-          ? <img src={result.thumbnail_path} alt="" className="w-full h-full object-cover" />
+        {thumb
+          ? <img src={thumb} alt="" className="w-full h-full object-cover" />
           : <ImageOff size={12} className="text-dim/30" />
         }
       </div>
@@ -109,9 +111,28 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
+  const [search, setSearch] = useState("");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
+  const q = search.trim().toLowerCase();
+  const recentPrompts = q
+    ? stats.recent_prompts.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.prompt_text.toLowerCase().includes(q) ||
+        p.tags?.some((tag) => tag.toLowerCase().includes(q))
+      )
+    : stats.recent_prompts;
+  const topRated = q
+    ? stats.top_rated.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.prompt_text.toLowerCase().includes(q) ||
+        p.tags?.some((tag) => tag.toLowerCase().includes(q))
+      )
+    : stats.top_rated;
+  const filteredResults = q
+    ? recentResults.filter((r) => r.prompt_title.toLowerCase().includes(q) || r.notes?.toLowerCase().includes(q))
+    : recentResults;
 
   return (
     <PageContainer
@@ -125,6 +146,23 @@ export function Dashboard() {
       }
     >
       <div className="flex flex-col gap-6 min-w-0">
+        <div className="flex items-center gap-3">
+          <div className="relative w-full max-w-[520px]">
+            <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-dim/50" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search recent prompts, tags, and results..."
+              className="w-full h-9 pl-9 pr-3 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim/45 focus:outline-none"
+              style={{ border: "var(--border-default)" }}
+            />
+          </div>
+          {search && (
+            <button type="button" onClick={() => setSearch("")} className="font-mono text-[9px] text-dim hover:text-white">
+              Clear
+            </button>
+          )}
+        </div>
         {/* Stats row */}
         <div className="grid grid-cols-4 gap-3 min-w-0">
           <StatModule label="TOTAL PROMPTS" value={stats.total_prompts} sub="IN LIBRARY" />
@@ -154,9 +192,12 @@ export function Dashboard() {
                   </div>
                 ) : stats.recent_prompts.length > 0 ? (
                   <div className="flex flex-col">
-                    {stats.recent_prompts.map((p) => (
+                    {recentPrompts.map((p) => (
                       <PromptRow key={p.id} prompt={p} onClick={() => navigate(`/library/${p.id}`)} />
                     ))}
+                    {recentPrompts.length === 0 && (
+                      <span className="font-mono text-[10px] text-dim/40 px-3 py-6">No recent prompts match search.</span>
+                    )}
                   </div>
                 ) : (
                   <EmptyState
@@ -177,9 +218,9 @@ export function Dashboard() {
             <Card>
               <CardHeader label="Top Rated" action={<Star size={12} className="text-dim" />} />
               <CardBody>
-                {stats.top_rated.length > 0 ? (
+                {topRated.length > 0 ? (
                   <div className="flex flex-col">
-                    {stats.top_rated.map((p) => (
+                    {topRated.map((p) => (
                       <PromptRow key={p.id} prompt={p} onClick={() => navigate(`/library/${p.id}`)} />
                     ))}
                   </div>
@@ -202,9 +243,9 @@ export function Dashboard() {
                 }
               />
               <CardBody>
-                {recentResults.length > 0 ? (
+                {filteredResults.length > 0 ? (
                   <div className="flex flex-col">
-                    {recentResults.map((r) => (
+                    {filteredResults.map((r) => (
                       <ResultThumb key={r.id} result={r} promptId={r.prompt_id} />
                     ))}
                   </div>

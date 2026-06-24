@@ -79,11 +79,12 @@
   --surface-card:   rgba(255, 255, 255, 0.05);
   --surface-hover:  rgba(255, 255, 255, 0.08);
   --surface-active: rgba(215, 25, 33, 0.05);
+  --surface-signal: rgba(215, 25, 33, 0.10);
 
   /* Borders */
   --border-default: 1px solid rgba(255, 255, 255, 0.10);
   --border-strong:  1px solid rgba(255, 255, 255, 0.18);
-  --border-active:  1px solid rgba(215, 25, 33, 0.65);
+  --border-active:  1px solid rgba(215, 25, 33, 0.72);
   --border-dim:     1px solid rgba(255, 255, 255, 0.05);
 
   /* Animation */
@@ -118,6 +119,12 @@
     min-height: 100vh;
     overflow: hidden;
     user-select: none;
+  }
+
+  input,
+  textarea,
+  select {
+    color: var(--color-soft-white);
   }
 
   .selectable,
@@ -173,10 +180,10 @@
 
 .system-label {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
+  font-size: 10.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: rgba(232, 232, 227, 0.74);
   line-height: 1.2;
 }
 
@@ -185,6 +192,33 @@
   font-size: 13px;
   line-height: 1.7;
   color: var(--color-soft-white);
+}
+
+.signal-chip {
+  border: var(--border-active);
+  background: var(--surface-signal);
+  color: var(--color-white);
+}
+
+.saved-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-white);
+  border: 1px solid rgba(215, 25, 33, 0.45);
+  background: rgba(215, 25, 33, 0.10);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+
+.accent-selected {
+  border: var(--border-active) !important;
+  background: var(--surface-signal) !important;
+  color: var(--color-white) !important;
 }
 
 /* ─── Surface Utilities ──────────────────────────────────── */
@@ -232,4 +266,3 @@
   );
   background-size: 20px 20px;
 }
-

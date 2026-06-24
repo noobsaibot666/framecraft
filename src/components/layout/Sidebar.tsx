@@ -4,20 +4,40 @@ import { Settings } from "lucide-react";
 import { getQueue } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { num: "01", label: "DASHBOARD",  to: "/" },
-  { num: "02", label: "LIBRARY",    to: "/library" },
-  { num: "03", label: "CRAFT",      to: "/craft" },
-  { num: "04", label: "RECIPES",    to: "/recipes" },
-  { num: "05", label: "IMPORT",     to: "/import" },
-  { num: "06", label: "SREFS",      to: "/srefs" },
-  { num: "07", label: "ANALYZE",    to: "/analyze" },
-  { num: "08", label: "BRIEF",      to: "/brief" },
-  { num: "09", label: "FRAMES",     to: "/frames" },
-  { num: "10", label: "REFS",       to: "/references" },
-  { num: "11", label: "PROJECTS",   to: "/projects" },
-  { num: "12", label: "COMPARE",    to: "/compare" },
-  { num: "13", label: "QUEUE",      to: "/queue" },
+const NAV_GROUPS = [
+  {
+    label: "WORK",
+    items: [
+      { num: "01", label: "DASHBOARD", to: "/" },
+      { num: "02", label: "PROJECTS", to: "/projects" },
+      { num: "03", label: "QUEUE", to: "/queue" },
+    ],
+  },
+  {
+    label: "CREATE",
+    items: [
+      { num: "04", label: "CRAFT", to: "/craft" },
+      { num: "05", label: "LIBRARY", to: "/library" },
+      { num: "06", label: "RECIPES", to: "/recipes" },
+      { num: "07", label: "IMPORT", to: "/import" },
+    ],
+  },
+  {
+    label: "ANALYZE",
+    items: [
+      { num: "08", label: "IMAGE", to: "/analyze" },
+      { num: "09", label: "BRIEF", to: "/brief" },
+      { num: "10", label: "FRAMES", to: "/frames" },
+      { num: "11", label: "COMPARE", to: "/compare" },
+    ],
+  },
+  {
+    label: "ASSETS",
+    items: [
+      { num: "12", label: "REFERENCES", to: "/references" },
+      { num: "13", label: "SREFS", to: "/srefs" },
+    ],
+  },
 ] as const;
 
 function NavItem({
@@ -40,7 +60,7 @@ function NavItem({
           "relative flex items-center gap-3 px-4 py-2.5",
           "group transition-all duration-150",
           isActive
-            ? "text-white"
+            ? "text-white bg-red/8"
             : "text-dim hover:text-muted"
         )
       }
@@ -52,14 +72,14 @@ function NavItem({
             className={cn(
               "absolute left-0 top-1/2 -translate-y-1/2",
               "w-px h-4 transition-all duration-150",
-              isActive ? "bg-red" : "bg-transparent"
+              isActive ? "bg-red h-7" : "bg-transparent"
             )}
           />
           {/* Number */}
           <span
             className={cn(
               "font-mono text-[10px] tabular-nums shrink-0 transition-colors",
-              isActive ? "text-dim" : "text-dim/60"
+              isActive ? "text-red" : "text-dim/60"
             )}
           >
             {num}
@@ -94,9 +114,16 @@ export function Sidebar() {
       style={{ borderRight: "var(--border-default)" }}
     >
       {/* Navigation */}
-      <nav className="flex-1 pt-3 pb-2 flex flex-col gap-0.5">
-        {NAV_ITEMS.map((item) => (
-          <NavItem key={item.to} {...item} badge={item.to === "/queue" ? pendingCount : undefined} />
+      <nav className="flex-1 pt-3 pb-2 flex flex-col gap-2 overflow-y-auto">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className="flex flex-col gap-0.5">
+            <span className="px-4 pt-2 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/45">
+              {group.label}
+            </span>
+            {group.items.map((item) => (
+              <NavItem key={item.to} {...item} badge={item.to === "/queue" ? pendingCount : undefined} />
+            ))}
+          </div>
         ))}
       </nav>
 

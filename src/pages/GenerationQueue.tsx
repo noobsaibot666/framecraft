@@ -17,6 +17,7 @@ import {
   type QueueItem,
   type QueueStatus,
 } from "@/lib/queue";
+import { fileToDataUrl, importQueueResult, matchQueueFiles } from "@/lib/queueImport";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -126,7 +127,10 @@ export function GenerationQueue() {
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [copied, setCopied] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [singleImportId, setSingleImportId] = useState<string | null>(null);
+  const bulkFileRef = useRef<HTMLInputElement>(null);
+  const singleFileRef = useRef<HTMLInputElement>(null);
 
   const promptMap = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
   const pending = items.filter((item) => item.status === "pending");
@@ -165,17 +169,52 @@ export function GenerationQueue() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const withPromptData = (item: QueueItem): QueueItem => {
+    const prompt = promptMap.get(item.prompt_id);
+    return {
+      ...item,
+      provider: item.provider ?? prompt?.provider,
+      prompt_title: item.prompt_title ?? prompt?.title,
+      prompt_text: item.prompt_text ?? prompt?.prompt_text,
+    };
+  };
+
+  const handleSingleImport = async (files: FileList | null) => {
+    const file = files?.[0];
+    const item = items.find((entry) => entry.id === singleImportId);
+    setSingleImportId(null);
+    if (!file || !item) return;
+
+    try {
+      setImportError(null);
+      await importQueueResult(withPromptData(item), await fileToDataUrl(file));
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Import failed");
+    } finally {
+      if (singleFileRef.current) singleFileRef.current.value = "";
+      await refresh();
+    }
+  };
+
   const handleBulkImport = async (files: FileList | null) => {
     if (!files?.length) return;
-    const names = Array.from(files).map((file) => file.name.toLowerCase());
-    for (const item of items) {
-      const prompt = promptMap.get(item.prompt_id);
-      const title = prompt?.title.toLowerCase() ?? item.prompt_id.toLowerCase();
-      if (names.some((name) => name.includes(item.prompt_id.toLowerCase()) || name.includes(title.slice(0, 16)))) {
-        await updateQueueStatus(item.id, "done");
+    const fileList = Array.from(files);
+    const matches = matchQueueFiles(items.map(withPromptData), fileList);
+
+    try {
+      setImportError(null);
+      for (const match of matches.matched) {
+        await importQueueResult(match.item, await fileToDataUrl(match.file));
       }
+      if (matches.unmatched.length > 0) {
+        setImportError(`${matches.unmatched.length} file${matches.unmatched.length === 1 ? "" : "s"} did not match queued prompts.`);
+      }
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Import failed");
+    } finally {
+      if (bulkFileRef.current) bulkFileRef.current.value = "";
+      await refresh();
     }
-    await refresh();
   };
 
   return (
@@ -185,13 +224,21 @@ export function GenerationQueue() {
       action={
         <div className="flex items-center gap-2">
           <input
-            ref={fileRef}
+            ref={bulkFileRef}
             type="file"
             multiple
+            accept="image/*"
             className="hidden"
             onChange={(event) => handleBulkImport(event.target.files)}
           />
-          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
+          <input
+            ref={singleFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => handleSingleImport(event.target.files)}
+          />
+          <Button variant="ghost" size="sm" onClick={() => bulkFileRef.current?.click()}>
             <Upload size={11} /> Bulk Import
           </Button>
           <Button variant="ghost" size="sm" onClick={copyAllPending} disabled={pending.length === 0}>
@@ -245,6 +292,11 @@ export function GenerationQueue() {
         <Badge variant="default">{items.length} total</Badge>
         <Badge variant="default">{pending.length} pending</Badge>
       </div>
+      {importError && (
+        <div className="mb-4 px-3 py-2 rounded-sm border border-red/30 bg-red/10 font-mono text-[10px] text-red">
+          {importError}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="flex items-center justify-center h-48 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
@@ -269,8 +321,8 @@ export function GenerationQueue() {
                     await refresh();
                   }}
                   onImport={async () => {
-                    await updateQueueStatus(item.id, "done");
-                    await refresh();
+                    setSingleImportId(item.id);
+                    singleFileRef.current?.click();
                   }}
                 />
               ))}

@@ -1,6 +1,7 @@
 import { getProjectById, getPromptsForProject, getResultsForProject, getReferencesForProject } from "./projects";
 import { getDeliverablesForProject, isMissingResult } from "./deliverables";
 import { getApiKey, AI_MODELS } from "./aiConfig";
+import { fetchProviderJson, requireValidApiKey } from "./aiClient";
 import type {
   AssistantThread, AssistantMessage, AssistantSuggestion, ProjectContextPack,
 } from "@/types";
@@ -220,10 +221,10 @@ export async function askAssistant(
 
   const systemPrompt = serializePackToSystem(pack);
   const apiKey = getApiKey(model.provider);
-  if (!apiKey) throw new Error(`No ${model.provider} API key configured.`);
+  requireValidApiKey(model.provider, apiKey);
 
   if (model.provider === "anthropic") {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(model.provider, "https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "x-api-key": apiKey,
@@ -237,16 +238,11 @@ export async function askAssistant(
         messages,
       }),
     });
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Anthropic error ${res.status}: ${err}`);
-    }
-    const data = await res.json() as { content: { type: string; text: string }[] };
     return data.content.find((c) => c.type === "text")?.text ?? "";
   }
 
   // OpenAI
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(model.provider, "https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
@@ -258,11 +254,6 @@ export async function askAssistant(
       messages: [{ role: "system", content: systemPrompt }, ...messages],
     }),
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenAI error ${res.status}: ${err}`);
-  }
-  const data = await res.json() as { choices: { message: { content: string } }[] };
   return data.choices[0]?.message?.content ?? "";
 }
 

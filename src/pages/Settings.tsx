@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
-import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI } from "@/lib/aiConfig";
+import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
 import type { Prompt } from "@/types";
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -30,13 +30,15 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
 
 // ─── API Key Sub-component ────────────────────────────────────
 
-function ApiKeyField({ label, storageKey, placeholder, mask }: {
-  label: string; storageKey: string; placeholder: string;
+function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
+  label: string; provider: AIProvider; storageKey: string; placeholder: string;
   mask: (v: string) => string;
 }) {
   const [value, setValue] = useState(() => localStorage.getItem(storageKey) ?? "");
   const [show, setShow] = useState(false);
   const [saved, setSaved] = useState(false);
+  const validation = validateApiKey(provider, value);
+  const hasValue = value.trim().length > 0;
 
   const handleSave = () => {
     if (value.trim()) localStorage.setItem(storageKey, value.trim());
@@ -49,8 +51,14 @@ function ApiKeyField({ label, storageKey, placeholder, mask }: {
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60">{label}</span>
-        {value && <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-white/40"
-          style={{ border: "1px solid rgba(255,255,255,0.10)" }}>CONFIGURED</span>}
+        {hasValue && (
+          <span
+            className={`font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm ${validation.valid ? "text-white/40" : "text-red/70"}`}
+            style={{ border: validation.valid ? "1px solid rgba(255,255,255,0.10)" : "1px solid rgba(215,25,33,0.25)" }}
+          >
+            {validation.valid ? "VALID FORMAT" : "CHECK FORMAT"}
+          </span>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -72,6 +80,9 @@ function ApiKeyField({ label, storageKey, placeholder, mask }: {
           {saved ? <><Check size={9} /> Saved</> : "Save"}
         </Button>
       </div>
+      {hasValue && !validation.valid && (
+        <span className="font-mono text-[9px] text-red/60">{validation.message}</span>
+      )}
     </div>
   );
 }
@@ -231,12 +242,14 @@ export function Settings() {
             </p>
             <ApiKeyField
               label="Anthropic"
+              provider="anthropic"
               storageKey={AI_KEY_ANTHROPIC}
               placeholder="sk-ant-api03-…"
               mask={(v) => v.length > 8 ? `sk-ant-${"·".repeat(14)}${v.slice(-4)}` : v}
             />
             <ApiKeyField
               label="OpenAI"
+              provider="openai"
               storageKey={AI_KEY_OPENAI}
               placeholder="sk-proj-…"
               mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}

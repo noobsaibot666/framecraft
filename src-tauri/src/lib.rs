@@ -45,6 +45,12 @@ pub fn run() {
             sql: include_str!("../migrations/007_token_patterns.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "token_favorite",
+            sql: include_str!("../migrations/008_token_favorite.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -113,6 +113,7 @@ export interface Token {
   use_count: number;
   quality_score: number;
   is_builtin: boolean;
+  is_favorite: boolean;
 }
 
 export interface TokenPill extends Token {

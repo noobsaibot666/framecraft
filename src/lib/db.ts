@@ -414,6 +414,7 @@ function rowToToken(row: Record<string, unknown>): Token {
     use_count: (row.use_count as number) ?? 0,
     quality_score: (row.quality_score as number) ?? 0,
     is_builtin: Boolean(row.is_builtin),
+    is_favorite: Boolean(row.is_favorite),
   };
 }
 
@@ -463,7 +464,17 @@ export async function createToken(text: string, categoryId: string): Promise<Tok
     use_count: 0,
     quality_score: 0,
     is_builtin: false,
+    is_favorite: false,
   };
+}
+
+export async function toggleTokenFavorite(id: string, isFavorite: boolean): Promise<void> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute("UPDATE tokens SET is_favorite = $1 WHERE id = $2", [isFavorite ? 1 : 0, id]);
+    return;
+  }
+  // dev mode: no-op (tokens are stateless in dev)
 }
 
 // ─── Avoidance Patterns ──────────────────────────────────────

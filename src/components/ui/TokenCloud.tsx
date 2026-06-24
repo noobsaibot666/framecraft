@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Search } from "lucide-react";
-import { getTokenCategories, getTokensByCategory, createToken } from "@/lib/db";
+import { Plus, Search, Star } from "lucide-react";
+import { getTokenCategories, getTokensByCategory, createToken, toggleTokenFavorite } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import type { TokenCategory, Token } from "@/types";
 
@@ -18,6 +18,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
   const [loadingCats, setLoadingCats] = useState(true);
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [search, setSearch] = useState("");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [newTokenText, setNewTokenText] = useState("");
   const [addingNew, setAddingNew] = useState(false);
   const [savingNew, setSavingNew] = useState(false);
@@ -78,11 +79,21 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
     }
   };
 
-  const selectedSet = new Set(selectedTexts);
+  const handleToggleFavorite = async (e: React.MouseEvent, token: Token) => {
+    e.stopPropagation();
+    const next = !token.is_favorite;
+    setTokens((prev) => prev.map((t) => t.id === token.id ? { ...t, is_favorite: next } : t));
+    await toggleTokenFavorite(token.id, next);
+  };
 
-  const visibleTokens = search.trim()
-    ? tokens.filter((t) => t.text.toLowerCase().includes(search.toLowerCase()))
-    : tokens;
+  const selectedSet = new Set(selectedTexts);
+  const favoriteCount = tokens.filter((t) => t.is_favorite).length;
+
+  const visibleTokens = tokens.filter((t) => {
+    if (favoritesOnly && !t.is_favorite) return false;
+    if (search.trim() && !t.text.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
 
   if (loadingCats) {
     return (
@@ -115,7 +126,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
         ))}
       </div>
 
-      {/* Search + add custom */}
+      {/* Search + favorites toggle + add custom */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search size={9} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
@@ -127,6 +138,20 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
             style={{ border: "var(--border-dim)" }}
           />
         </div>
+        {/* Favorites filter */}
+        <button
+          type="button"
+          onClick={() => setFavoritesOnly((v) => !v)}
+          className={cn(
+            "h-6 px-2 rounded-sm font-mono text-[8px] tracking-widest uppercase transition-precise flex items-center gap-1",
+            favoritesOnly ? "text-white" : "text-dim hover:text-muted"
+          )}
+          style={{ border: favoritesOnly ? "var(--border-strong)" : "var(--border-dim)" }}
+          title="Show favorites only"
+        >
+          <Star size={8} className={cn(favoritesOnly && "fill-white/50")} />
+          {favoriteCount > 0 && !favoritesOnly && <span>{favoriteCount}</span>}
+        </button>
         <button
           type="button"
           onClick={() => setAddingNew((v) => !v)}
@@ -169,12 +194,19 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
         </div>
       )}
 
+      {/* Favorites-only empty state */}
+      {favoritesOnly && favoriteCount === 0 && (
+        <div className="flex items-center justify-center py-4">
+          <span className="font-mono text-[9px] text-dim/40">No favorites yet. Hold star on any token to save it.</span>
+        </div>
+      )}
+
       {/* Token pills grid */}
       {loadingTokens ? (
         <div className="flex items-center justify-center py-4">
           <span className="font-mono text-[9px] text-dim/40">Loading…</span>
         </div>
-      ) : visibleTokens.length === 0 ? (
+      ) : !favoritesOnly && visibleTokens.length === 0 ? (
         <div className="flex items-center justify-center py-4">
           <span className="font-mono text-[9px] text-dim/40">
             {search ? "No matches." : "No tokens. Run in Tauri to load library."}
@@ -186,31 +218,46 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
             const active = selectedSet.has(token.text);
             const isHighQuality = token.quality_score > 0;
             return (
-              <button
-                key={token.id}
-                type="button"
-                onClick={() => onToggle(token)}
-                className={cn(
-                  "inline-flex items-center font-mono text-[9px] tracking-wide px-2 py-1 rounded-sm transition-precise",
-                  active ? "text-white" : "text-dim/70 hover:text-muted"
-                )}
-                style={{
-                  border: active
-                    ? "var(--border-strong)"
-                    : isHighQuality
-                    ? "1px solid rgba(255,255,255,0.14)"
-                    : "var(--border-dim)",
-                  background: active
-                    ? "rgba(255,255,255,0.08)"
-                    : isHighQuality
-                    ? "rgba(255,255,255,0.03)"
-                    : "transparent",
-                }}
-                title={token.text}
-              >
-                {active && <span className="mr-1 text-white/40 text-[8px]">✓</span>}
-                {token.text}
-              </button>
+              <div key={token.id} className="relative group/pill">
+                <button
+                  type="button"
+                  onClick={() => onToggle(token)}
+                  className={cn(
+                    "inline-flex items-center font-mono text-[9px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
+                    active ? "text-white" : "text-dim/70 hover:text-muted"
+                  )}
+                  style={{
+                    border: active
+                      ? "var(--border-strong)"
+                      : isHighQuality
+                      ? "1px solid rgba(255,255,255,0.14)"
+                      : "var(--border-dim)",
+                    background: active
+                      ? "rgba(255,255,255,0.08)"
+                      : isHighQuality
+                      ? "rgba(255,255,255,0.03)"
+                      : "transparent",
+                  }}
+                  title={token.text}
+                >
+                  {active && <span className="mr-1 text-white/40 text-[8px]">✓</span>}
+                  {token.text}
+                </button>
+                {/* Favorite star — always visible if favorited, hover-visible otherwise */}
+                <button
+                  type="button"
+                  onClick={(e) => handleToggleFavorite(e, token)}
+                  className={cn(
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-precise",
+                    token.is_favorite
+                      ? "opacity-100 text-white/60"
+                      : "opacity-0 group-hover/pill:opacity-100 text-dim/30 hover:text-white/50"
+                  )}
+                  title={token.is_favorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  <Star size={7} className={cn(token.is_favorite && "fill-white/50")} />
+                </button>
+              </div>
             );
           })}
         </div>

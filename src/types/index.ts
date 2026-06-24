@@ -317,9 +317,85 @@ export interface ComparisonResult {
   created_at: string;
 }
 
+// ─── V4: Guided Assistant ────────────────────────────────────
+
+export interface AssistantThread {
+  id: string;
+  project_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssistantMessage {
+  id: string;
+  thread_id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: string[];
+  created_at: string;
+}
+
+export type SuggestionKind =
+  | "next_action"
+  | "avoidance_improvement"
+  | "reference_gap"
+  | "winner_interpretation";
+
+export interface AssistantSuggestion {
+  kind: SuggestionKind;
+  label: string;
+  body: string;
+  action?: {
+    label: string;
+    type: "craft_prompt" | "navigate" | "save_note";
+    payload?: string;
+  };
+}
+
+export interface ProjectContextPack {
+  project: {
+    id: string;
+    title: string;
+    brief_text?: string;
+    production_goal?: string;
+    category?: string;
+    status: string;
+    client?: string;
+  };
+  prompts: {
+    total: number;
+    winners: number;
+    failed: number;
+    avgRating: number;
+    top: { id: string; title: string; rating: number; is_winner: boolean; is_failed: boolean }[];
+  };
+  results: {
+    total: number;
+    winners: number;
+    failed: number;
+    avgScore: number;
+  };
+  references: {
+    total: number;
+    kinds: string[];
+  };
+  deliverables: {
+    total: number;
+    byStatus: Partial<Record<string, number>>;
+    missingResults: number;
+  };
+}
+
 // ─── V4: Deliverable Board ────────────────────────────────────
 
-export type DeliverableStatus = "todo" | "in_progress" | "review" | "done" | "cancelled";
+export type DeliverableStatus =
+  | "planned"
+  | "prompting"
+  | "generating"
+  | "review"
+  | "selected"
+  | "final";
 
 export interface Deliverable {
   id: string;
@@ -327,12 +403,12 @@ export interface Deliverable {
   title: string;
   description?: string;
   status: DeliverableStatus;
-  position: number;
-  prompt_id?: string;
-  result_id?: string;
-  reference_id?: string;
+  target_format?: string;
+  aspect_ratio?: string;
+  linked_prompt_id?: string;
+  linked_result_id?: string;
   notes?: string;
-  due_date?: string;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

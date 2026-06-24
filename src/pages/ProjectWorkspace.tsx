@@ -661,6 +661,21 @@ export function ProjectWorkspace() {
 
           {/* Quick actions */}
           <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/projects/${id}/export`)}
+            className="w-full justify-center text-dim">
+            Export Report
+          </Button>
+          <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/projects/${id}/assistant`)}
+            className="w-full justify-center text-dim">
+            Assistant
+          </Button>
+          <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/projects/${id}/board`)}
+            className="w-full justify-center text-dim">
+            Pipeline Board
+          </Button>
+          <Button variant="ghost" size="sm"
             onClick={() => navigate(`/compare/${id}`)}
             className="w-full justify-center text-dim">
             Compare Results

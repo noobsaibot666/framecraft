@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download, Bookmark } from "lucide-react";
+import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download, Bookmark, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -152,18 +152,23 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
   disabled?: boolean;
 }) {
   return (
-    <div className="flex gap-4 p-4 rounded-card"
+    <div className="grid grid-cols-[112px_1fr] gap-4 p-4 rounded-card"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-      {/* Frame thumb */}
-      <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
-        className="w-20 h-14 object-cover rounded-sm shrink-0"
-        style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+      <div className="relative">
+        <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
+          className="w-28 aspect-video object-cover rounded-sm"
+          style={{ border: "1px solid rgba(215,25,33,0.24)" }} />
+        <span className="absolute bottom-1 left-1 font-mono text-[8px] text-white/80 px-1.5 py-0.5 rounded-sm"
+          style={{ background: "rgba(0,0,0,0.68)" }}>
+          {formatTime(frame.timestamp)}
+        </span>
+      </div>
 
       <div className="flex flex-col gap-2 flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-col gap-0.5 min-w-0">
             <span className="font-sans text-[12px] font-semibold text-white truncate">{result.title}</span>
-            <span className="font-mono text-[8px] text-dim/40">@ {formatTime(frame.timestamp)}</span>
+            <span className="font-mono text-[8px] text-red/55 uppercase tracking-widest">Recommended next prompt</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {result.aspect_ratio && (
@@ -183,13 +188,31 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
           </div>
         </div>
 
-        <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed line-clamp-2">
+        <p className="font-mono text-[10px] text-soft-white/80 leading-relaxed line-clamp-2">
           {result.suggested_prompt}
         </p>
 
-        <p className="font-mono text-[9px] text-dim/50 leading-relaxed line-clamp-2">
-          {result.style_notes}
-        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <span className="system-label text-[8px]">STYLE NOTES</span>
+            <p className="font-mono text-[9px] text-dim/55 leading-relaxed line-clamp-2">
+              {result.style_notes}
+            </p>
+          </div>
+          {result.avoidance_suggestions?.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="system-label text-[8px] text-red/60">AVOID</span>
+              <div className="flex flex-wrap gap-1">
+                {result.avoidance_suggestions.slice(0, 4).map((item) => (
+                  <span key={item} className="font-mono text-[7px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-red/55"
+                    style={{ border: "1px solid rgba(215,25,33,0.20)" }}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {result.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 items-center">
@@ -294,7 +317,25 @@ export function VideoFrames() {
       thumbUrl:  thumbCanvas.toDataURL("image/jpeg", 0.70),
       timestamp: v.currentTime,
     };
+    const newIdx = frames.length;
     setFrames((prev) => [...prev, frame]);
+    setSelected((prev) => new Set(prev).add(newIdx));
+  };
+
+  const removeFrame = (idx: number) => {
+    setFrames((prev) => prev.filter((_, i) => i !== idx));
+    setSelected((prev) => new Set([...prev]
+      .filter((i) => i !== idx)
+      .map((i) => i > idx ? i - 1 : i)));
+    setResults((prev) => prev
+      .filter((item) => item.frameIdx !== idx)
+      .map((item) => ({
+        ...item,
+        frameIdx: item.frameIdx > idx ? item.frameIdx - 1 : item.frameIdx,
+      })));
+    setImportedIds((prev) => new Set([...prev]
+      .filter((i) => i !== idx)
+      .map((i) => i > idx ? i - 1 : i)));
   };
 
   const onDrop = useCallback((accepted: File[]) => {
@@ -452,7 +493,7 @@ export function VideoFrames() {
         {/* ── Video preview — full width, big ── */}
         <div {...getRootProps()}
           className={cn(
-            "relative w-full rounded-card overflow-hidden cursor-pointer transition-precise",
+            "relative w-full max-h-[520px] rounded-card overflow-hidden cursor-pointer transition-precise",
             !videoFile && "flex flex-col items-center justify-center gap-3",
             isDragActive ? "bg-white/5" : !videoFile && "hover:border-white/20"
           )}
@@ -472,7 +513,7 @@ export function VideoFrames() {
                 src={videoObjUrl}
                 muted={isMuted}
                 playsInline
-                className="w-full h-full object-contain bg-black cursor-pointer"
+                className="w-full h-full max-h-[520px] object-contain bg-black cursor-pointer"
                 onClick={togglePlay}
                 onTimeUpdate={(e) => setCurrentTime((e.currentTarget as HTMLVideoElement).currentTime)}
                 onLoadedMetadata={(e) => setDuration((e.currentTarget as HTMLVideoElement).duration)}
@@ -566,8 +607,8 @@ export function VideoFrames() {
             {/* Capture current frame */}
             <button type="button" onClick={captureCurrentFrame}
               disabled={!videoFile || duration === 0}
-              className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-precise shrink-0 px-2 py-1 rounded-sm"
-              style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+              className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-precise shrink-0 px-2 py-1 rounded-sm"
+              style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(215,25,33,0.08)" }}
               title={`Capture frame at ${formatTime(currentTime)}`}>
               + Frame
             </button>
@@ -641,8 +682,7 @@ export function VideoFrames() {
               <select
                 value={selectedModel.id}
                 onChange={(e) => setSelectedModel(AI_MODELS.find((m) => m.id === e.target.value) ?? AI_MODELS[0])}
-                className="appearance-none h-7 pl-3 pr-7 font-mono text-[10px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise"
-                style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+                className="accent-selected appearance-none h-7 pl-3 pr-7 font-mono text-[10px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
                 <optgroup label="Anthropic">
                   {AI_MODELS.filter((m) => m.provider === "anthropic").map((m) => (
                     <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
@@ -710,9 +750,13 @@ export function VideoFrames() {
                       }
                     }}
                     className={cn(
-                      "relative overflow-hidden rounded-sm transition-precise cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/40",
-                      isSelected ? "ring-1 ring-white/50" : "hover:ring-1 hover:ring-white/15"
-                    )}>
+                      "relative overflow-hidden rounded-sm transition-precise cursor-pointer focus:outline-none",
+                      isSelected ? "ring-1 ring-red/70" : "hover:ring-1 hover:ring-white/15"
+                    )}
+                    style={{
+                      border: isSelected ? "1px solid rgba(215,25,33,0.68)" : "1px solid rgba(255,255,255,0.06)",
+                      boxShadow: isSelected ? "0 0 0 1px rgba(215,25,33,0.28)" : "none",
+                    }}>
                     <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
                       className="w-full aspect-video object-cover block" />
                     <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
@@ -733,13 +777,21 @@ export function VideoFrames() {
                         {savedRefFrameIdx === idx ? "Saved" : "Ref"}
                       </button>
                     </div>
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); removeFrame(idx); }}
+                      className="absolute top-1.5 right-1.5 w-5 h-5 rounded-sm flex items-center justify-center text-white/65 hover:text-white transition-precise"
+                      style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
+                      title="Remove frame">
+                      <Trash2 size={10} />
+                    </button>
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
                       <span className="font-mono text-[9px] text-white/70">{formatTime(frame.timestamp)}</span>
                     </div>
                     {isSelected && (
-                      <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-sm bg-white flex items-center justify-center">
-                        <Check size={11} className="text-black" />
+                      <div className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-sm flex items-center justify-center"
+                        style={{ background: "rgba(215,25,33,0.92)" }}>
+                        <Check size={11} className="text-white" />
                       </div>
                     )}
                   </div>

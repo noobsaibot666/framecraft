@@ -75,7 +75,7 @@ function PromptCard({ p, onImport, imported, disabled = false }: {
         </div>
       </div>
 
-      <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed">{p.prompt}</p>
+      <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed line-clamp-4">{p.prompt}</p>
 
       {p.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -382,18 +382,18 @@ export function BriefAnalyzer() {
                     style={{ border: "var(--border-dim)" }}>{result.tone}</span>
                 </div>
 
-                <p className="font-mono text-[10px] text-muted leading-relaxed">{result.summary}</p>
+                <p className="font-mono text-[10px] text-muted leading-relaxed line-clamp-4">{result.summary}</p>
 
                 {result.production_goal && (
                   <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                     <span className="system-label text-[8px]">PRODUCTION GOAL</span>
-                    <p className="font-mono text-[10px] text-white leading-relaxed">{result.production_goal}</p>
+                    <p className="font-mono text-[10px] text-white leading-relaxed line-clamp-3">{result.production_goal}</p>
                   </div>
                 )}
 
                 <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                   <span className="system-label text-[8px]">CREATIVE DIRECTION</span>
-                  <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed">{result.creative_direction}</p>
+                  <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed line-clamp-4">{result.creative_direction}</p>
                 </div>
 
                 {result.key_elements?.length > 0 && (

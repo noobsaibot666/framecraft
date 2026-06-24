@@ -413,7 +413,7 @@ export function ImageAnalyzer() {
                   <span className="system-label">RECONSTRUCTED PROMPT</span>
                   <CopyButton text={result.suggested_prompt} label="Copy prompt" />
                 </div>
-                <p className="font-mono text-[11px] text-soft-white leading-relaxed">
+                <p className="font-mono text-[11px] text-soft-white leading-relaxed line-clamp-5">
                   {result.suggested_prompt}
                 </p>
               </div>
@@ -442,7 +442,7 @@ export function ImageAnalyzer() {
                       )}
                     </div>
                   </div>
-                  <p className="font-mono text-[11px] text-soft-white/70 leading-relaxed">
+                  <p className="font-mono text-[11px] text-soft-white/70 leading-relaxed line-clamp-4">
                     {result.variation_prompt}
                   </p>
                 </div>
@@ -452,7 +452,7 @@ export function ImageAnalyzer() {
               <div className="flex flex-col gap-2 p-4 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                 <span className="system-label">STYLE ANALYSIS</span>
-                <p className="font-mono text-[11px] text-muted leading-relaxed">
+                <p className="font-mono text-[11px] text-muted leading-relaxed line-clamp-4">
                   {result.style_notes}
                 </p>
               </div>

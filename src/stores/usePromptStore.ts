@@ -9,6 +9,7 @@ import {
   searchPrompts,
   type CreatePromptInput,
 } from "@/lib/db";
+import { filterAndSortPrompts, type ResultSummaryMap } from "@/lib/promptFilters";
 
 interface PromptState {
   prompts: Prompt[];
@@ -26,7 +27,7 @@ interface PromptState {
   create: (data: CreatePromptInput) => Promise<string>;
   update: (id: string, data: Partial<CreatePromptInput>) => Promise<void>;
   remove: (id: string) => Promise<void>;
-  filteredAndSorted: () => Prompt[];
+  filteredAndSorted: (resultSummary?: ResultSummaryMap) => Prompt[];
 }
 
 export const usePromptStore = create<PromptState>((set, get) => ({
@@ -83,32 +84,8 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     set((s) => ({ prompts: s.prompts.filter((p) => p.id !== id) }));
   },
 
-  filteredAndSorted: () => {
+  filteredAndSorted: (resultSummary) => {
     const { prompts, filters, sortBy } = get();
-    let list = [...prompts];
-
-    if (filters.provider) list = list.filter((p) => p.provider === filters.provider);
-    if (filters.category) list = list.filter((p) => p.category === filters.category);
-    if (filters.minRating != null) list = list.filter((p) => p.rating >= filters.minRating!);
-    if (filters.isWinner) list = list.filter((p) => p.is_winner);
-    if (filters.isFailed) list = list.filter((p) => p.is_failed);
-    if (filters.isRecipe) list = list.filter((p) => p.is_recipe);
-
-    switch (sortBy) {
-      case "newest":
-        list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        break;
-      case "oldest":
-        list.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        break;
-      case "rating_desc":
-        list.sort((a, b) => b.rating - a.rating);
-        break;
-      case "rating_asc":
-        list.sort((a, b) => a.rating - b.rating);
-        break;
-    }
-
-    return list;
+    return filterAndSortPrompts(prompts, filters, sortBy, resultSummary);
   },
 }));

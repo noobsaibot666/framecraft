@@ -39,6 +39,32 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "oldest", label: "Oldest First" },
   { value: "rating_desc", label: "Highest Rated" },
   { value: "rating_asc", label: "Lowest Rated" },
+  { value: "most_used", label: "Most Results" },
+  { value: "ai_risk_desc", label: "Highest Risk" },
+  { value: "ai_risk_asc", label: "Lowest Risk" },
+];
+
+const RATING_FILTER_OPTIONS = [
+  { value: "", label: "Any Rating" },
+  { value: "1", label: "1+ Stars" },
+  { value: "2", label: "2+ Stars" },
+  { value: "3", label: "3+ Stars" },
+  { value: "4", label: "4+ Stars" },
+  { value: "5", label: "5 Stars" },
+];
+
+const AI_RISK_FILTER_OPTIONS = [
+  { value: "", label: "Any Risk" },
+  { value: "2", label: "Risk ≤ 2" },
+  { value: "4", label: "Risk ≤ 4" },
+  { value: "6", label: "Risk ≤ 6" },
+  { value: "8", label: "Risk ≤ 8" },
+];
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "Any Status" },
+  { value: "winner", label: "Winners" },
+  { value: "failed", label: "Failed" },
 ];
 
 function RatingDots({ rating }: { rating: number }) {
@@ -233,7 +259,8 @@ export function PromptLibrary() {
     }
   }, [confirmDelete, remove]);
 
-  const prompts = filteredAndSorted();
+  const prompts = filteredAndSorted(resultMap);
+  const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
   return (
     <PageContainer
@@ -282,20 +309,29 @@ export function PromptLibrary() {
           className="w-36"
         />
 
-        <div className="flex items-center gap-1">
-          <button
-            className={cn(
-              "font-mono text-[9px] tracking-widest uppercase px-2 py-1.5 rounded transition-precise",
-              filters.isWinner
-                ? "text-white border-white/30"
-                : "text-dim border-white/10"
-            )}
-            style={{ border: filters.isWinner ? "var(--border-strong)" : "var(--border-dim)" }}
-            onClick={() => setFilters({ isWinner: !filters.isWinner || undefined })}
-          >
-            Winners
-          </button>
-        </div>
+        <NativeSelect
+          value={filters.minRating != null ? String(filters.minRating) : ""}
+          onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })}
+          options={RATING_FILTER_OPTIONS}
+          className="w-32"
+        />
+
+        <NativeSelect
+          value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""}
+          onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })}
+          options={AI_RISK_FILTER_OPTIONS}
+          className="w-32"
+        />
+
+        <NativeSelect
+          value={statusFilter}
+          onChange={(v) => setFilters({
+            isWinner: v === "winner" || undefined,
+            isFailed: v === "failed" || undefined,
+          })}
+          options={STATUS_FILTER_OPTIONS}
+          className="w-32"
+        />
       </div>
 
       {/* Copy feedback */}

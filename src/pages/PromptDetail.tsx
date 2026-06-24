@@ -7,7 +7,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultsForPrompt, deleteResult } from "@/lib/db";
+import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -234,6 +234,7 @@ export function PromptDetail() {
                         type="button"
                         onClick={async () => {
                           await deleteResult(r.id);
+                          await recomputePromptResultSummary(prompt.id);
                           setResults((prev) => prev.filter((x) => x.id !== r.id));
                         }}
                         className="absolute top-1.5 right-1.5 p-1 rounded-sm opacity-0 group-hover:opacity-100 transition-precise text-dim/60 hover:text-red"

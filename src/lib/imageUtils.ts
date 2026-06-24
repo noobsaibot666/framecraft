@@ -23,3 +23,11 @@ export function generateThumbnail(file: File, maxSize = 400): Promise<string> {
 export function fileToPreviewUrl(file: File): string {
   return URL.createObjectURL(file);
 }
+
+export async function fileToDataUrl(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${file.type || "application/octet-stream"};base64,${btoa(binary)}`;
+}

@@ -21,13 +21,32 @@ const TRIGGERS: Record<string, string[]> = {
 };
 
 const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+const CUSTOM_TRIGGER_STOP_WORDS = new Set([
+  "with", "that", "this", "from", "into", "your", "their", "shot", "shots",
+  "face", "faces", "rule", "risk", "avoid", "accurate", "physically",
+]);
+
+function customTriggers(pattern: AvoidancePattern): string[] {
+  const source = [
+    pattern.label,
+    pattern.description,
+    pattern.correction_prompt,
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  return [...new Set(
+    source
+      .split(/[^a-z0-9-]+/)
+      .map((word) => word.trim())
+      .filter((word) => word.length >= 4 && !CUSTOM_TRIGGER_STOP_WORDS.has(word))
+  )];
+}
 
 export function detectRisks(promptText: string, patterns: AvoidancePattern[]): DetectedRisk[] {
   const lower = promptText.toLowerCase();
   const detected: DetectedRisk[] = [];
 
   for (const pattern of patterns) {
-    const triggers = TRIGGERS[pattern.artifact_type] ?? [];
+    const triggers = TRIGGERS[pattern.artifact_type] ?? customTriggers(pattern);
     const matched = triggers.filter((t) => lower.includes(t));
     if (matched.length > 0) {
       detected.push({ pattern, triggered_by: matched });

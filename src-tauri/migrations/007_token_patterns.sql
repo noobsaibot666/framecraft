@@ -1,5 +1,8 @@
 -- Token co-occurrence pattern tracking for Production Memory (Phase 06)
--- Populated incrementally after each high-rated result save
+-- Migration 003 created an earlier incompatible token_patterns table shape.
+-- Replace it here so fresh installs and upgraded V1 databases get the documented schema.
+
+DROP TABLE IF EXISTS token_patterns;
 
 CREATE TABLE IF NOT EXISTS token_patterns (
   id                TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

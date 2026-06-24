@@ -5,9 +5,9 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { createResult, updateTokenQualityFromResult } from "@/lib/db";
+import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
-import { generateThumbnail, fileToPreviewUrl } from "@/lib/imageUtils";
+import { generateThumbnail, fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -78,7 +78,7 @@ function ScoreDots({
 export function ResultReview() {
   const { promptId } = useParams<{ promptId: string }>();
   const navigate = useNavigate();
-  const { getById, update: updatePrompt } = usePromptStore();
+  const { getById } = usePromptStore();
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -142,11 +142,13 @@ export function ResultReview() {
     setSaving(true);
     try {
       let thumbnail: string | undefined;
+      let originalImage: string | undefined;
       if (file) thumbnail = await generateThumbnail(file, 400);
+      if (file) originalImage = await fileToDataUrl(file);
 
       const resultId = await createResult({
         prompt_id: promptId,
-        file_path: file?.name,
+        file_path: originalImage,
         thumbnail_path: thumbnail,
         provider: prompt?.provider,
         score_overall: scores.overall,
@@ -168,14 +170,7 @@ export function ResultReview() {
         updateTokenQualityFromResult(prompt.prompt_text, delta).catch(() => {});
       }
 
-      // If this result rates higher than current prompt rating, update it
-      if (scores.overall > 0 && prompt && scores.overall > prompt.rating) {
-        await updatePrompt(promptId, {
-          rating: scores.overall,
-          is_winner: isWinner || prompt.is_winner,
-          is_failed: isFailed && !isWinner,
-        });
-      }
+      await recomputePromptResultSummary(promptId);
 
       navigate(`/library/${promptId}`, { state: { newResultId: resultId } });
     } finally {

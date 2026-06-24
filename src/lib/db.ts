@@ -1,4 +1,5 @@
 import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result, SREF, Profile } from "@/types";
+import { summarizePromptFromResults } from "@/lib/resultMemory";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -94,6 +95,8 @@ export interface CreatePromptInput {
   lens?: string;
   lighting?: string;
   style_ref?: string;
+  character_ref?: string;
+  image_ref?: string;
   parameters?: Record<string, string | boolean | number>;
   tags?: string[];
   rating?: number;
@@ -195,6 +198,10 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
     camera: data.camera,
     lens: data.lens,
     lighting: data.lighting,
+    style_ref: data.style_ref,
+    character_ref: data.character_ref,
+    image_ref: data.image_ref,
+    parameters: data.parameters,
     tags: data.tags,
     rating: data.rating ?? 0,
     ai_look_risk: data.ai_look_risk ?? 0,
@@ -222,53 +229,39 @@ export async function updatePrompt(
 
   if (isTauri) {
     const db = await getDb();
-    await db.execute(
-      `UPDATE prompts SET
-        title = COALESCE($2, title),
-        description = $3,
-        provider = COALESCE($4, provider),
-        category = $5,
-        use_case = $6,
-        prompt_text = COALESCE($7, prompt_text),
-        avoidance_text = $8,
-        aspect_ratio = $9,
-        model_version = $10,
-        camera = $11,
-        lens = $12,
-        lighting = $13,
-        tags = $14,
-        rating = COALESCE($15, rating),
-        ai_look_risk = COALESCE($16, ai_look_risk),
-        is_winner = COALESCE($17, is_winner),
-        is_failed = COALESCE($18, is_failed),
-        failure_notes = $19,
-        notes = $20,
-        updated_at = $21
-       WHERE id = $1`,
-      [
-        id,
-        data.title ?? null,
-        data.description ?? null,
-        data.provider ?? null,
-        data.category ?? null,
-        data.use_case ?? null,
-        data.prompt_text ?? null,
-        data.avoidance_text ?? null,
-        data.aspect_ratio ?? null,
-        data.model_version ?? null,
-        data.camera ?? null,
-        data.lens ?? null,
-        data.lighting ?? null,
-        data.tags ? JSON.stringify(data.tags) : null,
-        data.rating ?? null,
-        data.ai_look_risk ?? null,
-        data.is_winner != null ? (data.is_winner ? 1 : 0) : null,
-        data.is_failed != null ? (data.is_failed ? 1 : 0) : null,
-        data.failure_notes ?? null,
-        data.notes ?? null,
-        ts,
-      ]
-    );
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    const add = (column: string, value: unknown) => {
+      values.push(value);
+      sets.push(`${column} = $${values.length + 1}`);
+    };
+
+    if ("title" in data && data.title != null) add("title", data.title);
+    if ("description" in data) add("description", data.description ?? null);
+    if ("provider" in data && data.provider != null) add("provider", data.provider);
+    if ("category" in data) add("category", data.category ?? null);
+    if ("use_case" in data) add("use_case", data.use_case ?? null);
+    if ("prompt_text" in data && data.prompt_text != null) add("prompt_text", data.prompt_text);
+    if ("avoidance_text" in data) add("avoidance_text", data.avoidance_text ?? null);
+    if ("aspect_ratio" in data) add("aspect_ratio", data.aspect_ratio ?? null);
+    if ("model_version" in data) add("model_version", data.model_version ?? null);
+    if ("camera" in data) add("camera", data.camera ?? null);
+    if ("lens" in data) add("lens", data.lens ?? null);
+    if ("lighting" in data) add("lighting", data.lighting ?? null);
+    if ("style_ref" in data) add("style_ref", data.style_ref ?? null);
+    if ("character_ref" in data) add("character_ref", data.character_ref ?? null);
+    if ("image_ref" in data) add("image_ref", data.image_ref ?? null);
+    if ("parameters" in data) add("parameters", data.parameters ? JSON.stringify(data.parameters) : null);
+    if ("tags" in data) add("tags", data.tags ? JSON.stringify(data.tags) : null);
+    if ("rating" in data && data.rating != null) add("rating", data.rating);
+    if ("ai_look_risk" in data && data.ai_look_risk != null) add("ai_look_risk", data.ai_look_risk);
+    if ("is_winner" in data && data.is_winner != null) add("is_winner", data.is_winner ? 1 : 0);
+    if ("is_failed" in data && data.is_failed != null) add("is_failed", data.is_failed ? 1 : 0);
+    if ("failure_notes" in data) add("failure_notes", data.failure_notes ?? null);
+    if ("notes" in data) add("notes", data.notes ?? null);
+    add("updated_at", ts);
+
+    await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
     return;
   }
 
@@ -669,6 +662,12 @@ export async function getResultsForPrompt(promptId: string): Promise<Result[]> {
     return rows.map(rowToResult);
   }
   return _devResults.filter((r) => r.prompt_id === promptId);
+}
+
+export async function recomputePromptResultSummary(promptId: string): Promise<void> {
+  const results = await getResultsForPrompt(promptId);
+  const summary = summarizePromptFromResults(results);
+  await updatePrompt(promptId, summary);
 }
 
 export async function updateResult(id: string, data: Partial<CreateResultInput>): Promise<void> {

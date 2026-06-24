@@ -182,9 +182,10 @@ export interface LibraryFilters {
   provider?: Provider;
   category?: Category;
   minRating?: number;
+  maxAiRisk?: number;
   isWinner?: boolean;
   isFailed?: boolean;
   isRecipe?: boolean;
 }
 
-export type SortOption = "newest" | "oldest" | "rating_desc" | "rating_asc" | "most_used";
+export type SortOption = "newest" | "oldest" | "rating_desc" | "rating_asc" | "most_used" | "ai_risk_desc" | "ai_risk_asc";

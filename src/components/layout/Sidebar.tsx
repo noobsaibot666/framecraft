@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { num: "06", label: "SREFS",      to: "/srefs" },
   { num: "07", label: "ANALYZE",    to: "/analyze" },
   { num: "08", label: "BRIEF",      to: "/brief" },
+  { num: "09", label: "FRAMES",     to: "/frames" },
 ] as const;
 
 function NavItem({

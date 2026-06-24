@@ -8,8 +8,8 @@ import { CraftPrompt } from "@/pages/CraftPrompt";
 import { ManualImport } from "@/pages/ManualImport";
 import { ResultReview } from "@/pages/ResultReview";
 import { SREFLibrary } from "@/pages/SREFLibrary";
+import { RecipeLibrary } from "@/pages/RecipeLibrary";
 import { Settings } from "@/pages/Settings";
-import { Placeholder } from "@/pages/Placeholder";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,7 +31,7 @@ export default function App() {
             <Route path="/library/:id" element={<PromptDetail />} />
             <Route path="/craft" element={<CraftPrompt />} />
             <Route path="/craft/:id" element={<CraftPrompt />} />
-            <Route path="/recipes" element={<Placeholder title="Recipe Library" subtitle="REUSABLE PROMPT STRUCTURES" />} />
+            <Route path="/recipes" element={<RecipeLibrary />} />
             <Route path="/import" element={<ManualImport />} />
             <Route path="/srefs" element={<SREFLibrary />} />
             <Route path="/results/:promptId" element={<ResultReview />} />

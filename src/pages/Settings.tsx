@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
 import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
+import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import type { Prompt } from "@/types";
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -96,6 +97,8 @@ export function Settings() {
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [importStatus, setImportStatus] = useState<{ done: number; total: number; finished: boolean } | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticResult | null>(null);
+  const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
 
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
@@ -114,6 +117,15 @@ export function Settings() {
       URL.revokeObjectURL(url);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleRunDiagnostics = async () => {
+    setDiagnosticsRunning(true);
+    try {
+      setDiagnostics(await runReleaseDiagnostics());
+    } finally {
+      setDiagnosticsRunning(false);
     }
   };
 
@@ -255,6 +267,52 @@ export function Settings() {
               mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}
             />
 
+          </div>
+        </Section>
+
+        <Section label="RELEASE DIAGNOSTICS">
+          <div className="flex flex-col gap-4 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="font-sans text-[11px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
+                <span className="font-mono text-[10px] text-muted leading-relaxed">
+                  Checks Tauri runtime, required SQLite tables, file storage, and native dialog plugin availability.
+                </span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={handleRunDiagnostics} disabled={diagnosticsRunning}>
+                {diagnosticsRunning ? "Running..." : "Run Checks"}
+              </Button>
+            </div>
+
+            {diagnostics && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60">
+                    {formatDiagnosticSummary(diagnostics)}
+                  </span>
+                  <span className="font-mono text-[8px] text-dim/35">
+                    {new Date(diagnostics.generatedAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  {diagnostics.checks.map((check) => (
+                    <div key={check.id} className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 px-2 py-2 rounded-sm"
+                      style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                      <span className={`font-mono text-[8px] tracking-widest uppercase ${
+                        check.status === "pass" ? "text-white/60" : check.status === "fail" ? "text-red/70" : "text-dim/50"
+                      }`}>
+                        {check.status}
+                      </span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="font-mono text-[10px] text-soft-white">{check.label}</span>
+                        <span className="font-mono text-[9px] text-muted leading-relaxed">{check.message}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </Section>
 

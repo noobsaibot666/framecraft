@@ -5,7 +5,8 @@ import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings } f
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getActiveModel, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import type { AIModel } from "@/lib/aiConfig";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -38,8 +39,7 @@ Analyze this image and return ONLY a valid JSON object (no markdown, no explanat
 quality_tier must be one of: commercial, editorial, concept, reference.
 Return only the JSON object — no markdown fences, no preamble.`;
 
-async function analyzeImage(base64: string, mimeType: string): Promise<AnalysisResult> {
-  const model = getActiveModel();
+async function analyzeImage(base64: string, mimeType: string, model: AIModel): Promise<AnalysisResult> {
   const apiKey = getApiKey(model.provider);
   if (!apiKey) throw new Error(`No API key configured for ${model.provider}. Add it in Settings.`);
 
@@ -143,8 +143,8 @@ export function ImageAnalyzer() {
   const navigate = useNavigate();
   const { create } = usePromptStore();
 
-  const activeModel = getActiveModel();
-  const apiKey = getApiKey(activeModel.provider);
+  const [selectedModel, setSelectedModel] = useState<AIModel>(AI_MODELS[0]);
+  const apiKey = getApiKey(selectedModel.provider);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string>("");
@@ -178,7 +178,7 @@ export function ImageAnalyzer() {
     setResult(null);
     try {
       const { base64, mimeType } = await fileToBase64(imageFile);
-      const analysis = await analyzeImage(base64, mimeType);
+      const analysis = await analyzeImage(base64, mimeType, selectedModel);
       setResult(analysis);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed. Check your API key in Settings.");
@@ -254,21 +254,43 @@ export function ImageAnalyzer() {
             </div>
           )}
 
+          {/* Model picker */}
           <div className="flex flex-col gap-1.5">
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleAnalyze}
-              disabled={!imageFile || !apiKey || analyzing}
-              className="w-full justify-center"
-            >
-              <Scan size={11} />
-              {analyzing ? "Analyzing…" : "Analyze Image"}
-            </Button>
-            <span className="font-mono text-[8px] text-dim/30 text-center">
-              via {activeModel.label}
-            </span>
+            <span className="font-mono text-[8px] tracking-widest uppercase text-dim/40">MODEL</span>
+            <div className="flex flex-col gap-1">
+              {[{ id: "anthropic" as const, label: "ANTHROPIC" }, { id: "openai" as const, label: "OPENAI" }].map(({ id, label }) => {
+                const models = AI_MODELS.filter((m) => m.provider === id);
+                return (
+                  <div key={id} className="flex flex-col gap-0.5">
+                    <span className="font-mono text-[7px] tracking-widest uppercase text-dim/25">{label}</span>
+                    {models.map((m) => (
+                      <button key={m.id} type="button"
+                        onClick={() => setSelectedModel(m)}
+                        className={cn(
+                          "flex items-center justify-between px-2 py-1.5 rounded-sm text-left transition-precise",
+                          selectedModel.id === m.id ? "text-white" : "text-dim hover:text-muted"
+                        )}
+                        style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
+                        <span className="font-mono text-[9px]">{m.label}</span>
+                        <span className="font-mono text-[7px] tracking-widest uppercase text-dim/30">{m.tier}</span>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          <Button
+            variant="primary"
+            size="md"
+            onClick={handleAnalyze}
+            disabled={!imageFile || !apiKey || analyzing}
+            className="w-full justify-center"
+          >
+            <Scan size={11} />
+            {analyzing ? "Analyzing…" : "Analyze Image"}
+          </Button>
 
           {imageUrl && (
             <button type="button" onClick={() => { setImageFile(null); setImageUrl(""); setResult(null); setError(""); setImported(false); }}

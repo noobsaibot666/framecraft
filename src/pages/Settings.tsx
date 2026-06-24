@@ -4,8 +4,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
-import { AI_MODELS, AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_MODEL_KEY, DEFAULT_MODEL_ID } from "@/lib/aiConfig";
-import { cn } from "@/lib/utils";
+import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI } from "@/lib/aiConfig";
 import type { Prompt } from "@/types";
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -86,15 +85,6 @@ export function Settings() {
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
 
-  // Model selection
-  const [activeModel, setActiveModel] = useState(() => localStorage.getItem(AI_MODEL_KEY) ?? DEFAULT_MODEL_ID);
-  const handleModelSelect = (id: string) => {
-    setActiveModel(id);
-    localStorage.setItem(AI_MODEL_KEY, id);
-  };
-
-  const anthropicModels = AI_MODELS.filter((m) => m.provider === "anthropic");
-  const openaiModels    = AI_MODELS.filter((m) => m.provider === "openai");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
@@ -218,37 +208,6 @@ export function Settings() {
               mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}
             />
 
-            {/* Model selector */}
-            <div className="flex flex-col gap-2 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-              <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60 pt-1">ACTIVE MODEL</span>
-              <div className="flex flex-col gap-1">
-                {[{ label: "ANTHROPIC", models: anthropicModels }, { label: "OPENAI", models: openaiModels }].map(({ label, models }) => (
-                  <div key={label} className="flex flex-col gap-1">
-                    <span className="font-mono text-[8px] tracking-widest text-dim/30 uppercase mt-1">{label}</span>
-                    {models.map((model) => (
-                      <button key={model.id} type="button"
-                        onClick={() => handleModelSelect(model.id)}
-                        className={cn(
-                          "flex items-center justify-between px-3 py-2 rounded-sm text-left transition-precise",
-                          activeModel === model.id
-                            ? "bg-white/6 text-white"
-                            : "text-dim hover:text-muted hover:bg-white/3"
-                        )}
-                        style={{ border: activeModel === model.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid transparent" }}>
-                        <span className="font-mono text-[10px]">{model.label}</span>
-                        <span className={cn(
-                          "font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm",
-                          model.tier === "powerful" ? "text-white/40" : model.tier === "balanced" ? "text-white/30" : "text-white/20"
-                        )}
-                          style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-                          {model.tier}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </Section>
 

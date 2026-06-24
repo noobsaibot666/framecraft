@@ -13,14 +13,16 @@ import {
   getPromptsForProject,
   getResultsForProject,
   getReferencesForProject,
+  addResultToProject,
   addPromptToProject,
   removePromptFromProject,
   addReferenceToProject,
   removeReferenceFromProject,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { getPrompts, searchPrompts } from "@/lib/db";
+import { getPrompts, getRecentResults, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
+import { toDisplaySrc } from "@/lib/fileStore";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -150,11 +152,12 @@ function RefRow({ ref: r, onRemove, onOpen }: {
   onRemove: () => void;
   onOpen: () => void;
 }) {
+  const thumbSrc = toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data;
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm group"
       style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
-      {r.thumbnail_data ? (
-        <img src={r.thumbnail_data} alt="" className="w-8 h-8 object-cover rounded-sm shrink-0" />
+      {thumbSrc ? (
+        <img src={thumbSrc} alt="" className="w-8 h-8 object-cover rounded-sm shrink-0" />
       ) : (
         <div className="w-8 h-8 rounded-sm shrink-0 flex items-center justify-center"
           style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -175,7 +178,7 @@ function RefRow({ ref: r, onRemove, onOpen }: {
 
 // ─── Add Picker ───────────────────────────────────────────────
 
-type PickerMode = "prompts" | "references" | null;
+type PickerMode = "prompts" | "references" | "results" | null;
 
 function PromptPicker({ projectId, onAdd, onClose }: {
   projectId: string;
@@ -270,8 +273,8 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
         {items.map((r) => (
           <div key={r.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm hover:bg-white/3 transition-precise">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              {r.thumbnail_data ? (
-                <img src={r.thumbnail_data} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
+              {toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data ? (
+                <img src={toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
               ) : (
                 <div className="w-7 h-7 rounded-sm shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
                   <Image size={8} className="text-white/20" />
@@ -295,6 +298,64 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
         ))}
         {items.length === 0 && (
           <span className="font-mono text-[9px] text-dim/40 px-2 py-2">No references found.</span>
+        )}
+      </div>
+      <div className="flex justify-end pt-1">
+        <button type="button" onClick={onClose} className="font-mono text-[9px] text-dim/50 hover:text-white transition-precise">
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ResultPicker({ projectId, onAdd, onClose }: {
+  projectId: string;
+  onAdd: () => void;
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<Awaited<ReturnType<typeof getRecentResults>>>([]);
+  const [added, setAdded] = useState<Set<string>>(new Set());
+
+  useEffect(() => { getRecentResults(24).then(setItems); }, []);
+
+  const handleAdd = async (resultId: string) => {
+    await addResultToProject(projectId, resultId);
+    setAdded((prev) => new Set([...prev, resultId]));
+    onAdd();
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="font-mono text-[9px] text-dim/50">Recent results</span>
+      <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+        {items.map((r) => {
+          const thumb = toDisplaySrc(r.thumbnail_path) ?? r.thumbnail_path;
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => handleAdd(r.id)}
+              disabled={added.has(r.id)}
+              className="relative aspect-square rounded-sm overflow-hidden text-left disabled:opacity-50"
+              style={{ border: added.has(r.id) ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}
+            >
+              {thumb ? (
+                <img src={thumb} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Image size={12} className="text-white/20" />
+                </div>
+              )}
+              <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[7px] text-white/70 truncate"
+                style={{ background: "rgba(0,0,0,0.65)" }}>
+                {added.has(r.id) ? "Added" : r.prompt_title || r.id.slice(0, 6)}
+              </span>
+            </button>
+          );
+        })}
+        {items.length === 0 && (
+          <span className="col-span-4 font-mono text-[9px] text-dim/30">No results yet. Add results from a prompt or the generation queue.</span>
         )}
       </div>
       <div className="flex justify-end pt-1">
@@ -417,12 +478,14 @@ export function ProjectWorkspace() {
 
   const reloadLinks = async () => {
     if (!id) return;
-    const [prompts, refs] = await Promise.all([
+    const [prompts, refs, results] = await Promise.all([
       getPromptsForProject(id),
       getReferencesForProject(id),
+      getResultsForProject(id),
     ]);
     setLinkedPrompts(prompts);
     setLinkedRefs(refs);
+    setLinkedResults(results);
   };
 
   const winnerCount = linkedPrompts.filter((p) => p.is_winner).length;
@@ -561,35 +624,59 @@ export function ProjectWorkspace() {
             )}
           </Panel>
 
-          {/* Results panel (read-only — linked via result save) */}
-          {linkedResults.length > 0 && (
-            <Panel title="RESULTS" count={linkedResults.length}>
-              <div className="grid grid-cols-6 gap-2">
-                {linkedResults.map((r) => (
-                  <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
-                    {r.thumbnail_path ? (
-                      <img src={r.thumbnail_path} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center"
-                        style={{ background: "rgba(255,255,255,0.05)" }}>
-                        <Image size={12} className="text-white/20" />
-                      </div>
-                    )}
-                    {r.is_winner && (
-                      <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-sm bg-white/20 flex items-center justify-center">
-                        <Star size={8} className="text-white/80 fill-white/60" />
-                      </span>
-                    )}
-                    {r.is_failed && (
-                      <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-sm bg-red/20 flex items-center justify-center">
-                        <AlertTriangle size={7} className="text-red/70" />
-                      </span>
-                    )}
-                  </div>
-                ))}
+          <Panel
+            title="RESULTS"
+            count={linkedResults.length}
+            action={
+              <button type="button"
+                onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
+                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+                style={{ border: "var(--border-dim)" }}>
+                <Plus size={8} /> Add
+              </button>
+            }
+          >
+            {pickerMode === "results" && (
+              <div className="mb-2 p-3 rounded-sm" style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
+                <ResultPicker
+                  projectId={id!}
+                  onAdd={reloadLinks}
+                  onClose={() => setPickerMode(null)}
+                />
               </div>
-            </Panel>
-          )}
+            )}
+            {linkedResults.length === 0 && pickerMode !== "results" ? (
+              <span className="font-mono text-[9px] text-dim/30">No results linked yet.</span>
+            ) : (
+              <div className="grid grid-cols-6 gap-2">
+                {linkedResults.map((r) => {
+                  const thumb = toDisplaySrc(r.thumbnail_path) ?? r.thumbnail_path;
+                  return (
+                    <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
+                      {thumb ? (
+                        <img src={thumb} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center"
+                          style={{ background: "rgba(255,255,255,0.05)" }}>
+                          <Image size={12} className="text-white/20" />
+                        </div>
+                      )}
+                      {r.is_winner && (
+                        <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-sm bg-white/20 flex items-center justify-center">
+                          <Star size={8} className="text-white/80 fill-white/60" />
+                        </span>
+                      )}
+                      {r.is_failed && (
+                        <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-sm bg-red/20 flex items-center justify-center">
+                          <AlertTriangle size={7} className="text-red/70" />
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
         </div>
 
         {/* Right column — metadata + references */}

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   getResultDir,
   getRefDir,
@@ -13,6 +13,10 @@ import {
 // JSDOM canvas stub: getContext returns null — thumbnailFromDataUrl falls back to input
 const JPEG_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARC";
 const PNG_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+afterEach(() => {
+  vi.resetModules();
+});
 
 describe("path helpers", () => {
   it("getResultDir appends results/ to base", () => {
@@ -67,6 +71,19 @@ describe("toDisplaySrc — dev mode", () => {
 
   it("returns undefined for file paths outside Tauri (no convertFileSrc)", () => {
     expect(toDisplaySrc("/some/path/file.jpg")).toBeUndefined();
+  });
+
+  it("uses Tauri internals synchronously when available", async () => {
+    vi.stubGlobal("window", {
+      __TAURI_INTERNALS__: {
+        convertFileSrc: (path: string, protocol = "asset") => `${protocol}://localhost/${encodeURIComponent(path)}`,
+      },
+    });
+    const { toDisplaySrc: tauriToDisplaySrc } = await import("./fileStore");
+
+    expect(tauriToDisplaySrc("/Users/alan/image.jpg")).toBe("asset://localhost/%2FUsers%2Falan%2Fimage.jpg");
+
+    vi.unstubAllGlobals();
   });
 });
 

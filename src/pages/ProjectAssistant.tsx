@@ -327,11 +327,11 @@ export function ProjectAssistant() {
 
     // Ensure we have a thread
     let tid = activeThreadId;
+    const createdThread = !tid;
     if (!tid) {
       tid = await createThread(id!, text.slice(0, 40) + (text.length > 40 ? "…" : ""));
       const updated = await getThreadsForProject(id!);
       setThreads(updated);
-      setActiveThreadId(tid);
     }
 
     // Add user message
@@ -353,6 +353,7 @@ export function ProjectAssistant() {
       const fallback = "No API key configured. Here are my deterministic suggestions based on your project data — check the suggestion cards on the left for grounded next actions.";
       const aId = await addMessage(tid, "assistant", fallback);
       setMessages((prev) => [...prev, { id: aId, thread_id: tid!, role: "assistant", content: fallback, created_at: new Date().toISOString() }]);
+      if (createdThread) setActiveThreadId(tid);
       setSending(false);
       return;
     }
@@ -366,9 +367,11 @@ export function ProjectAssistant() {
       const reply = await askAssistant(pack, history, modelId);
       const aId = await addMessage(tid, "assistant", reply);
       setMessages((prev) => [...prev, { id: aId, thread_id: tid!, role: "assistant", content: reply, created_at: new Date().toISOString() }]);
+      if (createdThread) setActiveThreadId(tid);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       setError(msg);
+      if (createdThread) setActiveThreadId(tid);
     } finally {
       setSending(false);
     }

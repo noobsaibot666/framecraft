@@ -35,14 +35,16 @@ const FORMAT_OPTIONS = [
 function CreateForm({
   projectId,
   onCreated,
+  initialOpen = false,
 }: {
   projectId: string;
   onCreated: (d: Deliverable) => void;
+  initialOpen?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState("");
   const [aspect, setAspect] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   const handleSubmit = async () => {
     if (!title.trim()) return;
@@ -381,6 +383,7 @@ export function ProjectBoard() {
   const [project, setProject] = useState<Project | null>(null);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showTopCreate, setShowTopCreate] = useState(false);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -475,12 +478,27 @@ export function ProjectBoard() {
               <span className="font-mono text-[9px] text-red/50">{missingCount} missing result{missingCount !== 1 ? "s" : ""}</span>
             </div>
           )}
+          <Button variant="primary" size="sm" onClick={() => setShowTopCreate((open) => !open)}>
+            <Plus size={11} /> New Deliverable
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}`)}>
             <ArrowLeft size={11} /> Project
           </Button>
         </div>
       }
     >
+      {showTopCreate && (
+        <div className="mb-4 max-w-[360px]">
+          <CreateForm
+            initialOpen
+            projectId={id!}
+            onCreated={(d) => {
+              handleCreated(d);
+              setShowTopCreate(false);
+            }}
+          />
+        </div>
+      )}
       {deliverables.length === 0 ? (
         <div className="flex flex-col gap-6">
           <div className="flex flex-col items-center justify-center py-16 gap-3"

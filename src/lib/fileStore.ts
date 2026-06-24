@@ -1,5 +1,12 @@
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+function tauriConvertFileSrc(): ((path: string, protocol?: string) => string) | undefined {
+  if (typeof window === "undefined") return undefined;
+  return (window as unknown as {
+    __TAURI_INTERNALS__?: { convertFileSrc?: (path: string, protocol?: string) => string };
+  }).__TAURI_INTERNALS__?.convertFileSrc;
+}
+
 // Pre-cache convertFileSrc so toDisplaySrc stays synchronous
 let _convertFileSrc: ((path: string) => string) | undefined;
 if (isTauri) {
@@ -121,8 +128,9 @@ export async function readImageAsDataUrl(filePath: string): Promise<string> {
 export function toDisplaySrc(filePath: string | undefined): string | undefined {
   if (!filePath) return undefined;
   if (filePath.startsWith("data:")) return filePath;
-  if (!isTauri || !_convertFileSrc) return undefined;
-  return _convertFileSrc(filePath);
+  const convert = _convertFileSrc ?? tauriConvertFileSrc();
+  if (!convert) return undefined;
+  return convert(filePath);
 }
 
 export async function deleteResultFiles(resultId: string): Promise<void> {

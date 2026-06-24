@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, AlertTriangle, ChevronDown, Layers, X, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -230,6 +230,23 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   );
 }
 
+// ─── MJ Source URL Parser ─────────────────────────────────────
+
+function parseMJSourceUrl(url: string): { cdnUrl: string; jobId: string; index: number } | null {
+  try {
+    const u = new URL(url.trim());
+    // alpha.midjourney.com/jobs/{uuid}  or  midjourney.com/jobs/{uuid}
+    if (!u.hostname.endsWith("midjourney.com")) return null;
+    const match = u.pathname.match(/\/jobs\/([0-9a-f-]{36})/i);
+    if (!match) return null;
+    const jobId = match[1];
+    const index = parseInt(u.searchParams.get("index") ?? "0", 10);
+    return { cdnUrl: `https://cdn.midjourney.com/${jobId}/0_${index}.png`, jobId, index };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Constants ────────────────────────────────────────────────
 
 const PROVIDERS: { value: Provider; label: string }[] = [
@@ -264,6 +281,12 @@ export function ManualImport() {
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // Source URL preview
+  const mjSource = useMemo(() => parseMJSourceUrl(source), [source]);
+  useEffect(() => {
+    if (mjSource) setProvider("midjourney");
+  }, [mjSource]);
 
   // Batch import state
   const [batchJson, setBatchJson] = useState("");
@@ -534,6 +557,22 @@ export function ManualImport() {
                   placeholder="Midjourney community, X, personal…"
                   className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise"
                   style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+                {mjSource && (
+                  <div className="flex items-start gap-3 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                    <img
+                      src={mjSource.cdnUrl}
+                      alt="Source preview"
+                      className="w-20 h-20 object-cover rounded-sm shrink-0"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                    <div className="flex flex-col gap-1 min-w-0 pt-0.5">
+                      <span className="font-mono text-[8px] tracking-widest uppercase text-dim/50">MIDJOURNEY SOURCE</span>
+                      <span className="font-mono text-[9px] text-soft-white/60 break-all">{mjSource.jobId}</span>
+                      <span className="font-mono text-[8px] text-dim/40">variant {mjSource.index + 1}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <TagInput tags={tags} onChange={setTags} />
             </div>

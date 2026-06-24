@@ -235,8 +235,16 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 function parseMJSourceUrl(url: string): { cdnUrl: string; jobId: string; index: number } | null {
   try {
     const u = new URL(url.trim());
-    // alpha.midjourney.com/jobs/{uuid}  or  midjourney.com/jobs/{uuid}
     if (!u.hostname.endsWith("midjourney.com")) return null;
+
+    // Direct CDN URL: cdn.midjourney.com/{uuid}/0_{n}.png
+    if (u.hostname === "cdn.midjourney.com") {
+      const cdn = u.pathname.match(/\/([0-9a-f-]{36})\/0_(\d+)/i);
+      if (!cdn) return null;
+      return { cdnUrl: url.trim(), jobId: cdn[1], index: parseInt(cdn[2], 10) };
+    }
+
+    // alpha.midjourney.com/jobs/{uuid}?index={n}
     const match = u.pathname.match(/\/jobs\/([0-9a-f-]{36})/i);
     if (!match) return null;
     const jobId = match[1];

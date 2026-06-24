@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings } from "lucide-react";
+import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -60,6 +60,8 @@ export function ImageAnalyzer() {
   const [error, setError] = useState("");
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState(false);
+  const [importingVariation, setImportingVariation] = useState(false);
+  const [importedVariation, setImportedVariation] = useState(false);
 
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
@@ -69,6 +71,7 @@ export function ImageAnalyzer() {
     setResult(null);
     setError("");
     setImported(false);
+    setImportedVariation(false);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -105,10 +108,30 @@ export function ImageAnalyzer() {
         tags: result.tags,
         notes: result.style_notes,
         aspect_ratio: result.aspect_ratio ?? undefined,
+        avoidance_text: result.avoidance_suggestions?.length
+          ? result.avoidance_suggestions.join(", ")
+          : undefined,
       });
       setImported(true);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleImportVariation = async () => {
+    if (!result?.variation_prompt) return;
+    setImportingVariation(true);
+    try {
+      await create({
+        title: `${result.title} — variation`,
+        prompt_text: result.variation_prompt,
+        provider: (result.provider as "midjourney") ?? "midjourney",
+        tags: result.tags,
+        aspect_ratio: result.aspect_ratio ?? undefined,
+      });
+      setImportedVariation(true);
+    } finally {
+      setImportingVariation(false);
     }
   };
 
@@ -200,7 +223,7 @@ export function ImageAnalyzer() {
           </Button>
 
           {imageUrl && (
-            <button type="button" onClick={() => { setImageFile(null); setImageUrl(""); setResult(null); setError(""); setImported(false); }}
+            <button type="button" onClick={() => { setImageFile(null); setImageUrl(""); setResult(null); setError(""); setImported(false); setImportedVariation(false); }}
               className="font-mono text-[9px] text-dim/40 hover:text-dim transition-precise text-center">
               Clear
             </button>
@@ -275,6 +298,36 @@ export function ImageAnalyzer() {
                 </p>
               </div>
 
+              {/* Variation prompt */}
+              {result.variation_prompt && (
+                <div className="flex flex-col gap-2 p-4 rounded-card"
+                  style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Shuffle size={9} className="text-dim" />
+                      <span className="system-label">VARIATION PROMPT</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CopyButton text={result.variation_prompt} label="Copy" />
+                      {importedVariation ? (
+                        <span className="flex items-center gap-1 font-mono text-[8px] text-white/40">
+                          <Check size={8} /> Saved
+                        </span>
+                      ) : (
+                        <button type="button" onClick={handleImportVariation} disabled={importingVariation}
+                          className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+                          style={{ border: "var(--border-dim)" }}>
+                          <ArrowRight size={8} /> {importingVariation ? "Saving…" : "Import"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="font-mono text-[11px] text-soft-white/70 leading-relaxed">
+                    {result.variation_prompt}
+                  </p>
+                </div>
+              )}
+
               {/* Style notes */}
               <div className="flex flex-col gap-2 p-4 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
@@ -283,6 +336,43 @@ export function ImageAnalyzer() {
                   {result.style_notes}
                 </p>
               </div>
+
+              {/* AI-look risks + avoidance */}
+              {(result.ai_look_risks?.length > 0 || result.avoidance_suggestions?.length > 0) && (
+                <div className="flex flex-col gap-3 p-4 rounded-card"
+                  style={{ border: "1px solid rgba(215,25,33,0.20)", background: "rgba(215,25,33,0.03)" }}>
+                  {result.ai_look_risks?.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldAlert size={9} className="text-red/60" />
+                        <span className="system-label text-red/60">AI-LOOK RISKS DETECTED</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {result.ai_look_risks.map((risk) => (
+                          <span key={risk} className="font-mono text-[10px] text-red/50 leading-snug">· {risk}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {result.avoidance_suggestions?.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between">
+                        <span className="system-label">AVOIDANCE TOKENS</span>
+                        <CopyButton text={result.avoidance_suggestions.join(", ")} label="Copy all" />
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {result.avoidance_suggestions.map((s) => (
+                          <span key={s}
+                            className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-red/50"
+                            style={{ border: "1px solid rgba(215,25,33,0.20)" }}>
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Elements + Tags */}
               <div className="grid grid-cols-2 gap-4">

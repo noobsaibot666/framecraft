@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Upload, X, Settings } from "lucide-react";
+import { FileText, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Upload, X, Settings, ShieldAlert, BookOpen, ListChecks } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -18,12 +18,23 @@ interface GeneratedPrompt {
   aspect_ratio: string;
 }
 
+interface SuggestedRecipe {
+  title: string;
+  description: string;
+  token_sequence: string[];
+}
+
 interface BriefResult {
   summary: string;
+  production_goal: string;
   creative_direction: string;
   tone: string;
   key_elements: string[];
+  required_deliverables: string[];
+  key_constraints: string[];
+  risk_areas: string[];
   prompts: GeneratedPrompt[];
+  suggested_recipes: SuggestedRecipe[];
 }
 
 // ─── AI Prompt ────────────────────────────────────────────────
@@ -33,9 +44,13 @@ const SYSTEM_PROMPT = `You are an expert creative director and Midjourney prompt
 Analyze the creative brief and return ONLY a valid JSON object (no markdown, no explanation):
 {
   "summary": "2-3 sentence summary of the brief's core ask and objective",
+  "production_goal": "one sentence — what this campaign must achieve visually",
   "creative_direction": "overall visual direction and aesthetic approach",
   "tone": "tone descriptor (e.g. luxury minimal, bold editorial, warm lifestyle)",
-  "key_elements": ["visual element 1", "element 2"],
+  "key_elements": ["core visual element 1", "element 2"],
+  "required_deliverables": ["hero key visual", "lifestyle context shot", "detail close-up"],
+  "key_constraints": ["brand rule or restriction 1", "constraint 2"],
+  "risk_areas": ["specific visual risk for this category — e.g. product reflections may look synthetic", "another risk if present"],
   "prompts": [
     {
       "title": "descriptive 3-6 word title",
@@ -44,10 +59,21 @@ Analyze the creative brief and return ONLY a valid JSON object (no markdown, no 
       "tags": ["category", "style"],
       "aspect_ratio": "16:9"
     }
+  ],
+  "suggested_recipes": [
+    {
+      "title": "Recipe name (3-5 words)",
+      "description": "one sentence on what this recipe produces and when to use it",
+      "token_sequence": ["subject token", "environment token", "lighting token", "camera token", "style token", "--ar 16:9"]
+    }
   ]
 }
 
-Generate 4-5 distinct variations covering: hero/key visual, lifestyle/context, detail close-up, alternative angle. Every prompt must be immediately usable in Midjourney.
+required_deliverables: list what the campaign actually needs as distinct shots (not creative concepts — concrete deliverables like "hero pack shot", "talent lifestyle", "texture detail").
+key_constraints: brand rules, legal restrictions, or production limits from the brief. Empty array if none stated.
+risk_areas: what could go wrong visually for this specific brief — AI-look risks, category-specific production traps. 2-3 items maximum.
+suggested_recipes: 1-2 reusable prompt structures for this campaign type. token_sequence is an ordered list of prompt tokens, not a full sentence.
+Generate 4-5 distinct prompt variations covering: hero/key visual, lifestyle/context, detail close-up, alternative angle. Every prompt must be immediately usable in Midjourney.
 Return only the JSON — no markdown fences, no preamble.`;
 
 // ─── API Call ─────────────────────────────────────────────────
@@ -84,7 +110,7 @@ async function analyzeBrief(content: BriefContent, model: AIModel): Promise<Brie
       },
       body: JSON.stringify({
         model: model.id,
-        max_tokens: 2048,
+        max_tokens: 3072,
         messages: [{ role: "user", content: userContent }],
       }),
     });
@@ -101,7 +127,7 @@ async function analyzeBrief(content: BriefContent, model: AIModel): Promise<Brie
       headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: model.id,
-        max_tokens: 2048,
+        max_tokens: 3072,
         messages: [{ role: "user", content: `BRIEF:\n${(content as { type: "text"; text: string }).text}\n\n${SYSTEM_PROMPT}` }],
       }),
     });
@@ -211,6 +237,7 @@ export function BriefAnalyzer() {
   const [result, setResult] = useState<BriefResult | null>(null);
   const [error, setError] = useState("");
   const [importedIds, setImportedIds] = useState<Set<number>>(new Set());
+  const [savedRecipeIds, setSavedRecipeIds] = useState<Set<number>>(new Set());
 
   const hasInput = briefText.trim().length > 0 || attachedFile !== null;
 
@@ -232,6 +259,7 @@ export function BriefAnalyzer() {
     setError("");
     setResult(null);
     setImportedIds(new Set());
+    setSavedRecipeIds(new Set());
     try {
       let content: BriefContent;
       if (attachedFile) {
@@ -264,6 +292,17 @@ export function BriefAnalyzer() {
     for (let i = 0; i < result.prompts.length; i++) {
       if (!importedIds.has(i)) await handleImport(result.prompts[i], i);
     }
+  };
+
+  const handleSaveRecipe = async (recipe: SuggestedRecipe, idx: number) => {
+    await create({
+      title: recipe.title,
+      prompt_text: recipe.token_sequence.join(", "),
+      provider: "midjourney",
+      is_recipe: true,
+      notes: recipe.description,
+    });
+    setSavedRecipeIds((prev) => new Set(prev).add(idx));
   };
 
   return (
@@ -381,21 +420,29 @@ export function BriefAnalyzer() {
           {result && (
             <div className="flex flex-col gap-5">
               {/* Brief overview */}
-              <div className="flex flex-col gap-4 p-4 rounded-card"
+              <div className="flex flex-col gap-3 p-4 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                 <div className="flex items-start justify-between gap-4">
                   <span className="system-label">BRIEF OVERVIEW</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/50"
-                      style={{ border: "var(--border-dim)" }}>{result.tone}</span>
-                  </div>
+                  <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/50 shrink-0"
+                    style={{ border: "var(--border-dim)" }}>{result.tone}</span>
                 </div>
+
                 <p className="font-mono text-[10px] text-muted leading-relaxed">{result.summary}</p>
+
+                {result.production_goal && (
+                  <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                    <span className="system-label text-[8px]">PRODUCTION GOAL</span>
+                    <p className="font-mono text-[10px] text-white leading-relaxed">{result.production_goal}</p>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                   <span className="system-label text-[8px]">CREATIVE DIRECTION</span>
                   <p className="font-mono text-[10px] text-soft-white/70 leading-relaxed">{result.creative_direction}</p>
                 </div>
-                {result.key_elements.length > 0 && (
+
+                {result.key_elements?.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <Tag size={9} className="text-dim/40 mt-0.5" />
                     {result.key_elements.map((el) => (
@@ -404,7 +451,51 @@ export function BriefAnalyzer() {
                     ))}
                   </div>
                 )}
+
+                {(result.required_deliverables?.length > 0 || result.key_constraints?.length > 0) && (
+                  <div className="grid grid-cols-2 gap-3 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                    {result.required_deliverables?.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1">
+                          <ListChecks size={8} className="text-dim/40" />
+                          <span className="system-label text-[8px]">DELIVERABLES</span>
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          {result.required_deliverables.map((d) => (
+                            <span key={d} className="font-mono text-[9px] text-soft-white/60 leading-snug">· {d}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {result.key_constraints?.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <span className="system-label text-[8px]">CONSTRAINTS</span>
+                        <div className="flex flex-col gap-0.5">
+                          {result.key_constraints.map((c) => (
+                            <span key={c} className="font-mono text-[9px] text-soft-white/60 leading-snug">· {c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {/* Risk areas */}
+              {result.risk_areas?.length > 0 && (
+                <div className="flex flex-col gap-2.5 p-4 rounded-card"
+                  style={{ border: "1px solid rgba(215,25,33,0.20)", background: "rgba(215,25,33,0.03)" }}>
+                  <div className="flex items-center gap-1.5">
+                    <ShieldAlert size={9} className="text-red/60" />
+                    <span className="system-label text-red/60">PRODUCTION RISK AREAS</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {result.risk_areas.map((r) => (
+                      <span key={r} className="font-mono text-[10px] text-red/50 leading-snug">· {r}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Generated prompts header */}
               <div className="flex items-center justify-between">
@@ -432,6 +523,47 @@ export function BriefAnalyzer() {
                   />
                 ))}
               </div>
+
+              {/* Suggested recipes */}
+              {result.suggested_recipes?.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <BookOpen size={9} className="text-dim" />
+                    <span className="system-label">{result.suggested_recipes.length} SUGGESTED RECIPES</span>
+                  </div>
+                  {result.suggested_recipes.map((recipe, i) => (
+                    <div key={i} className="flex flex-col gap-3 p-4 rounded-card"
+                      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="font-sans text-[12px] font-semibold text-white truncate">{recipe.title}</span>
+                          <span className="font-mono text-[9px] text-dim/50">{recipe.description}</span>
+                        </div>
+                        {savedRecipeIds.has(i) ? (
+                          <span className="flex items-center gap-1 font-mono text-[8px] text-white/40 shrink-0">
+                            <Check size={8} /> Saved
+                          </span>
+                        ) : (
+                          <button type="button" onClick={() => handleSaveRecipe(recipe, i)}
+                            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm shrink-0"
+                            style={{ border: "var(--border-dim)" }}>
+                            <BookOpen size={8} /> Save Recipe
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {recipe.token_sequence.map((token) => (
+                          <span key={token}
+                            className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/60"
+                            style={{ border: "var(--border-dim)" }}>
+                            {token}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

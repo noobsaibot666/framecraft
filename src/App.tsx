@@ -7,6 +7,7 @@ import { PromptDetail } from "@/pages/PromptDetail";
 import { CraftPrompt } from "@/pages/CraftPrompt";
 import { ManualImport } from "@/pages/ManualImport";
 import { ResultReview } from "@/pages/ResultReview";
+import { SREFLibrary } from "@/pages/SREFLibrary";
 import { Settings } from "@/pages/Settings";
 import { Placeholder } from "@/pages/Placeholder";
 
@@ -32,7 +33,7 @@ export default function App() {
             <Route path="/craft/:id" element={<CraftPrompt />} />
             <Route path="/recipes" element={<Placeholder title="Recipe Library" subtitle="REUSABLE PROMPT STRUCTURES" />} />
             <Route path="/import" element={<ManualImport />} />
-            <Route path="/srefs" element={<Placeholder title="SREF Library" subtitle="STYLE REFERENCE ASSETS" />} />
+            <Route path="/srefs" element={<SREFLibrary />} />
             <Route path="/results/:promptId" element={<ResultReview />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

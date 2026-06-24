@@ -1,4 +1,4 @@
-import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result } from "@/types";
+import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result, SREF, Profile } from "@/types";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -761,4 +761,115 @@ export async function getFailedResultArtifacts(
   return _devResults
     .filter((r) => r.is_failed && r.artifacts?.length)
     .flatMap((r) => r.artifacts ?? []);
+}
+
+// ─── SREF / Profile Library (Phase 08) ───────────────────────
+
+function rowToSREF(row: Record<string, unknown>): SREF {
+  return {
+    id: row.id as string,
+    code: row.code as string,
+    title: row.title as string | undefined,
+    description: row.description as string | undefined,
+    provider: (row.provider as string ?? "midjourney") as SREF["provider"],
+    category: row.category as SREF["category"] | undefined,
+    best_use: row.best_use as string | undefined,
+    risk_notes: row.risk_notes as string | undefined,
+    example_path: row.example_path as string | undefined,
+    rating: Number(row.rating ?? 0),
+    tags: row.tags ? tryParseJson<string[]>(row.tags as string, []) : undefined,
+    notes: row.notes as string | undefined,
+    created_at: row.created_at as string,
+  };
+}
+
+function rowToProfile(row: Record<string, unknown>): Profile {
+  return {
+    id: row.id as string,
+    code: row.code as string,
+    title: row.title as string | undefined,
+    description: row.description as string | undefined,
+    provider: (row.provider as string ?? "midjourney") as Profile["provider"],
+    best_use: row.best_use as string | undefined,
+    risk_notes: row.risk_notes as string | undefined,
+    example_path: row.example_path as string | undefined,
+    rating: Number(row.rating ?? 0),
+    tags: row.tags ? tryParseJson<string[]>(row.tags as string, []) : undefined,
+    notes: row.notes as string | undefined,
+    created_at: row.created_at as string,
+  };
+}
+
+function tryParseJson<T>(raw: string, fallback: T): T {
+  try { return JSON.parse(raw) as T; } catch { return fallback; }
+}
+
+export async function getSREFs(): Promise<SREF[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select("SELECT * FROM srefs ORDER BY rating DESC, created_at ASC")) as Record<string, unknown>[];
+    return rows.map(rowToSREF);
+  }
+  return [];
+}
+
+export async function updateSREFRating(id: string, rating: number): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("UPDATE srefs SET rating = $1, updated_at = datetime('now') WHERE id = $2", [rating, id]);
+}
+
+export async function createSREF(data: { code: string; title?: string; description?: string; category?: string; best_use?: string; risk_notes?: string; notes?: string; tags?: string[] }): Promise<string> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `INSERT INTO srefs (code, title, description, provider, category, best_use, risk_notes, notes, tags)
+       VALUES ($1, $2, $3, 'midjourney', $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [data.code, data.title ?? null, data.description ?? null, data.category ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
+    )) as { id: string }[];
+    return rows[0].id;
+  }
+  return crypto.randomUUID();
+}
+
+export async function deleteSREF(id: string): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("DELETE FROM srefs WHERE id = $1", [id]);
+}
+
+export async function getProfiles(): Promise<Profile[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select("SELECT * FROM profiles ORDER BY rating DESC, created_at ASC")) as Record<string, unknown>[];
+    return rows.map(rowToProfile);
+  }
+  return [];
+}
+
+export async function updateProfileRating(id: string, rating: number): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("UPDATE profiles SET rating = $1 WHERE id = $2", [rating, id]);
+}
+
+export async function createProfile(data: { code: string; title?: string; description?: string; best_use?: string; risk_notes?: string; notes?: string; tags?: string[] }): Promise<string> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `INSERT INTO profiles (code, title, description, provider, best_use, risk_notes, notes, tags)
+       VALUES ($1, $2, $3, 'midjourney', $4, $5, $6, $7)
+       RETURNING id`,
+      [data.code, data.title ?? null, data.description ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
+    )) as { id: string }[];
+    return rows[0].id;
+  }
+  return crypto.randomUUID();
+}
+
+export async function deleteProfile(id: string): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("DELETE FROM profiles WHERE id = $1", [id]);
 }

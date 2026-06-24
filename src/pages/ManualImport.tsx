@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, AlertTriangle, ChevronDown, Layers, X, Check } from "lucide-react";
+import { Upload, AlertTriangle, ChevronDown, Layers, X, Check, Link } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
@@ -195,6 +195,34 @@ function FieldSelect({ label, value, onChange, options }: {
         </select>
         <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
       </div>
+    </div>
+  );
+}
+
+function SourceInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [copied, setCopied] = useState(false);
+  const isUrl = value.startsWith("http");
+  const handleCopy = () => {
+    navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="relative">
+      <input value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder="Midjourney community, X, personal…"
+        className={cn(
+          "w-full h-8 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
+          isUrl ? "pl-3 pr-8" : "px-3"
+        )}
+        style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+      {isUrl && (
+        <button type="button" onClick={handleCopy}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise"
+          title="Copy URL">
+          {copied ? <Check size={10} className="text-white/60" /> : <Link size={10} />}
+        </button>
+      )}
     </div>
   );
 }
@@ -561,10 +589,7 @@ export function ManualImport() {
               <FieldSelect label="PROVIDER" value={provider} onChange={(v) => setProvider(v as Provider)} options={PROVIDERS} />
               <div className="flex flex-col gap-1.5">
                 <label className="system-label">SOURCE</label>
-                <input value={source} onChange={(e) => setSource(e.target.value)}
-                  placeholder="Midjourney community, X, personal…"
-                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise"
-                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+                <SourceInput value={source} onChange={setSource} />
                 {mjSource && (
                   <div className="flex items-start gap-3 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <img

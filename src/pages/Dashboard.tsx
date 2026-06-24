@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -8,8 +8,9 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
+import { getRecentResults } from "@/lib/db";
 import { formatDate } from "@/lib/utils";
-import type { Prompt } from "@/types";
+import type { Prompt, Result } from "@/types";
 
 function StatModule({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
@@ -74,11 +75,43 @@ function EmptyState({
   );
 }
 
+function ResultThumb({ result, promptId }: { result: Result & { prompt_title: string }; promptId: string }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      onClick={() => navigate(`/library/${promptId}`)}
+      className="flex items-center gap-3 w-full px-3 py-2.5 text-left transition-precise hover:bg-white/4 rounded-sm"
+      style={{ borderBottom: "var(--border-dim)" }}
+    >
+      <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center" style={{ border: "var(--border-dim)" }}>
+        {result.thumbnail_path
+          ? <img src={result.thumbnail_path} alt="" className="w-full h-full object-cover" />
+          : <ImageOff size={12} className="text-dim/30" />
+        }
+      </div>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="font-sans text-[11px] text-white truncate">{result.prompt_title || "Untitled"}</span>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className={`w-1.5 h-1.5 rounded-full ${i < result.score_overall ? "bg-white/50" : "bg-white/10"}`} />
+            ))}
+          </div>
+          <span className="font-mono text-[8px] text-dim">{formatDate(result.created_at)}</span>
+        </div>
+      </div>
+      {result.is_winner && <Star size={9} className="text-white/30 shrink-0 ml-auto" />}
+    </button>
+  );
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
+  const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
 
   return (
     <PageContainer
@@ -160,15 +193,29 @@ export function Dashboard() {
               </CardBody>
             </Card>
 
-            {/* Risk Watchlist */}
+            {/* Recent Results */}
             <Card>
-              <CardHeader label="Risk Watchlist" action={<StatusDot active={false} />} />
+              <CardHeader
+                label="Recent Results"
+                action={
+                  <StatusDot active={recentResults.length > 0} />
+                }
+              />
               <CardBody>
-                <EmptyState
-                  icon={<Star size={16} className="text-dim" />}
-                  label="No high-risk prompts"
-                  compact
-                />
+                {recentResults.length > 0 ? (
+                  <div className="flex flex-col">
+                    {recentResults.map((r) => (
+                      <ResultThumb key={r.id} result={r} promptId={r.prompt_id} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<ImageOff size={16} className="text-dim" />}
+                    label="No results yet"
+                    action="Add outputs from Prompt Detail pages."
+                    compact
+                  />
+                )}
               </CardBody>
             </Card>
           </div>

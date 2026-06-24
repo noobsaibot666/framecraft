@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle,
+  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { formatDate } from "@/lib/utils";
-import type { Prompt } from "@/types";
+import { getResultsForPrompt } from "@/lib/db";
+import { formatDate, cn } from "@/lib/utils";
+import type { Prompt, Result } from "@/types";
 
 function MetaRow({ label, value }: { label: string; value?: string | number }) {
   if (!value && value !== 0) return null;
@@ -46,6 +47,7 @@ export function PromptDetail() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [results, setResults] = useState<Result[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -53,6 +55,7 @@ export function PromptDetail() {
       setPrompt(p);
       setLoading(false);
     });
+    getResultsForPrompt(id).then(setResults);
   }, [id, getById]);
 
   const handleCopy = async () => {
@@ -123,6 +126,9 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
           </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+            <Plus size={11} /> Add Result
+          </Button>
           <Button
             variant={confirmDelete ? "primary" : "ghost"}
             size="sm"
@@ -192,6 +198,60 @@ export function PromptDetail() {
               <p className="font-mono text-[11px] text-muted leading-relaxed">{prompt.notes}</p>
             </div>
           )}
+
+          {/* Results Gallery */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="system-label">RESULTS ({results.length})</span>
+              <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+                <Plus size={10} /> Add Result
+              </Button>
+            </div>
+            {results.length === 0 ? (
+              <div
+                className="flex items-center justify-center py-8 rounded-card cursor-pointer hover:bg-white/3 transition-precise"
+                style={{ border: "2px dashed rgba(255,255,255,0.08)" }}
+                onClick={() => navigate(`/results/${prompt.id}`)}
+              >
+                <span className="font-mono text-[10px] text-dim/50">No results yet — add your first output</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {results.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex flex-col gap-2 rounded-card overflow-hidden"
+                    style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
+                  >
+                    {/* Thumbnail */}
+                    <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden">
+                      {r.thumbnail_path ? (
+                        <img src={r.thumbnail_path} alt="Result" className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageOff size={16} className="text-dim/30" />
+                      )}
+                    </div>
+                    {/* Meta */}
+                    <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < r.score_overall ? "bg-white/60" : "bg-white/10")} />
+                          ))}
+                        </div>
+                        {r.is_winner && <Star size={9} className="text-white/50" />}
+                        {r.is_failed && <AlertTriangle size={9} className="text-red/50" />}
+                      </div>
+                      <span className="font-mono text-[8px] text-dim/50">{formatDate(r.created_at)}</span>
+                      {r.artifacts && r.artifacts.length > 0 && (
+                        <span className="font-mono text-[8px] text-red/50">{r.artifacts.length} artifact{r.artifacts.length !== 1 ? "s" : ""}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}

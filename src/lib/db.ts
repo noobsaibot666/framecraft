@@ -1,4 +1,4 @@
-import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern } from "@/types";
+import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result } from "@/types";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -510,4 +510,180 @@ export async function getAvoidancePatterns(): Promise<AvoidancePattern[]> {
     return rows.map(rowToAvoidancePattern);
   }
   return STATIC_AVOIDANCE_PATTERNS;
+}
+
+// ─── Results ─────────────────────────────────────────────────
+
+export interface CreateResultInput {
+  prompt_id: string;
+  file_path?: string;
+  thumbnail_path?: string;
+  provider?: string;
+  score_overall?: number;
+  score_realism?: number;
+  score_brand_fit?: number;
+  score_composition?: number;
+  score_lighting?: number;
+  score_ai_risk?: number;
+  reuse_potential?: number;
+  is_winner?: boolean;
+  is_failed?: boolean;
+  artifacts?: string[];
+  notes?: string;
+}
+
+function rowToResult(row: Record<string, unknown>): Result {
+  return {
+    id: row.id as string,
+    prompt_id: row.prompt_id as string,
+    file_path: row.file_path as string | undefined,
+    thumbnail_path: row.thumbnail_path as string | undefined,
+    provider: row.provider as Result["provider"] | undefined,
+    score_overall: (row.score_overall as number) ?? 0,
+    score_realism: (row.score_realism as number) ?? 0,
+    score_brand_fit: (row.score_brand_fit as number) ?? 0,
+    score_composition: (row.score_composition as number) ?? 0,
+    score_lighting: (row.score_lighting as number) ?? 0,
+    score_ai_risk: (row.score_ai_risk as number) ?? 0,
+    reuse_potential: (row.reuse_potential as number) ?? 0,
+    is_winner: Boolean(row.is_winner),
+    is_failed: Boolean(row.is_failed),
+    artifacts: row.artifacts ? JSON.parse(row.artifacts as string) : [],
+    notes: row.notes as string | undefined,
+    created_at: row.created_at as string,
+  };
+}
+
+const _devResults: (Result & { prompt_title?: string })[] = [];
+
+export async function createResult(data: CreateResultInput): Promise<string> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute(
+      `INSERT INTO results
+        (prompt_id, file_path, thumbnail_path, provider,
+         score_overall, score_realism, score_brand_fit, score_composition,
+         score_lighting, score_ai_risk, reuse_potential,
+         is_winner, is_failed, artifacts, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [
+        data.prompt_id,
+        data.file_path ?? null,
+        data.thumbnail_path ?? null,
+        data.provider ?? null,
+        data.score_overall ?? 0,
+        data.score_realism ?? 0,
+        data.score_brand_fit ?? 0,
+        data.score_composition ?? 0,
+        data.score_lighting ?? 0,
+        data.score_ai_risk ?? 0,
+        data.reuse_potential ?? 0,
+        data.is_winner ? 1 : 0,
+        data.is_failed ? 1 : 0,
+        data.artifacts ? JSON.stringify(data.artifacts) : null,
+        data.notes ?? null,
+      ]
+    );
+    const rows = (await db.select(
+      "SELECT id FROM results WHERE prompt_id = $1 ORDER BY rowid DESC LIMIT 1",
+      [data.prompt_id]
+    )) as Record<string, unknown>[];
+    return rows[0].id as string;
+  }
+  const id = `dev_result_${Date.now()}`;
+  _devResults.push({
+    id,
+    prompt_id: data.prompt_id,
+    file_path: data.file_path,
+    thumbnail_path: data.thumbnail_path,
+    provider: data.provider as Result["provider"],
+    score_overall: data.score_overall ?? 0,
+    score_realism: data.score_realism ?? 0,
+    score_brand_fit: data.score_brand_fit ?? 0,
+    score_composition: data.score_composition ?? 0,
+    score_lighting: data.score_lighting ?? 0,
+    score_ai_risk: data.score_ai_risk ?? 0,
+    reuse_potential: data.reuse_potential ?? 0,
+    is_winner: data.is_winner ?? false,
+    is_failed: data.is_failed ?? false,
+    artifacts: data.artifacts ?? [],
+    notes: data.notes,
+    created_at: new Date().toISOString(),
+  });
+  return id;
+}
+
+export async function getResultsForPrompt(promptId: string): Promise<Result[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM results WHERE prompt_id = $1 ORDER BY created_at DESC",
+      [promptId]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToResult);
+  }
+  return _devResults.filter((r) => r.prompt_id === promptId);
+}
+
+export async function updateResult(id: string, data: Partial<CreateResultInput>): Promise<void> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute(
+      `UPDATE results SET
+        score_overall = COALESCE($1, score_overall),
+        score_realism = COALESCE($2, score_realism),
+        score_brand_fit = COALESCE($3, score_brand_fit),
+        score_composition = COALESCE($4, score_composition),
+        score_lighting = COALESCE($5, score_lighting),
+        score_ai_risk = COALESCE($6, score_ai_risk),
+        reuse_potential = COALESCE($7, reuse_potential),
+        is_winner = COALESCE($8, is_winner),
+        is_failed = COALESCE($9, is_failed),
+        artifacts = COALESCE($10, artifacts),
+        notes = COALESCE($11, notes)
+       WHERE id = $12`,
+      [
+        data.score_overall ?? null,
+        data.score_realism ?? null,
+        data.score_brand_fit ?? null,
+        data.score_composition ?? null,
+        data.score_lighting ?? null,
+        data.score_ai_risk ?? null,
+        data.reuse_potential ?? null,
+        data.is_winner !== undefined ? (data.is_winner ? 1 : 0) : null,
+        data.is_failed !== undefined ? (data.is_failed ? 1 : 0) : null,
+        data.artifacts ? JSON.stringify(data.artifacts) : null,
+        data.notes ?? null,
+        id,
+      ]
+    );
+    return;
+  }
+  const idx = _devResults.findIndex((r) => r.id === id);
+  if (idx !== -1) Object.assign(_devResults[idx], data);
+}
+
+export async function deleteResult(id: string): Promise<void> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute("DELETE FROM results WHERE id = $1", [id]);
+    return;
+  }
+  const idx = _devResults.findIndex((r) => r.id === id);
+  if (idx !== -1) _devResults.splice(idx, 1);
+}
+
+export async function getRecentResults(limit = 10): Promise<(Result & { prompt_title: string })[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT r.*, p.title as prompt_title
+       FROM results r
+       LEFT JOIN prompts p ON r.prompt_id = p.id
+       ORDER BY r.created_at DESC LIMIT $1`,
+      [limit]
+    )) as Record<string, unknown>[];
+    return rows.map((row) => ({ ...rowToResult(row), prompt_title: (row.prompt_title as string) ?? "" }));
+  }
+  return _devResults.slice(-limit).reverse().map((r) => ({ ...r, prompt_title: r.prompt_title ?? "" }));
 }

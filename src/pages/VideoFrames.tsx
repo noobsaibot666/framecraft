@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload } from "lucide-react";
+import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -9,12 +9,13 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
+import { buildFramePromptInput, dataUrlToBytes, frameFilename, importableFrameResults, type FrameAnalysisResult } from "@/lib/videoFrames";
 import { cn } from "@/lib/utils";
 
 // ─── Frame extraction (canvas API — no external deps) ─────────
 
 interface ExtractedFrame {
-  dataUrl: string;   // full-res for API
+  dataUrl: string;   // full-res PNG for API + export
   thumbUrl: string;  // smaller thumbnail for UI
   timestamp: number; // seconds
 }
@@ -79,7 +80,7 @@ async function extractFrames(
         thumbCtx.drawImage(video, 0, 0, thumbCanvas.width, thumbCanvas.height);
 
         frames.push({
-          dataUrl:  fullCanvas.toDataURL("image/jpeg", 0.85),
+          dataUrl:  fullCanvas.toDataURL("image/png"),
           thumbUrl: thumbCanvas.toDataURL("image/jpeg", 0.70),
           timestamp,
         });
@@ -108,12 +109,6 @@ function CopyButton({ text }: { text: string }) {
       {copied ? "Copied!" : "Copy"}
     </button>
   );
-}
-
-interface FrameResult {
-  frameIdx: number;
-  result: AnalysisResult;
-  error?: string;
 }
 
 function ResultCard({ frame, result, onImport, imported }: {
@@ -208,8 +203,10 @@ export function VideoFrames() {
   const [selected, setSelected]         = useState<Set<number>>(new Set());
   const [analyzing, setAnalyzing]       = useState(false);
   const [analyzeProgress, setAnalyzeProgress] = useState({ current: 0, total: 0 });
-  const [results, setResults]           = useState<FrameResult[]>([]);
+  const [results, setResults]           = useState<FrameAnalysisResult[]>([]);
   const [importedIds, setImportedIds]   = useState<Set<number>>(new Set());
+  const [savingFrameIdx, setSavingFrameIdx] = useState<number | null>(null);
+  const [savedFrameIdx, setSavedFrameIdx] = useState<number | null>(null);
 
   // Player controls
   const togglePlay = () => {
@@ -251,7 +248,7 @@ export function VideoFrames() {
     thumbCanvas.getContext("2d")!.drawImage(v, 0, 0, thumbCanvas.width, thumbCanvas.height);
 
     const frame: ExtractedFrame = {
-      dataUrl:   fullCanvas.toDataURL("image/jpeg", 0.85),
+      dataUrl:   fullCanvas.toDataURL("image/png"),
       thumbUrl:  thumbCanvas.toDataURL("image/jpeg", 0.70),
       timestamp: v.currentTime,
     };
@@ -311,18 +308,21 @@ export function VideoFrames() {
 
   const handleAnalyze = async () => {
     if (!selected.size || !apiKey) return;
+    if (selected.size > 4 && !window.confirm(`Analyze ${selected.size} frames? This can use roughly ${selected.size * 1000} image tokens with ${selectedModel.label}.`)) {
+      return;
+    }
     const indices = [...selected].sort((a, b) => a - b);
     setAnalyzing(true);
     setResults([]);
     setImportedIds(new Set());
     setAnalyzeProgress({ current: 0, total: indices.length });
-    const out: FrameResult[] = [];
+    const out: FrameAnalysisResult[] = [];
     for (let i = 0; i < indices.length; i++) {
       const idx = indices[i];
       const frame = frames[idx];
       const base64 = frame.dataUrl.split(",")[1];
       try {
-        const result = await analyzeImage(base64, "image/jpeg", selectedModel);
+        const result = await analyzeImage(base64, "image/png", selectedModel);
         out.push({ frameIdx: idx, result });
       } catch (e) {
         out.push({ frameIdx: idx, result: {} as AnalysisResult, error: e instanceof Error ? e.message : "Failed" });
@@ -334,16 +334,38 @@ export function VideoFrames() {
   };
 
   const handleImport = async (result: AnalysisResult, frameIdx: number) => {
-    await create({
-      title: result.title,
-      prompt_text: result.suggested_prompt,
-      provider: "midjourney",
-      tags: result.tags,
-      aspect_ratio: result.aspect_ratio || undefined,
-      notes: result.style_notes,
-    });
+    await create(buildFramePromptInput(result, frames[frameIdx].dataUrl));
     setImportedIds((prev) => new Set(prev).add(frameIdx));
   };
+
+  const handleImportAll = async () => {
+    for (const item of importableFrameResults(results, importedIds)) {
+      await handleImport(item.result, item.frameIdx);
+    }
+  };
+
+  const handleSaveFrame = async (frame: ExtractedFrame, frameIdx: number) => {
+    if (!videoFile) return;
+    setSavingFrameIdx(frameIdx);
+    try {
+      const [{ save }, { writeFile }] = await Promise.all([
+        import("@tauri-apps/plugin-dialog"),
+        import("@tauri-apps/plugin-fs"),
+      ]);
+      const path = await save({
+        defaultPath: frameFilename(videoFile.name, frame.timestamp),
+        filters: [{ name: "PNG Image", extensions: ["png"] }],
+      });
+      if (!path) return;
+      await writeFile(path, dataUrlToBytes(frame.dataUrl));
+      setSavedFrameIdx(frameIdx);
+      setTimeout(() => setSavedFrameIdx(null), 1800);
+    } finally {
+      setSavingFrameIdx(null);
+    }
+  };
+
+  const unsavedImportCount = importableFrameResults(results, importedIds).length;
 
   return (
     <PageContainer title="Video Frames" subtitle="FRAME EXTRACTION + AI PROMPT RECONSTRUCTION">
@@ -596,6 +618,14 @@ export function VideoFrames() {
                     )}>
                     <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
                       className="w-full aspect-video object-cover block" />
+                    <button type="button"
+                      onClick={(e) => { e.stopPropagation(); handleSaveFrame(frame, idx); }}
+                      className="absolute top-1.5 left-1.5 flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
+                      style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
+                      title="Save frame as PNG">
+                      {savedFrameIdx === idx ? <Check size={8} /> : <Download size={8} />}
+                      {savingFrameIdx === idx ? "Saving" : savedFrameIdx === idx ? "Saved" : "PNG"}
+                    </button>
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
                       <span className="font-mono text-[9px] text-white/70">{formatTime(frame.timestamp)}</span>
@@ -615,7 +645,14 @@ export function VideoFrames() {
         {/* ── Results ── */}
         {results.length > 0 && (
           <div className="flex flex-col gap-3 mt-2">
-            <span className="system-label">{results.length} ANALYZED</span>
+            <div className="flex items-center justify-between">
+              <span className="system-label">{results.length} ANALYZED</span>
+              {unsavedImportCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={handleImportAll}>
+                  <ArrowRight size={10} /> Import All Analyzed ({unsavedImportCount})
+                </Button>
+              )}
+            </div>
             {results.map(({ frameIdx, result, error }) => (
               error ? (
                 <div key={frameIdx} className="flex items-center gap-3 p-3 rounded-sm"

@@ -191,6 +191,19 @@ export function PromptDetail() {
             </div>
           )}
 
+          {/* Reference Image */}
+          {prompt.image_ref && (
+            <div className="flex flex-col gap-3">
+              <span className="system-label">REFERENCE FRAME</span>
+              <div
+                className="rounded-card overflow-hidden"
+                style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
+              >
+                <img src={prompt.image_ref} alt="Reference frame" className="w-full max-h-80 object-contain bg-black/30" />
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           {prompt.notes && (
             <div className="flex flex-col gap-2">

@@ -470,9 +470,32 @@ export function CraftPrompt() {
         tags: p.tags ?? [], notes: p.notes ?? "",
         is_winner: p.is_winner, is_failed: p.is_failed,
       });
-      if (p.aspect_ratio || p.model_version) {
-        setMjParams((prev) => ({ ...prev, aspect_ratio: p.aspect_ratio ?? "", model_version: p.model_version ?? "", sref_code: p.style_ref ?? "" }));
-      }
+      const pp = p.parameters ?? {};
+      setMjParams((prev) => ({
+        ...prev,
+        aspect_ratio:  p.aspect_ratio    ?? "",
+        model_version: p.model_version   ?? "",
+        sref_code:     p.style_ref       ?? "",
+        profile:       String(pp.profile  ?? ""),
+        stylize:       String(pp.stylize  ?? ""),
+        chaos:         String(pp.chaos    ?? ""),
+        weird:         String(pp.weird    ?? ""),
+        quality:       String(pp.quality  ?? ""),
+        style:         String(pp.style    ?? ""),
+        sw:            String(pp.sw       ?? ""),
+        sv:            String(pp.sv       ?? ""),
+        seed:          String(pp.seed     ?? ""),
+        zoom:          String(pp.zoom     ?? ""),
+        stop:          String(pp.stop     ?? ""),
+        repeat:        String(pp.repeat   ?? ""),
+        no_prompt:     String(pp.no       ?? ""),
+        raw:   Boolean(pp.raw),
+        hd:    Boolean(pp.hd),
+        tile:  Boolean(pp.tile),
+        fast:  Boolean(pp.fast),
+        relax: Boolean(pp.relax),
+        exp:   Boolean(pp.exp),
+      }));
       setOriginalVersion(p.version ?? 1);
       setMode("manual");
     });
@@ -565,8 +588,32 @@ export function CraftPrompt() {
     use_case: fields.use_case || undefined,
     prompt_text: assembled,
     avoidance_text: fields.avoidance_text || undefined,
-    aspect_ratio: mjParams.aspect_ratio || undefined,
+    aspect_ratio:  mjParams.aspect_ratio  || undefined,
     model_version: mjParams.model_version || undefined,
+    style_ref:     mjParams.sref_code     || undefined,
+    parameters: fields.provider === "midjourney" ? (() => {
+      const pp: Record<string, string | boolean> = {};
+      if (mjParams.profile)  pp.profile  = mjParams.profile;
+      if (mjParams.stylize)  pp.stylize  = mjParams.stylize;
+      if (mjParams.chaos)    pp.chaos    = mjParams.chaos;
+      if (mjParams.weird)    pp.weird    = mjParams.weird;
+      if (mjParams.quality)  pp.quality  = mjParams.quality;
+      if (mjParams.style)    pp.style    = mjParams.style;
+      if (mjParams.sw)       pp.sw       = mjParams.sw;
+      if (mjParams.sv)       pp.sv       = mjParams.sv;
+      if (mjParams.seed)     pp.seed     = mjParams.seed;
+      if (mjParams.zoom)     pp.zoom     = mjParams.zoom;
+      if (mjParams.stop)     pp.stop     = mjParams.stop;
+      if (mjParams.repeat)   pp.repeat   = mjParams.repeat;
+      if (mjParams.no_prompt) pp.no      = mjParams.no_prompt;
+      if (mjParams.raw)      pp.raw      = true;
+      if (mjParams.hd)       pp.hd       = true;
+      if (mjParams.tile)     pp.tile     = true;
+      if (mjParams.fast)     pp.fast     = true;
+      if (mjParams.relax)    pp.relax    = true;
+      if (mjParams.exp)      pp.exp      = true;
+      return Object.keys(pp).length ? pp : undefined;
+    })() : undefined,
     camera: fields.camera || undefined,
     lens: fields.lens || undefined,
     lighting: fields.lighting || undefined,

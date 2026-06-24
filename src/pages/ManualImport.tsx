@@ -22,6 +22,7 @@ interface DetectedParams {
   quality?: string;
   weird?: string;
   no?: string;
+  raw?: boolean;
 }
 
 function detectMidjourneyParams(text: string): DetectedParams {
@@ -30,11 +31,12 @@ function detectMidjourneyParams(text: string): DetectedParams {
   const v  = text.match(/--v\s+(\S+)/);                  if (v)     params.model_version = v[1];
   const s  = text.match(/--s(?:tylize)?\s+(\d+)/);       if (s)     params.stylize       = s[1];
   const sr = text.match(/--sref\s+(\S+)/);               if (sr)    params.sref          = sr[1];
-  const p  = text.match(/--p\s+(\S+)/);                  if (p)     params.profile       = p[1];
+  const p  = text.match(/--profile\s+(\S+)|--p\s+(\S+)/); if (p)    params.profile       = p[1] ?? p[2];
   const c  = text.match(/--chaos\s+(\d+)/);              if (c)     params.chaos         = c[1];
   const q  = text.match(/--q(?:uality)?\s+(\S+)/);       if (q)     params.quality       = q[1];
   const w  = text.match(/--weird\s+(\d+)/);              if (w)     params.weird         = w[1];
   const no = text.match(/--no\s+([^-]+)/);               if (no)    params.no            = no[1].trim();
+  if (/\b--raw\b/.test(text)) params.raw = true;
   return params;
 }
 
@@ -44,7 +46,9 @@ function stripParams(text: string): string {
     .replace(/--v\s+\S+/g, "")
     .replace(/--s(?:tylize)?\s+\d+/g, "")
     .replace(/--sref\s+\S+/g, "")
+    .replace(/--profile\s+\S+/g, "")
     .replace(/--p\s+\S+/g, "")
+    .replace(/\b--raw\b/g, "")
     .replace(/--chaos\s+\d+/g, "")
     .replace(/--q(?:uality)?\s+\S+/g, "")
     .replace(/--weird\s+\d+/g, "")
@@ -353,7 +357,8 @@ export function ManualImport() {
                   {detected.model_version && <div className="flex items-center gap-1.5"><Badge variant="default">--v</Badge><span className="font-mono text-[10px] text-soft-white">{detected.model_version}</span></div>}
                   {detected.stylize       && <div className="flex items-center gap-1.5"><Badge variant="default">--s</Badge><span className="font-mono text-[10px] text-soft-white">{detected.stylize}</span></div>}
                   {detected.sref          && <div className="flex items-center gap-1.5"><Badge variant="default">--sref</Badge><span className="font-mono text-[10px] text-soft-white">{detected.sref}</span></div>}
-                  {detected.profile       && <div className="flex items-center gap-1.5"><Badge variant="default">--p</Badge><span className="font-mono text-[10px] text-soft-white">{detected.profile}</span></div>}
+                  {detected.profile       && <div className="flex items-center gap-1.5"><Badge variant="default">--profile</Badge><span className="font-mono text-[10px] text-soft-white">{detected.profile}</span></div>}
+                  {detected.raw           && <div className="flex items-center gap-1.5"><Badge variant="default">--raw</Badge><span className="font-mono text-[10px] text-soft-white">on</span></div>}
                   {detected.chaos         && <div className="flex items-center gap-1.5"><Badge variant="default">--chaos</Badge><span className="font-mono text-[10px] text-soft-white">{detected.chaos}</span></div>}
                   {detected.quality       && <div className="flex items-center gap-1.5"><Badge variant="default">--q</Badge><span className="font-mono text-[10px] text-soft-white">{detected.quality}</span></div>}
                   {detected.weird         && <div className="flex items-center gap-1.5"><Badge variant="default">--weird</Badge><span className="font-mono text-[10px] text-soft-white">{detected.weird}</span></div>}

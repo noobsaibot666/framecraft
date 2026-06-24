@@ -157,7 +157,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 
 // ─── Provider Parameter Panels ────────────────────────────────
 
-interface MJParams { aspect_ratio: string; model_version: string; stylize: string; chaos: string; weird: string; quality: string; no_prompt: string; sref_code: string; profile: string; }
+interface MJParams { aspect_ratio: string; model_version: string; stylize: string; chaos: string; weird: string; quality: string; no_prompt: string; sref_code: string; profile: string; raw: boolean; }
 interface DalleParams { size: string; quality: string; style: string; }
 interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
 
@@ -175,7 +175,9 @@ const MJ_ASPECT_RATIOS = [
 
 const MJ_VERSIONS = [
   { value: "", label: "Default" },
-  { value: "7", label: "v7 (latest)" },
+  { value: "8.1", label: "v8.1 (latest)" },
+  { value: "8", label: "v8" },
+  { value: "7", label: "v7" },
   { value: "6.1", label: "v6.1" },
   { value: "6", label: "v6" },
   { value: "5.2", label: "v5.2" },
@@ -217,7 +219,7 @@ const SD_SAMPLERS = [
   { value: "LMS", label: "LMS" },
 ];
 
-function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v: string) => void }) {
+function MidjourneyParams({ p, set, setRaw }: { p: MJParams; set: (k: keyof MJParams, v: string) => void; setRaw: (v: boolean) => void }) {
   return (
     <>
       <FieldSelect label="ASPECT RATIO" value={p.aspect_ratio} onChange={(v) => set("aspect_ratio", v)} options={MJ_ASPECT_RATIOS} />
@@ -227,8 +229,12 @@ function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v:
       <FieldInput label="CHAOS --c" value={p.chaos} onChange={(v) => set("chaos", v)} placeholder="0" hint="0–100" />
       <FieldInput label="WEIRD --w" value={p.weird} onChange={(v) => set("weird", v)} placeholder="0" hint="0–3000" />
       <FieldInput label="SREF CODE" value={p.sref_code} onChange={(v) => set("sref_code", v)} placeholder="12345" />
-      <FieldInput label="PROFILE --p" value={p.profile} onChange={(v) => set("profile", v)} placeholder="profile-id" />
+      <FieldInput label="PROFILE --profile" value={p.profile} onChange={(v) => set("profile", v)} placeholder="e.g. og9pmia" />
       <FieldInput label="NEGATIVE --no" value={p.no_prompt} onChange={(v) => set("no_prompt", v)} placeholder="text in frame, blur" />
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={p.raw} onChange={(e) => setRaw(e.target.checked)} className="accent-white w-3 h-3" />
+        <span className="system-label">--raw (disable auto-styling)</span>
+      </label>
     </>
   );
 }
@@ -278,7 +284,8 @@ function assembleMJ(f: Fields, mj: MJParams): string {
   if (mj.chaos) out += ` --c ${mj.chaos}`;
   if (mj.weird) out += ` --w ${mj.weird}`;
   if (mj.sref_code) out += ` --sref ${mj.sref_code}`;
-  if (mj.profile) out += ` --p ${mj.profile}`;
+  if (mj.profile) out += ` --profile ${mj.profile}`;
+  if (mj.raw) out += ` --raw`;
   if (mj.no_prompt) out += ` --no ${mj.no_prompt}`;
   return out;
 }
@@ -354,7 +361,7 @@ const EMPTY: Fields = {
   is_winner: false, is_failed: false,
 };
 
-const EMPTY_MJ: MJParams = { aspect_ratio: "", model_version: "", stylize: "", chaos: "", weird: "", quality: "", no_prompt: "", sref_code: "", profile: "" };
+const EMPTY_MJ: MJParams = { aspect_ratio: "", model_version: "", stylize: "", chaos: "", weird: "", quality: "", no_prompt: "", sref_code: "", profile: "", raw: false };
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
@@ -419,6 +426,7 @@ export function CraftPrompt() {
   };
 
   const setMJ = (k: keyof MJParams, v: string) => { setMjParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
+  const setMJRaw = (v: boolean) => { setMjParams((p) => ({ ...p, raw: v })); setOutputOverride(null); };
   const setDalle = (k: keyof DalleParams, v: string) => { setDalleParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
   const setSD = (k: keyof SDParams, v: string) => { setSDParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
 
@@ -842,7 +850,7 @@ export function CraftPrompt() {
               <span className="system-label">PARAMETERS</span>
               <span className="font-mono text-[9px] text-dim/60 uppercase tracking-widest">{fields.provider}</span>
             </div>
-            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} />}
+            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} setRaw={setMJRaw} />}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
             {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
             {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (

@@ -233,6 +233,31 @@ export function VideoFrames() {
     v.currentTime = Math.max(0, Math.min(duration, v.currentTime + secs));
   };
 
+  const captureCurrentFrame = () => {
+    const v = videoRef.current;
+    if (!v || !videoFile) return;
+
+    const maxW = 1280;
+    const scale = v.videoWidth > maxW ? maxW / v.videoWidth : 1;
+    const fullCanvas = document.createElement("canvas");
+    fullCanvas.width  = Math.round(v.videoWidth  * scale);
+    fullCanvas.height = Math.round(v.videoHeight * scale);
+    fullCanvas.getContext("2d")!.drawImage(v, 0, 0, fullCanvas.width, fullCanvas.height);
+
+    const thumbScale = v.videoWidth > 160 ? 160 / v.videoWidth : 1;
+    const thumbCanvas = document.createElement("canvas");
+    thumbCanvas.width  = Math.round(v.videoWidth  * thumbScale);
+    thumbCanvas.height = Math.round(v.videoHeight * thumbScale);
+    thumbCanvas.getContext("2d")!.drawImage(v, 0, 0, thumbCanvas.width, thumbCanvas.height);
+
+    const frame: ExtractedFrame = {
+      dataUrl:   fullCanvas.toDataURL("image/jpeg", 0.85),
+      thumbUrl:  thumbCanvas.toDataURL("image/jpeg", 0.70),
+      timestamp: v.currentTime,
+    };
+    setFrames((prev) => [...prev, frame]);
+  };
+
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
     if (!file) return;
@@ -437,6 +462,15 @@ export function VideoFrames() {
             <span className="font-mono text-[9px] text-dim/60 shrink-0 tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
+
+            {/* Capture current frame */}
+            <button type="button" onClick={captureCurrentFrame}
+              disabled={!videoFile || duration === 0}
+              className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-precise shrink-0 px-2 py-1 rounded-sm"
+              style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+              title={`Capture frame at ${formatTime(currentTime)}`}>
+              + Frame
+            </button>
 
             {/* Mute */}
             <button type="button" onClick={toggleMute}

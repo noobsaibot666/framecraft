@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
-import { getAvoidancePatterns, getFailedResultArtifacts } from "@/lib/db";
+import { AlertTriangle, ChevronDown, ChevronRight, Plus, X, Trash2 } from "lucide-react";
+import { getAvoidancePatterns, getFailedResultArtifacts, createAvoidancePattern, deleteAvoidancePattern } from "@/lib/db";
 import { detectRisks, calculateRiskScore } from "@/lib/avoidanceEngine";
 import { cn } from "@/lib/utils";
 import type { AvoidancePattern, DetectedRisk } from "@/types";
@@ -113,12 +113,97 @@ function RiskItem({
   );
 }
 
+// ─── Add Rule Form ────────────────────────────────────────────
+
+const SEVERITY_OPTIONS = ["critical", "high", "medium", "low"] as const;
+
+function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => void; onClose: () => void }) {
+  const [label, setLabel] = useState("");
+  const [artifactType] = useState("");
+  const [severity, setSeverity] = useState<typeof SEVERITY_OPTIONS[number]>("medium");
+  const [description, setDescription] = useState("");
+  const [correction, setCorrection] = useState("");
+  const [saving, setSaving] = useState(false);
+  const labelRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { labelRef.current?.focus(); }, []);
+
+  const handleSave = async () => {
+    if (!label.trim()) return;
+    setSaving(true);
+    try {
+      const pattern = await createAvoidancePattern({
+        label: label.trim(),
+        artifact_type: artifactType.trim() || label.trim().toLowerCase().replace(/\s+/g, "_"),
+        severity,
+        description: description || undefined,
+        correction_prompt: correction || undefined,
+      });
+      onSave(pattern);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-3 p-3 rounded-sm"
+      style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.03)" }}>
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[8px] text-dim/70 uppercase tracking-widest">Custom Rule</span>
+        <button type="button" onClick={onClose} className="text-dim/40 hover:text-white transition-precise"><X size={9} /></button>
+      </div>
+      <input ref={labelRef} value={label} onChange={(e) => setLabel(e.target.value)}
+        placeholder="Rule label (e.g. Over-processed skin)"
+        className="h-7 px-2.5 font-mono text-[10px] text-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+        onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }} />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">Severity</span>
+          <div className="relative">
+            <select value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}
+              className="w-full appearance-none h-7 px-2 font-mono text-[10px] text-white bg-dark rounded-sm focus:outline-none cursor-pointer"
+              style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+              {SEVERITY_OPTIONS.map((s) => <option key={s} value={s} className="bg-panel">{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">Correction</span>
+          <input value={correction} onChange={(e) => setCorrection(e.target.value)}
+            placeholder="Fix phrase to append…"
+            className="h-7 px-2 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+        </div>
+      </div>
+      <input value={description} onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description (optional)"
+        className="h-7 px-2.5 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={handleSave} disabled={!label.trim() || saving}
+          className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-white px-2.5 py-1.5 rounded-sm transition-precise disabled:opacity-40"
+          style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.07)" }}>
+          <Plus size={8} />{saving ? "Saving…" : "Add Rule"}
+        </button>
+        <button type="button" onClick={onClose}
+          className="font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-2 py-1.5 transition-precise">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Panel ───────────────────────────────────────────────
+
 export function AvoidancePanel({ promptText, category, provider, onAddCorrection, onRiskScoreChange }: AvoidancePanelProps) {
   const [patterns, setPatterns] = useState<AvoidancePattern[]>([]);
   const [risks, setRisks] = useState<DetectedRisk[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [riskScore, setRiskScore] = useState(0);
   const [pastArtifacts, setPastArtifacts] = useState<string[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -169,26 +254,47 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
     setDismissed((prev) => new Set([...prev, patternId]));
   };
 
+  const handleAddRule = (pattern: AvoidancePattern) => {
+    setPatterns((prev) => [...prev, pattern]);
+    setShowAddForm(false);
+  };
+
+  const handleDeletePattern = async (patternId: string) => {
+    await deleteAvoidancePattern(patternId);
+    setPatterns((prev) => prev.filter((p) => p.id !== patternId));
+    setRisks((prev) => prev.filter((r) => r.pattern.id !== patternId));
+  };
+
   if (risks.length === 0 && promptText.trim().length < 8) {
     return (
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 rounded-sm"
-        style={{ border: "var(--border-dim)" }}
-      >
-        <AlertTriangle size={10} className="text-dim/30 shrink-0" />
-        <span className="font-mono text-[9px] text-dim/40">Risk analysis runs as you build the prompt.</span>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-sm" style={{ border: "var(--border-dim)" }}>
+          <AlertTriangle size={10} className="text-dim/30 shrink-0" />
+          <span className="font-mono text-[9px] text-dim/40 flex-1">Risk analysis runs as you build the prompt.</span>
+          <button type="button" onClick={() => setShowAddForm((v) => !v)}
+            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-1.5 py-0.5 rounded-sm transition-precise"
+            style={{ border: "var(--border-dim)" }}>
+            <Plus size={7} />Rule
+          </button>
+        </div>
+        {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
       </div>
     );
   }
 
   if (activeRisks.length === 0) {
     return (
-      <div
-        className="flex items-center gap-2 px-3 py-2.5 rounded-sm"
-        style={{ border: "var(--border-dim)" }}
-      >
-        <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
-        <span className="font-mono text-[9px] text-dim/50">No risks detected. Risk score: 0/10.</span>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 px-3 py-2.5 rounded-sm" style={{ border: "var(--border-dim)" }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
+          <span className="font-mono text-[9px] text-dim/50 flex-1">No risks detected. Risk score: 0/10.</span>
+          <button type="button" onClick={() => setShowAddForm((v) => !v)}
+            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-1.5 py-0.5 rounded-sm transition-precise"
+            style={{ border: "var(--border-dim)" }}>
+            <Plus size={7} />Rule
+          </button>
+        </div>
+        {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
       </div>
     );
   }
@@ -219,18 +325,35 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
         <span className={cn("font-mono text-[11px] font-medium shrink-0", scoreColor)}>
           {riskScore.toFixed(1)}<span className="text-dim/50 text-[9px]">/10</span>
         </span>
+        <button type="button" onClick={() => setShowAddForm((v) => !v)}
+          className={cn("flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm transition-precise",
+            showAddForm ? "text-white" : "text-dim/50 hover:text-white")}
+          style={{ border: showAddForm ? "var(--border-strong)" : "var(--border-dim)" }}>
+          <Plus size={7} />Rule
+        </button>
       </div>
+
+      {/* Add rule form */}
+      {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
 
       {/* Risk list */}
       <div className="flex flex-col gap-1">
         {risks.map((risk) => (
-          <RiskItem
-            key={risk.pattern.id}
-            risk={risk}
-            dismissed={dismissed.has(risk.pattern.id)}
-            onAddCorrection={onAddCorrection}
-            onDismiss={() => handleDismiss(risk.pattern.id)}
-          />
+          <div key={risk.pattern.id} className="group/risk relative">
+            <RiskItem
+              risk={risk}
+              dismissed={dismissed.has(risk.pattern.id)}
+              onAddCorrection={onAddCorrection}
+              onDismiss={() => handleDismiss(risk.pattern.id)}
+            />
+            {!risk.pattern.is_builtin && !dismissed.has(risk.pattern.id) && (
+              <button type="button" onClick={() => handleDeletePattern(risk.pattern.id)}
+                className="absolute top-2 right-8 opacity-0 group-hover/risk:opacity-100 text-dim/30 hover:text-red/60 transition-precise"
+                title="Delete custom rule">
+                <Trash2 size={9} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

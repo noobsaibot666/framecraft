@@ -523,6 +523,41 @@ export async function getAvoidancePatterns(): Promise<AvoidancePattern[]> {
   return STATIC_AVOIDANCE_PATTERNS;
 }
 
+export async function createAvoidancePattern(data: {
+  label: string;
+  artifact_type: string;
+  severity: "critical" | "high" | "medium" | "low";
+  description?: string;
+  correction_prompt?: string;
+  triggers?: string[];
+}): Promise<AvoidancePattern> {
+  const pattern: AvoidancePattern = {
+    id: crypto.randomUUID(),
+    artifact_type: data.artifact_type,
+    label: data.label,
+    category: "all",
+    description: data.description,
+    correction_prompt: data.correction_prompt,
+    severity: data.severity,
+    is_builtin: false,
+  };
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute(
+      `INSERT INTO avoidance_patterns (id, artifact_type, label, category, description, correction_prompt, severity, is_builtin)
+       VALUES ($1, $2, $3, 'all', $4, $5, $6, 0)`,
+      [pattern.id, pattern.artifact_type, pattern.label, pattern.description ?? null, pattern.correction_prompt ?? null, pattern.severity]
+    );
+  }
+  return pattern;
+}
+
+export async function deleteAvoidancePattern(id: string): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("DELETE FROM avoidance_patterns WHERE id = $1 AND is_builtin = 0", [id]);
+}
+
 // ─── Results ─────────────────────────────────────────────────
 
 export interface CreateResultInput {

@@ -11,6 +11,7 @@ import { SREFLibrary } from "@/pages/SREFLibrary";
 import { RecipeLibrary } from "@/pages/RecipeLibrary";
 import { Settings } from "@/pages/Settings";
 import { ImageAnalyzer } from "@/pages/ImageAnalyzer";
+import { BriefAnalyzer } from "@/pages/BriefAnalyzer";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,7 @@ export default function App() {
             <Route path="/srefs" element={<SREFLibrary />} />
             <Route path="/results/:promptId" element={<ResultReview />} />
             <Route path="/analyze" element={<ImageAnalyzer />} />
+            <Route path="/brief" element={<BriefAnalyzer />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { num: "05", label: "IMPORT",     to: "/import" },
   { num: "06", label: "SREFS",      to: "/srefs" },
   { num: "07", label: "ANALYZE",    to: "/analyze" },
+  { num: "08", label: "BRIEF",      to: "/brief" },
 ] as const;
 
 function NavItem({

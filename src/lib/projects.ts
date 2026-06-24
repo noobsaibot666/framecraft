@@ -346,7 +346,7 @@ export async function getReferencesForProject(projectId: string): Promise<{
   const db = await getDb();
   const rows = (await db.select(
     `SELECT r.id, r.title, r.kind, r.thumbnail_data, r.rating
-     FROM references r
+     FROM "references" r
      JOIN project_references pr ON r.id = pr.reference_id
      WHERE pr.project_id = $1
      ORDER BY r.title ASC`,

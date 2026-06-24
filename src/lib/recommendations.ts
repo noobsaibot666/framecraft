@@ -488,7 +488,7 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
   }
 
   const rows = (await db.select(
-    `SELECT r.* FROM references r
+    `SELECT r.* FROM "references" r
      WHERE ${conditions.join(" AND ")}
      ORDER BY r.rating DESC, r.created_at DESC
      LIMIT ${limit}`,

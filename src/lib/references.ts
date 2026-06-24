@@ -76,7 +76,7 @@ export async function createReference(data: CreateReferenceInput): Promise<strin
   if (isTauri) {
     const db = await getDb();
     await db.execute(
-      `INSERT INTO references
+      `INSERT INTO "references"
         (id, title, description, kind, file_data, thumbnail_data,
          provider, category, source_url, tags, rating,
          best_use, risk_notes, notes, created_at, updated_at)
@@ -149,7 +149,7 @@ export async function getReferences(filters?: ReferenceFilters): Promise<Referen
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = (await db.select(
-      `SELECT * FROM references ${where} ORDER BY created_at DESC`,
+      `SELECT * FROM "references" ${where} ORDER BY created_at DESC`,
       values
     )) as Record<string, unknown>[];
     return rows.map(rowToReference);
@@ -167,7 +167,7 @@ export async function getReferenceById(id: string): Promise<Reference | null> {
   if (isTauri) {
     const db = await getDb();
     const rows = (await db.select(
-      "SELECT * FROM references WHERE id = $1",
+      `SELECT * FROM "references" WHERE id = $1`,
       [id]
     )) as Record<string, unknown>[];
     return rows[0] ? rowToReference(rows[0]) : null;
@@ -192,7 +192,7 @@ export async function searchReferences(query: string, filters?: ReferenceFilters
     if (filters?.minRating != null) { values.push(filters.minRating); conditions.push(`rating >= $${values.length}`); }
 
     const rows = (await db.select(
-      `SELECT * FROM references WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
+      `SELECT * FROM "references" WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC`,
       values
     )) as Record<string, unknown>[];
     return rows.map(rowToReference);
@@ -233,7 +233,7 @@ export async function updateReference(id: string, data: Partial<CreateReferenceI
     if ("notes" in data) add("notes", data.notes ?? null);
     add("updated_at", ts);
 
-    await db.execute(`UPDATE references SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
+    await db.execute(`UPDATE "references" SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
     return;
   }
 
@@ -246,7 +246,7 @@ export async function updateReference(id: string, data: Partial<CreateReferenceI
 export async function deleteReference(id: string): Promise<void> {
   if (isTauri) {
     const db = await getDb();
-    await db.execute("DELETE FROM references WHERE id = $1", [id]);
+    await db.execute(`DELETE FROM "references" WHERE id = $1`, [id]);
     return;
   }
   const idx = _devStore.findIndex((r) => r.id === id);
@@ -284,7 +284,7 @@ export async function getReferencesForPrompt(promptId: string): Promise<(Referen
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
-    `SELECT r.*, pr.role FROM references r
+    `SELECT r.*, pr.role FROM "references" r
      JOIN prompt_references pr ON r.id = pr.reference_id
      WHERE pr.prompt_id = $1
      ORDER BY r.title ASC`,
@@ -324,7 +324,7 @@ export async function getReferencesForResult(resultId: string): Promise<(Referen
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
-    `SELECT r.*, rr.role FROM references r
+    `SELECT r.*, rr.role FROM "references" r
      JOIN result_references rr ON r.id = rr.reference_id
      WHERE rr.result_id = $1
      ORDER BY r.title ASC`,

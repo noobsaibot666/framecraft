@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS project_results (
 
 CREATE TABLE IF NOT EXISTS project_references (
   project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  reference_id TEXT NOT NULL REFERENCES references(id) ON DELETE CASCADE,
+  reference_id TEXT NOT NULL REFERENCES "references"(id) ON DELETE CASCADE,
   PRIMARY KEY (project_id, reference_id)
 );
 

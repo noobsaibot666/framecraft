@@ -1,6 +1,15 @@
--- Phase 13: Reference Library
+-- Phase 13: Reference Library (V3)
+-- Migration 001 created a basic placeholder references table that is always empty
+-- at this migration point (the feature was not built until V3). Drop and recreate
+-- with the full schema. prompt_references and result_references use CREATE IF NOT EXISTS
+-- safely because migration 001's version is schema-identical.
 
-CREATE TABLE IF NOT EXISTS references (
+DROP INDEX IF EXISTS idx_references_created;
+DROP TABLE IF EXISTS result_references;
+DROP TABLE IF EXISTS prompt_references;
+DROP TABLE IF EXISTS "references";
+
+CREATE TABLE "references" (
   id            TEXT PRIMARY KEY,
   title         TEXT NOT NULL,
   description   TEXT,
@@ -21,18 +30,18 @@ CREATE TABLE IF NOT EXISTS references (
 
 CREATE TABLE IF NOT EXISTS prompt_references (
   prompt_id    TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
-  reference_id TEXT NOT NULL REFERENCES references(id) ON DELETE CASCADE,
+  reference_id TEXT NOT NULL REFERENCES "references"(id) ON DELETE CASCADE,
   role         TEXT NOT NULL DEFAULT 'style',
   PRIMARY KEY (prompt_id, reference_id)
 );
 
 CREATE TABLE IF NOT EXISTS result_references (
   result_id    TEXT NOT NULL REFERENCES results(id) ON DELETE CASCADE,
-  reference_id TEXT NOT NULL REFERENCES references(id) ON DELETE CASCADE,
+  reference_id TEXT NOT NULL REFERENCES "references"(id) ON DELETE CASCADE,
   role         TEXT NOT NULL DEFAULT 'style',
   PRIMARY KEY (result_id, reference_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_references_kind    ON references(kind);
-CREATE INDEX IF NOT EXISTS idx_references_rating  ON references(rating);
-CREATE INDEX IF NOT EXISTS idx_references_created ON references(created_at);
+CREATE INDEX idx_references_kind    ON "references"(kind);
+CREATE INDEX idx_references_rating  ON "references"(rating);
+CREATE INDEX idx_references_created ON "references"(created_at);

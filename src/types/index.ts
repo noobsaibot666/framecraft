@@ -189,3 +189,85 @@ export interface LibraryFilters {
 }
 
 export type SortOption = "newest" | "oldest" | "rating_desc" | "rating_asc" | "most_used" | "ai_risk_desc" | "ai_risk_asc";
+
+export type ProjectStatus = "draft" | "active" | "review" | "archived";
+
+export interface Project {
+  id: string;
+  title: string;
+  client?: string;
+  campaign?: string;
+  status: ProjectStatus;
+  brief_text?: string;
+  production_goal?: string;
+  category?: Category;
+  tags?: string[];
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  // Counts populated on query
+  prompt_count?: number;
+  result_count?: number;
+  reference_count?: number;
+  winner_count?: number;
+}
+
+export interface ProjectFilters {
+  status?: ProjectStatus;
+}
+
+export type ReferenceKind =
+  | "image"
+  | "frame"
+  | "result"
+  | "source"
+  | "mood"
+  | "product"
+  | "style";
+
+export type ReferenceRole =
+  | "style"
+  | "composition"
+  | "lighting"
+  | "product"
+  | "character"
+  | "frame"
+  | "failure-example";
+
+export interface Reference {
+  id: string;
+  title: string;
+  description?: string;
+  kind: ReferenceKind;
+  file_data?: string;
+  thumbnail_data?: string;
+  provider?: Provider;
+  category?: Category;
+  source_url?: string;
+  tags?: string[];
+  rating: number;
+  best_use?: string;
+  risk_notes?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PromptReference {
+  prompt_id: string;
+  reference_id: string;
+  role: ReferenceRole;
+}
+
+export interface ResultReference {
+  result_id: string;
+  reference_id: string;
+  role: ReferenceRole;
+}
+
+export interface ReferenceFilters {
+  kind?: ReferenceKind;
+  category?: Category;
+  provider?: Provider;
+  minRating?: number;
+}

@@ -8,6 +8,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { TokenCloud } from "@/components/ui/TokenCloud";
 import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
 import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
+import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { cn } from "@/lib/utils";
@@ -991,6 +992,16 @@ export function CraftPrompt() {
               ))}
             </div>
           )}
+
+          {/* Recommendations */}
+          <div
+            className="flex flex-col gap-3 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <RecommendationPanel
+              context={{ provider: fields.provider, category: fields.category || undefined, excludePromptId: id }}
+            />
+          </div>
 
           {/* Scoring */}
           <div

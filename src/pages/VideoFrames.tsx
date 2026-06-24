@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download } from "lucide-react";
+import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download, Bookmark } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -10,6 +10,7 @@ import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
 import { buildFramePromptInput, dataUrlToBytes, frameFilename, importableFrameResults, type FrameAnalysisResult } from "@/lib/videoFrames";
+import { createReference } from "@/lib/references";
 import { cn } from "@/lib/utils";
 
 // ─── Frame extraction (canvas API — no external deps) ─────────
@@ -243,6 +244,7 @@ export function VideoFrames() {
   const [savingFrameIdx, setSavingFrameIdx] = useState<number | null>(null);
   const [savedFrameIdx, setSavedFrameIdx] = useState<number | null>(null);
   const [saveFrameError, setSaveFrameError] = useState("");
+  const [savedRefFrameIdx, setSavedRefFrameIdx] = useState<number | null>(null);
 
   useEffect(() => () => {
     if (videoObjUrl) URL.revokeObjectURL(videoObjUrl);
@@ -417,6 +419,28 @@ export function VideoFrames() {
     } finally {
       setSavingFrameIdx(null);
     }
+  };
+
+  const handleSaveFrameAsRef = async (frame: ExtractedFrame, frameIdx: number) => {
+    const img = new Image();
+    img.onload = async () => {
+      const MAX = 400;
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      await createReference({
+        title: `Frame @ ${formatTime(frame.timestamp)}`,
+        kind: "frame",
+        file_data: frame.dataUrl,
+        thumbnail_data: canvas.toDataURL("image/jpeg", 0.75),
+        notes: videoFile?.name,
+      });
+      setSavedRefFrameIdx(frameIdx);
+      setTimeout(() => setSavedRefFrameIdx(null), 1800);
+    };
+    img.src = frame.dataUrl;
   };
 
   const unsavedImportCount = importableFrameResults(results, importedIds).length;
@@ -691,14 +715,24 @@ export function VideoFrames() {
                     )}>
                     <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
                       className="w-full aspect-video object-cover block" />
-                    <button type="button"
-                      onClick={(e) => { e.stopPropagation(); handleSaveFrame(frame, idx); }}
-                      className="absolute top-1.5 left-1.5 flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
-                      style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
-                      title="Save frame as PNG">
-                      {savedFrameIdx === idx ? <Check size={8} /> : <Download size={8} />}
-                      {savingFrameIdx === idx ? "Saving" : savedFrameIdx === idx ? "Saved" : "PNG"}
-                    </button>
+                    <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); handleSaveFrame(frame, idx); }}
+                        className="flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
+                        style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
+                        title="Save frame as PNG">
+                        {savedFrameIdx === idx ? <Check size={8} /> : <Download size={8} />}
+                        {savingFrameIdx === idx ? "Saving" : savedFrameIdx === idx ? "Saved" : "PNG"}
+                      </button>
+                      <button type="button"
+                        onClick={(e) => { e.stopPropagation(); handleSaveFrameAsRef(frame, idx); }}
+                        className="flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
+                        style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
+                        title="Save frame as Reference">
+                        {savedRefFrameIdx === idx ? <Check size={8} /> : <Bookmark size={8} />}
+                        {savedRefFrameIdx === idx ? "Saved" : "Ref"}
+                      </button>
+                    </div>
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
                       <span className="font-mono text-[9px] text-white/70">{formatTime(frame.timestamp)}</span>

@@ -13,6 +13,11 @@ import { Settings } from "@/pages/Settings";
 import { ImageAnalyzer } from "@/pages/ImageAnalyzer";
 import { BriefAnalyzer } from "@/pages/BriefAnalyzer";
 import { VideoFrames } from "@/pages/VideoFrames";
+import { ReferenceLibrary } from "@/pages/ReferenceLibrary";
+import { ReferenceDetail } from "@/pages/ReferenceDetail";
+import { ProjectLibrary } from "@/pages/ProjectLibrary";
+import { ProjectWorkspace } from "@/pages/ProjectWorkspace";
+import { LineageView } from "@/pages/LineageView";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +46,11 @@ export default function App() {
             <Route path="/analyze" element={<ImageAnalyzer />} />
             <Route path="/brief" element={<BriefAnalyzer />} />
             <Route path="/frames" element={<VideoFrames />} />
+            <Route path="/references" element={<ReferenceLibrary />} />
+            <Route path="/references/:id" element={<ReferenceDetail />} />
+            <Route path="/projects" element={<ProjectLibrary />} />
+            <Route path="/projects/:id" element={<ProjectWorkspace />} />
+            <Route path="/lineage/:promptId" element={<LineageView />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

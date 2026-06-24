@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle } from "lucide-react";
+import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle, Bookmark } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -9,6 +9,7 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
+import { createReference } from "@/lib/references";
 import { cn } from "@/lib/utils";
 
 function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
@@ -62,6 +63,7 @@ export function ImageAnalyzer() {
   const [imported, setImported] = useState(false);
   const [importingVariation, setImportingVariation] = useState(false);
   const [importedVariation, setImportedVariation] = useState(false);
+  const [savedAsRef, setSavedAsRef] = useState(false);
 
   const onDrop = useCallback((accepted: File[]) => {
     const file = accepted[0];
@@ -75,6 +77,7 @@ export function ImageAnalyzer() {
     setError("");
     setImported(false);
     setImportedVariation(false);
+    setSavedAsRef(false);
   }, []);
 
   useEffect(() => () => {
@@ -89,6 +92,38 @@ export function ImageAnalyzer() {
     setError("");
     setImported(false);
     setImportedVariation(false);
+    setSavedAsRef(false);
+  };
+
+  const handleSaveAsRef = async () => {
+    if (!imageUrl || !result) return;
+    const resp = await fetch(imageUrl);
+    const blob = await resp.blob();
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const full = e.target?.result as string;
+      const img = new Image();
+      img.onload = async () => {
+        const MAX = 400;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        await createReference({
+          title: result.title,
+          kind: "image",
+          file_data: full,
+          thumbnail_data: canvas.toDataURL("image/jpeg", 0.75),
+          tags: result.tags,
+          best_use: result.style_notes,
+          notes: result.suggested_prompt.slice(0, 200),
+        });
+        setSavedAsRef(true);
+      };
+      img.src = full;
+    };
+    reader.readAsDataURL(blob);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -291,16 +326,29 @@ export function ImageAnalyzer() {
                       style={{ border: "var(--border-dim)" }}>{result.provider}</span>
                   </div>
                 </div>
-                {imported ? (
-                  <span className="flex items-center gap-1.5 font-mono text-[9px] text-white/50">
-                    <Check size={10} /> Saved to library
-                  </span>
-                ) : (
-                  <Button variant="primary" size="sm" onClick={handleImport} disabled={importing}>
-                    {importing ? "Saving…" : "Import to Library"}
-                    <ArrowRight size={10} />
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {imported ? (
+                    <span className="flex items-center gap-1.5 font-mono text-[9px] text-white/50">
+                      <Check size={10} /> Saved to library
+                    </span>
+                  ) : (
+                    <Button variant="primary" size="sm" onClick={handleImport} disabled={importing}>
+                      {importing ? "Saving…" : "Import to Library"}
+                      <ArrowRight size={10} />
+                    </Button>
+                  )}
+                  {savedAsRef ? (
+                    <span className="flex items-center gap-1 font-mono text-[8px] text-white/40">
+                      <Check size={8} /> Ref saved
+                    </span>
+                  ) : (
+                    <button type="button" onClick={handleSaveAsRef}
+                      className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+                      style={{ border: "var(--border-dim)" }}>
+                      <Bookmark size={8} /> Save as Ref
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Suggested prompt */}

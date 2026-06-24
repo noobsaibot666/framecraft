@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff,
+  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
+import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
 import { formatDate, cn } from "@/lib/utils";
@@ -363,6 +364,26 @@ export function PromptDetail() {
                 ↑ View parent version
               </button>
             )}
+            <button
+              className="flex items-center gap-1.5 font-mono text-[9px] text-dim hover:text-white transition-precise mt-1"
+              onClick={() => navigate(`/lineage/${prompt.id}`)}
+            >
+              <GitBranch size={9} /> Version history
+            </button>
+          </div>
+
+          {/* Recommendations */}
+          <div
+            className="flex flex-col gap-3 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <RecommendationPanel
+              context={{
+                provider: prompt.provider,
+                category: prompt.category ?? undefined,
+                excludePromptId: prompt.id,
+              }}
+            />
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileText, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Upload, X, Settings, ShieldAlert, BookOpen, ListChecks } from "lucide-react";
+import { FileText, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Upload, X, Settings, ShieldAlert, BookOpen, ListChecks, FolderPlus, ChevronDown, Plus } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -8,6 +8,8 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { parseBriefResult } from "@/lib/aiResultParsers";
 import type { BriefResult, GeneratedPrompt, SuggestedRecipe } from "@/lib/aiResultParsers";
+import { getProjects, createProject, addPromptToProject } from "@/lib/projects";
+import type { Project } from "@/types";
 import { cn } from "@/lib/utils";
 
 // ─── AI Prompt ────────────────────────────────────────────────
@@ -214,6 +216,12 @@ export function BriefAnalyzer() {
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<number>>(new Set());
   const [importingAll, setImportingAll] = useState(false);
 
+  // Project import state
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [savedToProjectId, setSavedToProjectId] = useState<string | null>(null);
+  const [savingToProject, setSavingToProject] = useState(false);
+
   const hasInput = briefText.trim().length > 0 || attachedFile !== null;
 
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -236,6 +244,8 @@ export function BriefAnalyzer() {
     setImportedIds(new Set());
     setSavedRecipeIds(new Set());
     setImportingAll(false);
+    setSavedToProjectId(null);
+    setShowProjectPicker(false);
     try {
       let content: BriefContent;
       if (attachedFile) {
@@ -287,6 +297,47 @@ export function BriefAnalyzer() {
       notes: recipe.description,
     });
     setSavedRecipeIds((prev) => new Set(prev).add(idx));
+  };
+
+  const handleOpenProjectPicker = async () => {
+    const list = await getProjects();
+    setProjects(list);
+    setShowProjectPicker(true);
+  };
+
+  const handleImportToProject = async (projectId: string) => {
+    if (!result) return;
+    setSavingToProject(true);
+    setShowProjectPicker(false);
+    try {
+      for (let i = 0; i < result.prompts.length; i++) {
+        const p = result.prompts[i];
+        const id = await create({
+          title: p.title,
+          prompt_text: p.prompt,
+          provider: "midjourney",
+          tags: p.tags,
+          aspect_ratio: p.aspect_ratio || undefined,
+        });
+        await addPromptToProject(projectId, id);
+        setImportedIds((prev) => new Set(prev).add(i));
+      }
+      setSavedToProjectId(projectId);
+    } finally {
+      setSavingToProject(false);
+    }
+  };
+
+  const handleImportToNewProject = async () => {
+    if (!result) return;
+    const projectId = await createProject({
+      title: result.summary.slice(0, 60) || "Brief Analyzer Import",
+      brief_text: briefText.trim() || undefined,
+      production_goal: result.production_goal || undefined,
+      status: "active",
+    });
+    await handleImportToProject(projectId);
+    navigate(`/projects/${projectId}`);
   };
 
   return (
@@ -482,18 +533,58 @@ export function BriefAnalyzer() {
               )}
 
               {/* Generated prompts header */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="system-label">{result.prompts.length} GENERATED PROMPTS</span>
-                {result.prompts.length > 0 && importedIds.size < result.prompts.length && (
-                  <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={importingAll}>
-                    <ArrowRight size={10} /> {importingAll ? "Importing..." : "Import All"}
-                  </Button>
-                )}
-                {importedIds.size === result.prompts.length && (
-                  <span className="flex items-center gap-1 font-mono text-[9px] text-white/40">
-                    <Check size={9} /> All saved
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {result.prompts.length > 0 && importedIds.size < result.prompts.length && (
+                    <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={importingAll || savingToProject}>
+                      <ArrowRight size={10} /> {importingAll ? "Importing..." : "Import All"}
+                    </Button>
+                  )}
+                  {savedToProjectId ? (
+                    <span className="flex items-center gap-1 font-mono text-[9px] text-white/40">
+                      <Check size={9} /> Saved to project
+                    </span>
+                  ) : (
+                    <div className="relative">
+                      <button type="button"
+                        onClick={showProjectPicker ? () => setShowProjectPicker(false) : handleOpenProjectPicker}
+                        disabled={savingToProject}
+                        className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase px-2 py-1.5 rounded-sm text-dim hover:text-white transition-precise"
+                        style={{ border: "var(--border-dim)" }}>
+                        <FolderPlus size={9} />
+                        {savingToProject ? "Saving…" : "Save to Project"}
+                        <ChevronDown size={7} />
+                      </button>
+                      {showProjectPicker && (
+                        <div className="absolute right-0 top-full mt-1 z-20 flex flex-col gap-1 p-2 rounded-card min-w-48"
+                          style={{ border: "var(--border-strong)", background: "var(--surface-panel)" }}>
+                          <button type="button" onClick={handleImportToNewProject}
+                            className="flex items-center gap-2 px-3 py-2 rounded-sm text-left hover:bg-white/5 transition-precise">
+                            <Plus size={9} className="text-dim/60 shrink-0" />
+                            <span className="font-mono text-[9px] text-soft-white">New project from brief</span>
+                          </button>
+                          {projects.length > 0 && (
+                            <div className="h-px my-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+                          )}
+                          {projects.slice(0, 8).map((p) => (
+                            <button key={p.id} type="button" onClick={() => handleImportToProject(p.id)}
+                              className="flex items-center gap-2 px-3 py-2 rounded-sm text-left hover:bg-white/5 transition-precise">
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                                style={{ background: p.status === "active" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }} />
+                              <span className="font-mono text-[9px] text-muted truncate">{p.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {importedIds.size === result.prompts.length && !savedToProjectId && (
+                    <span className="flex items-center gap-1 font-mono text-[9px] text-white/40">
+                      <Check size={9} /> All saved
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Prompt cards */}

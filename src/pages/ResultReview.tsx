@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckSquare, Square, Star, Upload } from "lucide-react";
+import { ArrowLeft, CheckSquare, Square, Star, Upload, Bookmark, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
+import { createReference } from "@/lib/references";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { generateThumbnail, fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
@@ -100,6 +101,7 @@ export function ResultReview() {
   const [isFailed, setIsFailed] = useState(false);
   const [checkedArtifacts, setCheckedArtifacts] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
+  const [savedAsRef, setSavedAsRef] = useState(false);
   const setScore = (k: keyof typeof scores, v: number) => setScores((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
@@ -135,6 +137,22 @@ export function ResultReview() {
       next.has(label) ? next.delete(label) : next.add(label);
       return next;
     });
+  };
+
+  const handleSaveAsRef = async () => {
+    if (!file || !prompt) return;
+    const { fileToDataUrl, generateThumbnail } = await import("@/lib/imageUtils");
+    const [full, thumb] = await Promise.all([fileToDataUrl(file), generateThumbnail(file, 400)]);
+    await createReference({
+      title: `${prompt.title} — result`,
+      kind: "result",
+      file_data: full,
+      thumbnail_data: thumb,
+      provider: prompt.provider,
+      category: prompt.category,
+      tags: prompt.tags,
+    });
+    setSavedAsRef(true);
   };
 
   const handleSave = async () => {
@@ -369,6 +387,21 @@ export function ResultReview() {
             >
               Use Prompt Again
             </Button>
+            {savedAsRef ? (
+              <div className="flex items-center justify-center gap-1.5 font-mono text-[9px] text-white/40 py-1">
+                <Check size={9} /> Saved as Reference
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSaveAsRef}
+                disabled={!file}
+                className="w-full justify-center text-dim"
+              >
+                <Bookmark size={10} /> Save as Reference
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

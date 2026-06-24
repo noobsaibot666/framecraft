@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "framecraft",
+  "productName": "Framecraft",
   "version": "0.1.0",
   "identifier": "com.alan.framecraft",
   "build": {
@@ -12,13 +12,16 @@
   "app": {
     "windows": [
       {
-        "title": "framecraft",
-        "width": 800,
-        "height": 600
+        "title": "Framecraft",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 1100,
+        "minHeight": 680,
+        "center": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://api.anthropic.com https://api.openai.com"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: asset: https://asset.localhost tauri://localhost; media-src 'self' data: blob:; connect-src 'self' https://api.anthropic.com https://api.openai.com"
     }
   },
   "bundle": {

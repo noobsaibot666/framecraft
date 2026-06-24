@@ -51,6 +51,30 @@ pub fn run() {
             sql: include_str!("../migrations/008_token_favorite.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "references",
+            sql: include_str!("../migrations/009_references.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 10,
+            description: "projects",
+            sql: include_str!("../migrations/010_projects.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 11,
+            description: "v4_workflow",
+            sql: include_str!("../migrations/011_v4_workflow.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 12,
+            description: "deliverable_align",
+            sql: include_str!("../migrations/012_deliverable_align.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

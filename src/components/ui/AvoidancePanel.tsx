@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, X } from "lucide-react";
-import { getAvoidancePatterns } from "@/lib/db";
+import { getAvoidancePatterns, getFailedResultArtifacts } from "@/lib/db";
 import { detectRisks, calculateRiskScore } from "@/lib/avoidanceEngine";
 import { cn } from "@/lib/utils";
 import type { AvoidancePattern, DetectedRisk } from "@/types";
 
 interface AvoidancePanelProps {
   promptText: string;
+  category?: string;
+  provider?: string;
   onAddCorrection: (text: string) => void;
   onRiskScoreChange: (score: number) => void;
 }
@@ -111,16 +113,21 @@ function RiskItem({
   );
 }
 
-export function AvoidancePanel({ promptText, onAddCorrection, onRiskScoreChange }: AvoidancePanelProps) {
+export function AvoidancePanel({ promptText, category, provider, onAddCorrection, onRiskScoreChange }: AvoidancePanelProps) {
   const [patterns, setPatterns] = useState<AvoidancePattern[]>([]);
   const [risks, setRisks] = useState<DetectedRisk[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [riskScore, setRiskScore] = useState(0);
+  const [pastArtifacts, setPastArtifacts] = useState<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getAvoidancePatterns().then(setPatterns);
   }, []);
+
+  useEffect(() => {
+    getFailedResultArtifacts(category, provider).then(setPastArtifacts);
+  }, [category, provider]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -238,6 +245,24 @@ export function AvoidancePanel({ promptText, onAddCorrection, onRiskScoreChange 
           <Plus size={8} />
           Add all corrections
         </button>
+      )}
+
+      {/* Past failure artifacts */}
+      {pastArtifacts.length > 0 && (
+        <div className="flex flex-col gap-2 pt-1">
+          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">From your past failures</span>
+          <div className="flex flex-wrap gap-1">
+            {pastArtifacts.slice(0, 8).map((label) => (
+              <span
+                key={label}
+                className="font-mono text-[8px] text-red/50 px-1.5 py-0.5 rounded-sm"
+                style={{ border: "1px solid rgba(215,25,33,0.2)" }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

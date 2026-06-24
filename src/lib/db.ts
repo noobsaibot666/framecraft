@@ -707,3 +707,58 @@ export async function getRecentResults(limit = 10): Promise<(Result & { prompt_t
   }
   return _devResults.slice(-limit).reverse().map((r) => ({ ...r, prompt_title: r.prompt_title ?? "" }));
 }
+
+// ─── Production Memory (Phase 06) ────────────────────────────
+
+export async function updateTokenQualityFromResult(
+  promptText: string,
+  delta: number
+): Promise<void> {
+  if (!isTauri || Math.abs(delta) < 0.001) return;
+  const db = await getDb();
+  // Clamp quality_score to [-0.5, 1.0] range; use_count always increments on positive delta
+  const clampedDelta = Math.max(-0.5, Math.min(1.0, delta));
+  await db.execute(
+    `UPDATE tokens
+     SET quality_score = MAX(-0.5, MIN(1.0, quality_score + $1)),
+         use_count = use_count + CASE WHEN $1 > 0 THEN 1 ELSE 0 END
+     WHERE length(text) > 2
+       AND instr(lower($2), lower(text)) > 0`,
+    [clampedDelta, promptText]
+  );
+}
+
+export async function getFailedResultArtifacts(
+  category?: string,
+  provider?: string
+): Promise<string[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT r.artifacts
+       FROM results r
+       LEFT JOIN prompts p ON r.prompt_id = p.id
+       WHERE r.is_failed = 1
+         AND r.artifacts IS NOT NULL
+         AND r.artifacts != '[]'
+         AND ($1 IS NULL OR p.category = $1)
+         AND ($2 IS NULL OR p.provider = $2)
+       ORDER BY r.created_at DESC
+       LIMIT 20`,
+      [category ?? null, provider ?? null]
+    )) as Record<string, unknown>[];
+    const all: string[] = [];
+    for (const row of rows) {
+      try { all.push(...(JSON.parse(row.artifacts as string) as string[])); } catch {}
+    }
+    // Return deduplicated, most common first
+    const freq: Record<string, number> = {};
+    for (const a of all) freq[a] = (freq[a] ?? 0) + 1;
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .map(([label]) => label);
+  }
+  return _devResults
+    .filter((r) => r.is_failed && r.artifacts?.length)
+    .flatMap((r) => r.artifacts ?? []);
+}

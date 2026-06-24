@@ -5,7 +5,8 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { createResult } from "@/lib/db";
+import { createResult, updateTokenQualityFromResult } from "@/lib/db";
+import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { generateThumbnail, fileToPreviewUrl } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
@@ -160,6 +161,12 @@ export function ResultReview() {
         artifacts: Array.from(checkedArtifacts),
         notes: notes || undefined,
       });
+
+      // Update token quality scores (fire-and-forget — non-blocking)
+      if (prompt?.prompt_text) {
+        const delta = scoreToQualityDelta(scores.overall, isFailed);
+        updateTokenQualityFromResult(prompt.prompt_text, delta).catch(() => {});
+      }
 
       // If this result rates higher than current prompt rating, update it
       if (scores.overall > 0 && prompt && scores.overall > prompt.rating) {

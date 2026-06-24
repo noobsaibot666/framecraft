@@ -39,6 +39,12 @@ pub fn run() {
             sql: include_str!("../migrations/006_avoidance_seed.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "token_patterns",
+            sql: include_str!("../migrations/007_token_patterns.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

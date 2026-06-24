@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -9,8 +9,9 @@ import { TokenCloud } from "@/components/ui/TokenCloud";
 import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
 import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
+import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { cn } from "@/lib/utils";
-import type { Provider, Category, Token } from "@/types";
+import type { Provider, Category, Token, Prompt } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
 // ─── Shared sub-components ────────────────────────────────────
@@ -362,7 +363,7 @@ const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_pro
 export function CraftPrompt() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
-  const { create, update, getById } = usePromptStore();
+  const { create, update, getById, prompts: allPrompts } = usePromptStore();
 
   const isEdit = Boolean(id);
 
@@ -376,6 +377,11 @@ export function CraftPrompt() {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
   const [originalVersion, setOriginalVersion] = useState(1);
+
+  // Production Memory (Phase 06)
+  const [duplicates, setDuplicates] = useState<SimilarPrompt[]>([]);
+  const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
+  const [relatedPrompts, setRelatedPrompts] = useState<Prompt[]>([]);
 
   // For editable assembled output
   const [outputOverride, setOutputOverride] = useState<string | null>(null);
@@ -454,6 +460,22 @@ export function CraftPrompt() {
   })();
 
   const assembled = outputOverride ?? builtAssembled;
+
+  // Debounced duplicate + related prompts detection (Phase 06)
+  useEffect(() => {
+    if (!allPrompts.length) return;
+    const timer = setTimeout(() => {
+      if (assembled.trim().length > 30) {
+        setDuplicates(findSimilarPrompts(assembled, allPrompts, 0.55, id));
+        setDuplicatesDismissed(false);
+      } else {
+        setDuplicates([]);
+      }
+      setRelatedPrompts(findRelatedPrompts(fields.category, fields.provider, id, allPrompts));
+    }, 600);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assembled, fields.category, fields.provider, allPrompts.length]);
 
   const fullCopyText = includeAvoidance && fields.avoidance_text
     ? `${assembled}\n\n${fields.avoidance_text}`
@@ -587,6 +609,40 @@ export function CraftPrompt() {
       <div className="flex gap-6 min-w-0">
         {/* ── Left: Main form ─────────────────────────────── */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
+
+          {/* Duplicate warning */}
+          {duplicates.length > 0 && !duplicatesDismissed && (
+            <div
+              className="flex items-start gap-3 px-4 py-3 rounded-sm"
+              style={{ border: "1px solid rgba(215,25,33,0.3)", background: "rgba(215,25,33,0.05)" }}
+            >
+              <AlertCircle size={12} className="text-red/70 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <span className="font-mono text-[9px] text-red/70 uppercase tracking-widest">Similar prompts found</span>
+                <div className="flex flex-col gap-1 mt-1.5">
+                  {duplicates.map((d) => (
+                    <div key={d.prompt.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/library/${d.prompt.id}`)}
+                        className="font-mono text-[10px] text-muted hover:text-white transition-precise truncate text-left"
+                      >
+                        {d.prompt.title}
+                      </button>
+                      <span className="font-mono text-[9px] text-dim/50 shrink-0">{Math.round(d.similarity * 100)}% match</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDuplicatesDismissed(true)}
+                className="font-mono text-[9px] text-dim/50 hover:text-white shrink-0 transition-precise"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
 
           {/* Identity */}
           <div>
@@ -742,6 +798,8 @@ export function CraftPrompt() {
             <div className="flex flex-col gap-3">
               <AvoidancePanel
                 promptText={assembled}
+                category={fields.category}
+                provider={fields.provider}
                 onAddCorrection={(text) => {
                   setF("avoidance_text", fields.avoidance_text ? `${fields.avoidance_text}, ${text}` : text);
                 }}
@@ -791,6 +849,35 @@ export function CraftPrompt() {
               <p className="font-mono text-[10px] text-dim leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
           </div>
+
+          {/* Related Prompts */}
+          {relatedPrompts.length > 0 && (
+            <div
+              className="flex flex-col gap-2 p-4 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+            >
+              <div className="flex items-center gap-2">
+                <Zap size={9} className="text-dim/50" />
+                <span className="system-label">RELATED</span>
+              </div>
+              {relatedPrompts.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => navigate(`/library/${p.id}`)}
+                  className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
+                  style={{ border: "var(--border-dim)" }}
+                >
+                  <span className="font-mono text-[10px] text-muted truncate">{p.title}</span>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className={cn("w-1 h-1 rounded-full", i < p.rating ? "bg-white/50" : "bg-white/10")} />
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Scoring */}
           <div

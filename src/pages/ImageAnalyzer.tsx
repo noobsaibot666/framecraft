@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
 import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle } from "lucide-react";
@@ -67,12 +67,29 @@ export function ImageAnalyzer() {
     const file = accepted[0];
     if (!file) return;
     setImageFile(file);
-    setImageUrl(URL.createObjectURL(file));
+    setImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
     setResult(null);
     setError("");
     setImported(false);
     setImportedVariation(false);
   }, []);
+
+  useEffect(() => () => {
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+  }, [imageUrl]);
+
+  const clearImage = () => {
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    setImageFile(null);
+    setImageUrl("");
+    setResult(null);
+    setError("");
+    setImported(false);
+    setImportedVariation(false);
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -223,7 +240,7 @@ export function ImageAnalyzer() {
           </Button>
 
           {imageUrl && (
-            <button type="button" onClick={() => { setImageFile(null); setImageUrl(""); setResult(null); setError(""); setImported(false); setImportedVariation(false); }}
+            <button type="button" onClick={clearImage}
               className="font-mono text-[9px] text-dim/40 hover:text-dim transition-precise text-center">
               Clear
             </button>

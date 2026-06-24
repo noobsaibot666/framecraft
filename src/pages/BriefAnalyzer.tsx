@@ -6,36 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
+import { parseBriefResult } from "@/lib/aiResultParsers";
+import type { BriefResult, GeneratedPrompt, SuggestedRecipe } from "@/lib/aiResultParsers";
 import { cn } from "@/lib/utils";
-
-// ─── Types ────────────────────────────────────────────────────
-
-interface GeneratedPrompt {
-  title: string;
-  prompt: string;
-  use_case: string;
-  tags: string[];
-  aspect_ratio: string;
-}
-
-interface SuggestedRecipe {
-  title: string;
-  description: string;
-  token_sequence: string[];
-}
-
-interface BriefResult {
-  summary: string;
-  production_goal: string;
-  creative_direction: string;
-  tone: string;
-  key_elements: string[];
-  required_deliverables: string[];
-  key_constraints: string[];
-  risk_areas: string[];
-  prompts: GeneratedPrompt[];
-  suggested_recipes: SuggestedRecipe[];
-}
 
 // ─── AI Prompt ────────────────────────────────────────────────
 
@@ -106,6 +79,7 @@ async function analyzeBrief(content: BriefContent, model: AIModel): Promise<Brie
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -139,8 +113,7 @@ async function analyzeBrief(content: BriefContent, model: AIModel): Promise<Brie
     rawText = data.choices[0]?.message?.content ?? "";
   }
 
-  const clean = rawText.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
-  return JSON.parse(clean) as BriefResult;
+  return parseBriefResult(rawText);
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -172,10 +145,11 @@ function CopyButton({ text }: { text: string }) {
 
 // ─── Prompt Card ──────────────────────────────────────────────
 
-function PromptCard({ p, onImport, imported }: {
+function PromptCard({ p, onImport, imported, disabled = false }: {
   p: GeneratedPrompt;
   onImport: (p: GeneratedPrompt) => void;
   imported: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-3 p-4 rounded-card"
@@ -196,8 +170,8 @@ function PromptCard({ p, onImport, imported }: {
               <Check size={8} /> Saved
             </span>
           ) : (
-            <button type="button" onClick={() => onImport(p)}
-              className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+            <button type="button" onClick={() => onImport(p)} disabled={disabled}
+              className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-precise px-2 py-1 rounded-sm"
               style={{ border: "var(--border-dim)" }}>
               <ArrowRight size={8} /> Import
             </button>
@@ -238,6 +212,7 @@ export function BriefAnalyzer() {
   const [error, setError] = useState("");
   const [importedIds, setImportedIds] = useState<Set<number>>(new Set());
   const [savedRecipeIds, setSavedRecipeIds] = useState<Set<number>>(new Set());
+  const [importingAll, setImportingAll] = useState(false);
 
   const hasInput = briefText.trim().length > 0 || attachedFile !== null;
 
@@ -260,6 +235,7 @@ export function BriefAnalyzer() {
     setResult(null);
     setImportedIds(new Set());
     setSavedRecipeIds(new Set());
+    setImportingAll(false);
     try {
       let content: BriefContent;
       if (attachedFile) {
@@ -288,9 +264,17 @@ export function BriefAnalyzer() {
   };
 
   const handleImportAll = async () => {
-    if (!result) return;
-    for (let i = 0; i < result.prompts.length; i++) {
-      if (!importedIds.has(i)) await handleImport(result.prompts[i], i);
+    if (!result || importingAll) return;
+    setImportingAll(true);
+    try {
+      const pending = result.prompts
+        .map((prompt, idx) => ({ prompt, idx }))
+        .filter(({ idx }) => !importedIds.has(idx));
+      for (const item of pending) {
+        await handleImport(item.prompt, item.idx);
+      }
+    } finally {
+      setImportingAll(false);
     }
   };
 
@@ -501,8 +485,8 @@ export function BriefAnalyzer() {
               <div className="flex items-center justify-between">
                 <span className="system-label">{result.prompts.length} GENERATED PROMPTS</span>
                 {result.prompts.length > 0 && importedIds.size < result.prompts.length && (
-                  <Button variant="ghost" size="sm" onClick={handleImportAll}>
-                    <ArrowRight size={10} /> Import All
+                  <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={importingAll}>
+                    <ArrowRight size={10} /> {importingAll ? "Importing..." : "Import All"}
                   </Button>
                 )}
                 {importedIds.size === result.prompts.length && (
@@ -520,6 +504,7 @@ export function BriefAnalyzer() {
                     p={p}
                     onImport={(pr) => handleImport(pr, i)}
                     imported={importedIds.has(i)}
+                    disabled={importingAll}
                   />
                 ))}
               </div>

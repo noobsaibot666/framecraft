@@ -1,5 +1,6 @@
 import { getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
+import { parseAnalysisResult } from "@/lib/aiResultParsers";
 
 export interface AnalysisResult {
   title: string;
@@ -51,6 +52,7 @@ export async function analyzeImage(
       headers: {
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -96,6 +98,5 @@ export async function analyzeImage(
     text = data.choices[0]?.message?.content ?? "";
   }
 
-  const clean = text.replace(/^```[a-z]*\n?/m, "").replace(/\n?```$/m, "").trim();
-  return JSON.parse(clean) as AnalysisResult;
+  return parseAnalysisResult(text);
 }

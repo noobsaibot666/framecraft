@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
 import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward, Upload, Download } from "lucide-react";
@@ -33,63 +33,95 @@ async function extractFrames(
 ): Promise<ExtractedFrame[]> {
   return new Promise((resolve, reject) => {
     const video = document.createElement("video");
+    const objectUrl = URL.createObjectURL(file);
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(objectUrl);
+      fn();
+    };
+
+    const fail = (error: Error) => finish(() => reject(error));
+
     video.muted = true;
     video.playsInline = true;
     video.preload = "auto";
-    video.src = URL.createObjectURL(file);
+    video.src = objectUrl;
 
-    video.addEventListener("error", () =>
-      reject(new Error("Failed to load video. Check the file format."))
-    );
+    video.addEventListener("error", () => fail(new Error("Failed to load video. Check the file format.")));
 
     video.addEventListener("loadedmetadata", async () => {
-      const duration = video.duration;
-      if (!isFinite(duration) || duration < 0.5) {
-        reject(new Error("Video too short or duration unreadable."));
-        return;
+      try {
+        const duration = video.duration;
+        if (!isFinite(duration) || duration < 0.5) {
+          fail(new Error("Video too short or duration unreadable."));
+          return;
+        }
+
+        // Full-res canvas (capped at 1280px for API efficiency)
+        const fullCanvas = document.createElement("canvas");
+        const scale = video.videoWidth > 1280 ? 1280 / video.videoWidth : 1;
+        fullCanvas.width  = Math.round(video.videoWidth  * scale);
+        fullCanvas.height = Math.round(video.videoHeight * scale);
+        const fullCtx = fullCanvas.getContext("2d")!;
+
+        // Thumb canvas (160px wide for grid)
+        const thumbCanvas = document.createElement("canvas");
+        const thumbScale = video.videoWidth > 160 ? 160 / video.videoWidth : 1;
+        thumbCanvas.width  = Math.round(video.videoWidth  * thumbScale);
+        thumbCanvas.height = Math.round(video.videoHeight * thumbScale);
+        const thumbCtx = thumbCanvas.getContext("2d")!;
+
+        const frames: ExtractedFrame[] = [];
+
+        for (let i = 0; i < count; i++) {
+          // Spread frames across duration, skip first 0.5s (often black)
+          const timestamp = count === 1
+            ? duration / 2
+            : 0.5 + ((duration - 0.5) / (count - 1)) * i;
+
+          await new Promise<void>((res, rej) => {
+            const timeout = window.setTimeout(() => {
+              cleanup();
+              rej(new Error(`Timed out seeking to ${formatTime(timestamp)}.`));
+            }, 8000);
+            const cleanup = () => {
+              window.clearTimeout(timeout);
+              video.removeEventListener("seeked", onSeeked);
+              video.removeEventListener("error", onError);
+            };
+            const onSeeked = () => {
+              cleanup();
+              res();
+            };
+            const onError = () => {
+              cleanup();
+              rej(new Error(`Failed to seek to ${formatTime(timestamp)}.`));
+            };
+
+            video.addEventListener("seeked", onSeeked, { once: true });
+            video.addEventListener("error", onError, { once: true });
+            video.currentTime = Math.min(timestamp, duration - 0.1);
+          });
+
+          fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
+          thumbCtx.drawImage(video, 0, 0, thumbCanvas.width, thumbCanvas.height);
+
+          frames.push({
+            dataUrl:  fullCanvas.toDataURL("image/png"),
+            thumbUrl: thumbCanvas.toDataURL("image/jpeg", 0.70),
+            timestamp,
+          });
+
+          onProgress(i + 1, count);
+        }
+
+        finish(() => resolve(frames));
+      } catch (e) {
+        fail(e instanceof Error ? e : new Error("Failed to extract frames."));
       }
-
-      // Full-res canvas (capped at 1280px for API efficiency)
-      const fullCanvas = document.createElement("canvas");
-      const scale = video.videoWidth > 1280 ? 1280 / video.videoWidth : 1;
-      fullCanvas.width  = Math.round(video.videoWidth  * scale);
-      fullCanvas.height = Math.round(video.videoHeight * scale);
-      const fullCtx = fullCanvas.getContext("2d")!;
-
-      // Thumb canvas (160px wide for grid)
-      const thumbCanvas = document.createElement("canvas");
-      const thumbScale = video.videoWidth > 160 ? 160 / video.videoWidth : 1;
-      thumbCanvas.width  = Math.round(video.videoWidth  * thumbScale);
-      thumbCanvas.height = Math.round(video.videoHeight * thumbScale);
-      const thumbCtx = thumbCanvas.getContext("2d")!;
-
-      const frames: ExtractedFrame[] = [];
-
-      for (let i = 0; i < count; i++) {
-        // Spread frames across duration, skip first 0.5s (often black)
-        const timestamp = count === 1
-          ? duration / 2
-          : 0.5 + ((duration - 0.5) / (count - 1)) * i;
-
-        await new Promise<void>((res) => {
-          video.currentTime = Math.min(timestamp, duration - 0.1);
-          video.addEventListener("seeked", () => res(), { once: true });
-        });
-
-        fullCtx.drawImage(video, 0, 0, fullCanvas.width, fullCanvas.height);
-        thumbCtx.drawImage(video, 0, 0, thumbCanvas.width, thumbCanvas.height);
-
-        frames.push({
-          dataUrl:  fullCanvas.toDataURL("image/png"),
-          thumbUrl: thumbCanvas.toDataURL("image/jpeg", 0.70),
-          timestamp,
-        });
-
-        onProgress(i + 1, count);
-      }
-
-      URL.revokeObjectURL(video.src);
-      resolve(frames);
     });
 
     video.load();
@@ -111,11 +143,12 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function ResultCard({ frame, result, onImport, imported }: {
+function ResultCard({ frame, result, onImport, imported, disabled = false }: {
   frame: ExtractedFrame;
   result: AnalysisResult;
   onImport: () => void;
   imported: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div className="flex gap-4 p-4 rounded-card"
@@ -140,8 +173,8 @@ function ResultCard({ frame, result, onImport, imported }: {
             {imported ? (
               <span className="flex items-center gap-1 font-mono text-[8px] text-white/40"><Check size={8} /> Saved</span>
             ) : (
-              <button type="button" onClick={onImport}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+              <button type="button" onClick={onImport} disabled={disabled}
+                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-precise px-2 py-1 rounded-sm"
                 style={{ border: "var(--border-dim)" }}>
                 <ArrowRight size={8} /> Import
               </button>
@@ -173,7 +206,7 @@ function ResultCard({ frame, result, onImport, imported }: {
 
 // ─── Main Component ───────────────────────────────────────────
 
-const FRAME_COUNTS = [6, 12, 18] as const;
+const FRAME_COUNTS = [4, 8, 12, 16] as const;
 
 export function VideoFrames() {
   const navigate = useNavigate();
@@ -194,10 +227,11 @@ export function VideoFrames() {
   const [isMuted, setIsMuted]       = useState(false);
 
   // Extraction state
-  const [frameCount, setFrameCount]     = useState<6 | 12 | 18>(12);
+  const [frameCount, setFrameCount]     = useState<4 | 8 | 12 | 16>(12);
   const [extracting, setExtracting]     = useState(false);
   const [extractProgress, setExtractProgress] = useState({ current: 0, total: 0 });
   const [frames, setFrames]             = useState<ExtractedFrame[]>([]);
+  const [extractError, setExtractError] = useState("");
 
   // Selection + analysis state
   const [selected, setSelected]         = useState<Set<number>>(new Set());
@@ -205,8 +239,14 @@ export function VideoFrames() {
   const [analyzeProgress, setAnalyzeProgress] = useState({ current: 0, total: 0 });
   const [results, setResults]           = useState<FrameAnalysisResult[]>([]);
   const [importedIds, setImportedIds]   = useState<Set<number>>(new Set());
+  const [importingAll, setImportingAll] = useState(false);
   const [savingFrameIdx, setSavingFrameIdx] = useState<number | null>(null);
   const [savedFrameIdx, setSavedFrameIdx] = useState<number | null>(null);
+  const [saveFrameError, setSaveFrameError] = useState("");
+
+  useEffect(() => () => {
+    if (videoObjUrl) URL.revokeObjectURL(videoObjUrl);
+  }, [videoObjUrl]);
 
   // Player controls
   const togglePlay = () => {
@@ -269,6 +309,9 @@ export function VideoFrames() {
     setSelected(new Set());
     setResults([]);
     setImportedIds(new Set());
+    setExtractError("");
+    setSaveFrameError("");
+    setImportingAll(false);
   }, [videoObjUrl]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -285,13 +328,14 @@ export function VideoFrames() {
     setFrames([]);
     setSelected(new Set());
     setResults([]);
+    setExtractError("");
     try {
       const extracted = await extractFrames(videoFile, frameCount, (current, total) =>
         setExtractProgress({ current, total })
       );
       setFrames(extracted);
     } catch (e) {
-      console.error(e);
+      setExtractError(e instanceof Error ? e.message : "Frame extraction failed.");
     } finally {
       setExtracting(false);
       setExtractProgress({ current: 0, total: 0 });
@@ -339,14 +383,22 @@ export function VideoFrames() {
   };
 
   const handleImportAll = async () => {
-    for (const item of importableFrameResults(results, importedIds)) {
-      await handleImport(item.result, item.frameIdx);
+    if (importingAll) return;
+    setImportingAll(true);
+    try {
+      const pending = importableFrameResults(results, importedIds);
+      for (const item of pending) {
+        await handleImport(item.result, item.frameIdx);
+      }
+    } finally {
+      setImportingAll(false);
     }
   };
 
   const handleSaveFrame = async (frame: ExtractedFrame, frameIdx: number) => {
     if (!videoFile) return;
     setSavingFrameIdx(frameIdx);
+    setSaveFrameError("");
     try {
       const [{ save }, { writeFile }] = await Promise.all([
         import("@tauri-apps/plugin-dialog"),
@@ -360,6 +412,8 @@ export function VideoFrames() {
       await writeFile(path, dataUrlToBytes(frame.dataUrl));
       setSavedFrameIdx(frameIdx);
       setTimeout(() => setSavedFrameIdx(null), 1800);
+    } catch (e) {
+      setSaveFrameError(e instanceof Error ? e.message : "Failed to save frame.");
     } finally {
       setSavingFrameIdx(null);
     }
@@ -594,6 +648,16 @@ export function VideoFrames() {
           )}
         </div>
 
+        {(extractError || saveFrameError) && (
+          <div className="flex items-start gap-2 p-3 rounded-sm"
+            style={{ border: "1px solid rgba(215,25,33,0.22)", background: "rgba(215,25,33,0.04)" }}>
+            <AlertTriangle size={10} className="text-red/60 shrink-0 mt-0.5" />
+            <span className="font-mono text-[10px] text-red/70">
+              {extractError || saveFrameError}
+            </span>
+          </div>
+        )}
+
         {/* ── Frame grid ── */}
         {frames.length > 0 && !extracting && (
           <div className="flex flex-col gap-3">
@@ -611,9 +675,18 @@ export function VideoFrames() {
               {frames.map((frame, idx) => {
                 const isSelected = selected.has(idx);
                 return (
-                  <button key={idx} type="button" onClick={() => toggleSelect(idx)}
+                  <div key={idx}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => toggleSelect(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleSelect(idx);
+                      }
+                    }}
                     className={cn(
-                      "relative overflow-hidden rounded-sm transition-precise",
+                      "relative overflow-hidden rounded-sm transition-precise cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/40",
                       isSelected ? "ring-1 ring-white/50" : "hover:ring-1 hover:ring-white/15"
                     )}>
                     <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
@@ -635,7 +708,7 @@ export function VideoFrames() {
                         <Check size={11} className="text-black" />
                       </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -648,8 +721,8 @@ export function VideoFrames() {
             <div className="flex items-center justify-between">
               <span className="system-label">{results.length} ANALYZED</span>
               {unsavedImportCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleImportAll}>
-                  <ArrowRight size={10} /> Import All Analyzed ({unsavedImportCount})
+                <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={importingAll}>
+                  <ArrowRight size={10} /> {importingAll ? "Importing..." : `Import All Analyzed (${unsavedImportCount})`}
                 </Button>
               )}
             </div>
@@ -669,6 +742,7 @@ export function VideoFrames() {
                   result={result}
                   onImport={() => handleImport(result, frameIdx)}
                   imported={importedIds.has(frameIdx)}
+                  disabled={importingAll}
                 />
               )
             ))}

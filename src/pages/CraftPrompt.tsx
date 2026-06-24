@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -425,12 +425,20 @@ const EMPTY_MJ: MJParams = {
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
+interface CraftPromptLocationState {
+  prefillPromptText?: string;
+  prefillTitle?: string;
+  prefillRecipeId?: string;
+}
+
 // ─── Component ────────────────────────────────────────────────
 
 export function CraftPrompt() {
   const { id } = useParams<{ id?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { create, update, getById, prompts: allPrompts } = usePromptStore();
+  const prefillState = location.state as CraftPromptLocationState | null;
 
   const isEdit = Boolean(id);
 
@@ -501,6 +509,17 @@ export function CraftPrompt() {
       setMode("manual");
     });
   }, [id, getById]);
+
+  useEffect(() => {
+    if (id || !prefillState?.prefillPromptText) return;
+    setFields({
+      ...EMPTY,
+      title: prefillState.prefillTitle ?? "",
+      prompt_text: prefillState.prefillPromptText,
+      tags: prefillState.prefillRecipeId ? ["recipe-applied"] : [],
+    });
+    setMode("manual");
+  }, [id, prefillState?.prefillPromptText, prefillState?.prefillTitle, prefillState?.prefillRecipeId]);
 
   const setF = <K extends keyof Fields>(key: K, val: Fields[K]) => {
     setFields((f) => ({ ...f, [key]: val }));
@@ -624,6 +643,7 @@ export function CraftPrompt() {
     is_winner: fields.is_winner,
     is_failed: fields.is_failed,
     is_recipe: asRecipe,
+    parent_id: !isEdit ? prefillState?.prefillRecipeId : undefined,
     notes: fields.notes || undefined,
   });
 

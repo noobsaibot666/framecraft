@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { Settings } from "lucide-react";
+import { getQueue } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -15,16 +17,19 @@ const NAV_ITEMS = [
   { num: "10", label: "REFS",       to: "/references" },
   { num: "11", label: "PROJECTS",   to: "/projects" },
   { num: "12", label: "COMPARE",    to: "/compare" },
+  { num: "13", label: "QUEUE",      to: "/queue" },
 ] as const;
 
 function NavItem({
   num,
   label,
   to,
+  badge,
 }: {
   num: string;
   label: string;
   to: string;
+  badge?: number;
 }) {
   return (
     <NavLink
@@ -63,6 +68,11 @@ function NavItem({
           <span className="font-sans text-[12px] font-medium tracking-[0.04em] uppercase">
             {label}
           </span>
+          {badge != null && badge > 0 && (
+            <span className="ml-auto font-mono text-[9px] text-white/70 px-1.5 py-0.5 rounded-sm border border-white/15">
+              {badge}
+            </span>
+          )}
         </>
       )}
     </NavLink>
@@ -70,6 +80,14 @@ function NavItem({
 }
 
 export function Sidebar() {
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    getQueue()
+      .then((items) => setPendingCount(items.filter((item) => item.status === "pending").length))
+      .catch(() => setPendingCount(0));
+  }, []);
+
   return (
     <aside
       className="w-50 flex flex-col shrink-0"
@@ -78,7 +96,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 pt-3 pb-2 flex flex-col gap-0.5">
         {NAV_ITEMS.map((item) => (
-          <NavItem key={item.to} {...item} />
+          <NavItem key={item.to} {...item} badge={item.to === "/queue" ? pendingCount : undefined} />
         ))}
       </nav>
 

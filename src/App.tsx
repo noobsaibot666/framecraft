@@ -9,6 +9,8 @@ import { ManualImport } from "@/pages/ManualImport";
 import { ResultReview } from "@/pages/ResultReview";
 import { SREFLibrary } from "@/pages/SREFLibrary";
 import { RecipeLibrary } from "@/pages/RecipeLibrary";
+import { RecipeApply } from "@/pages/RecipeApply";
+import { GenerationQueue } from "@/pages/GenerationQueue";
 import { Settings } from "@/pages/Settings";
 import { ImageAnalyzer } from "@/pages/ImageAnalyzer";
 import { BriefAnalyzer } from "@/pages/BriefAnalyzer";
@@ -44,6 +46,8 @@ export default function App() {
             <Route path="/craft" element={<CraftPrompt />} />
             <Route path="/craft/:id" element={<CraftPrompt />} />
             <Route path="/recipes" element={<RecipeLibrary />} />
+            <Route path="/recipes/:id/apply" element={<RecipeApply />} />
+            <Route path="/queue" element={<GenerationQueue />} />
             <Route path="/import" element={<ManualImport />} />
             <Route path="/srefs" element={<SREFLibrary />} />
             <Route path="/results/:promptId" element={<ResultReview />} />

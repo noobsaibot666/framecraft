@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,6 +8,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultSummaryMap } from "@/lib/db";
+import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
@@ -83,11 +84,15 @@ function RatingDots({ rating }: { rating: number }) {
   );
 }
 
-function PromptCard({ prompt, resultSummary, onCopy, onDelete }: {
+function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMode, selected, onSelect }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   onCopy: (p: Prompt) => void;
   onDelete: (p: Prompt) => void;
+  onQueue: (p: Prompt) => void;
+  batchMode: boolean;
+  selected: boolean;
+  onSelect: (id: string, selected: boolean) => void;
 }) {
   const navigate = useNavigate();
 
@@ -99,6 +104,15 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete }: {
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 min-w-0">
+        {batchMode && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(e) => { e.stopPropagation(); onSelect(prompt.id, e.target.checked); }}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-0.5 accent-white/70"
+          />
+        )}
         <div className="flex flex-col gap-1 min-w-0">
           <span className="font-sans text-[12px] font-semibold text-white leading-tight truncate">
             {prompt.title}
@@ -145,6 +159,13 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete }: {
           )}
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
+          <button
+            className="p-1 rounded text-dim hover:text-white transition-precise"
+            onClick={(e) => { e.stopPropagation(); onQueue(prompt); }}
+            title="Add to Queue"
+          >
+            <ListPlus size={11} />
+          </button>
           <button
             className="p-1 rounded text-dim hover:text-white transition-precise"
             onClick={(e) => { e.stopPropagation(); onCopy(prompt); }}
@@ -225,6 +246,9 @@ export function PromptLibrary() {
   const [copied, setCopied] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Prompt | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
+  const [queued, setQueued] = useState<string | null>(null);
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
@@ -259,6 +283,28 @@ export function PromptLibrary() {
     }
   }, [confirmDelete, remove]);
 
+  const handleQueue = useCallback(async (prompt: Prompt) => {
+    await addToQueue(prompt.id);
+    setQueued(prompt.title);
+    setTimeout(() => setQueued(null), 1500);
+  }, []);
+
+  const handleBatchQueue = useCallback(async () => {
+    for (const id of selectedIds) await addToQueue(id);
+    setQueued(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""}`);
+    setSelectedIds(new Set());
+    setBatchMode(false);
+    setTimeout(() => setQueued(null), 1500);
+  }, [selectedIds]);
+
+  const handleSelect = useCallback((id: string, isSelected: boolean) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (isSelected) next.add(id); else next.delete(id);
+      return next;
+    });
+  }, []);
+
   const prompts = filteredAndSorted(resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
@@ -267,10 +313,20 @@ export function PromptLibrary() {
       title="Prompt Library"
       subtitle="STORED PROMPT ASSETS"
       action={
-        <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
-          <Plus size={12} />
-          New Prompt
-        </Button>
+        <div className="flex items-center gap-2">
+          {batchMode && (
+            <Button variant="ghost" size="md" onClick={handleBatchQueue} disabled={selectedIds.size === 0}>
+              <ListPlus size={12} /> Add {selectedIds.size} to Queue
+            </Button>
+          )}
+          <Button variant="ghost" size="md" onClick={() => { setBatchMode((v) => !v); setSelectedIds(new Set()); }}>
+            {batchMode ? "Cancel Batch" : "Batch Queue"}
+          </Button>
+          <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
+            <Plus size={12} />
+            New Prompt
+          </Button>
+        </div>
       }
     >
       {/* Toolbar */}
@@ -343,6 +399,14 @@ export function PromptLibrary() {
         </div>
       )}
 
+      {queued && (
+        <div className="mb-4 px-3 py-2 rounded-sm font-mono text-[10px] text-white/70 flex items-center gap-2"
+          style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+          <ListPlus size={10} className="text-white/40" />
+          Added to queue: {queued}
+        </div>
+      )}
+
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className="mb-4 px-3 py-2 rounded-sm font-mono text-[10px] text-red/80 flex items-center justify-between"
@@ -403,6 +467,10 @@ export function PromptLibrary() {
                 resultSummary={resultMap[p.id]}
                 onCopy={handleCopy}
                 onDelete={handleDelete}
+                onQueue={handleQueue}
+                batchMode={batchMode}
+                selected={selectedIds.has(p.id)}
+                onSelect={handleSelect}
               />
             ))}
           </div>

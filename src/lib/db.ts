@@ -110,6 +110,8 @@ export interface CreatePromptInput {
   version?: number;
 }
 
+export type CreateRecipeInput = Omit<CreatePromptInput, "is_recipe">;
+
 export async function getPrompts(): Promise<Prompt[]> {
   if (isTauri) {
     const db = await getDb();
@@ -219,6 +221,10 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
   store.prompts.unshift(prompt);
   saveMemStore(store);
   return id;
+}
+
+export async function createRecipe(data: CreateRecipeInput): Promise<string> {
+  return createPrompt({ ...data, is_recipe: true });
 }
 
 export async function updatePrompt(

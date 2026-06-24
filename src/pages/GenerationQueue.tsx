@@ -1,0 +1,283 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Check, Copy, ExternalLink, GripVertical, Plus, SkipForward, Upload, X } from "lucide-react";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { Button } from "@/components/ui/Button";
+import { Badge, ProviderBadge } from "@/components/ui/Badge";
+import { usePromptStore } from "@/stores/usePromptStore";
+import {
+  addToQueue,
+  clearDone,
+  getQueue,
+  reorderQueue,
+  updateQueueStatus,
+  type QueueItem,
+  type QueueStatus,
+} from "@/lib/queue";
+import { cn } from "@/lib/utils";
+import type { Prompt } from "@/types";
+
+const STATUS_LABELS: Record<QueueStatus, string> = {
+  pending: "Pending",
+  sent: "Sent",
+  done: "Done",
+  failed: "Failed",
+  skipped: "Skipped",
+};
+
+function providerUrl(prompt: Prompt | undefined): string {
+  switch (prompt?.provider) {
+    case "midjourney": return "https://www.midjourney.com/imagine";
+    case "dalle": return "https://chatgpt.com/";
+    case "firefly": return "https://firefly.adobe.com/";
+    case "ideogram": return "https://ideogram.ai/";
+    case "flux": return "https://fal.ai/models/flux";
+    default: return "https://www.google.com/search?q=AI+image+generator";
+  }
+}
+
+function statusClass(status: QueueStatus): string {
+  if (status === "pending") return "text-white/70 border-white/20";
+  if (status === "sent") return "text-muted border-white/15";
+  if (status === "done") return "text-white border-white/30";
+  if (status === "failed") return "text-red border-red/50";
+  return "text-dim border-white/10";
+}
+
+function QueueCard({
+  item,
+  prompt,
+  onCopy,
+  onStatus,
+  onImport,
+}: {
+  item: QueueItem;
+  prompt?: Prompt;
+  onCopy: () => void;
+  onStatus: (status: QueueStatus) => void;
+  onImport: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ ...style, border: "var(--border-default)", background: "var(--surface-card)" }}
+      className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 p-4 rounded-card"
+    >
+      <button
+        type="button"
+        className="text-dim hover:text-white transition-precise cursor-grab active:cursor-grabbing pt-1"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag queue item"
+      >
+        <GripVertical size={14} />
+      </button>
+
+      <div className="flex flex-col gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-sans text-[13px] text-white font-medium truncate">
+            {prompt?.title ?? item.prompt_title ?? item.prompt_id}
+          </span>
+          {prompt?.provider && <ProviderBadge provider={prompt.provider} />}
+          <span
+            className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-0.5 rounded-sm border", statusClass(item.status))}
+          >
+            {STATUS_LABELS[item.status]}
+          </span>
+        </div>
+        <p className="font-mono text-[10px] text-dim/70 leading-relaxed line-clamp-2">
+          {prompt?.prompt_text ?? item.prompt_text ?? "Prompt not loaded in dev store."}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <button type="button" onClick={onCopy} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Copy prompt">
+          <Copy size={12} />
+        </button>
+        <button type="button" onClick={() => { window.open(providerUrl(prompt), "_blank"); onStatus("sent"); }}
+          className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title={`Open in ${prompt?.provider ?? "provider"}`}>
+          <ExternalLink size={12} />
+        </button>
+        <button type="button" onClick={onImport} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Import result">
+          <Upload size={12} />
+        </button>
+        <button type="button" onClick={() => onStatus("done")} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Mark done">
+          <Check size={12} />
+        </button>
+        <button type="button" onClick={() => onStatus("skipped")} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Skip">
+          <SkipForward size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function GenerationQueue() {
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("project") ?? undefined;
+  const { prompts, fetchPrompts } = usePromptStore();
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const promptMap = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
+  const pending = items.filter((item) => item.status === "pending");
+
+  const refresh = async () => {
+    const [queue] = await Promise.all([getQueue(projectId), fetchPrompts()]);
+    setItems(queue);
+  };
+
+  useEffect(() => { refresh(); }, [projectId]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (!event.over || event.active.id === event.over.id) return;
+    const oldIndex = items.findIndex((item) => item.id === event.active.id);
+    const newIndex = items.findIndex((item) => item.id === event.over?.id);
+    const next = arrayMove(items, oldIndex, newIndex);
+    setItems(next);
+    await reorderQueue(next.map((item) => item.id));
+  };
+
+  const handleAddSelected = async () => {
+    for (const promptId of selected) await addToQueue(promptId, projectId);
+    setSelected(new Set());
+    setShowAdd(false);
+    await refresh();
+  };
+
+  const copyAllPending = async () => {
+    const text = pending
+      .map((item) => promptMap.get(item.prompt_id)?.prompt_text ?? item.prompt_text)
+      .filter(Boolean)
+      .join("\n\n---\n\n");
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleBulkImport = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const names = Array.from(files).map((file) => file.name.toLowerCase());
+    for (const item of items) {
+      const prompt = promptMap.get(item.prompt_id);
+      const title = prompt?.title.toLowerCase() ?? item.prompt_id.toLowerCase();
+      if (names.some((name) => name.includes(item.prompt_id.toLowerCase()) || name.includes(title.slice(0, 16)))) {
+        await updateQueueStatus(item.id, "done");
+      }
+    }
+    await refresh();
+  };
+
+  return (
+    <PageContainer
+      title="Generation Queue"
+      subtitle={projectId ? "PROJECT FILTER ACTIVE" : "PENDING PROMPT BATCH"}
+      action={
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(event) => handleBulkImport(event.target.files)}
+          />
+          <Button variant="ghost" size="sm" onClick={() => fileRef.current?.click()}>
+            <Upload size={11} /> Bulk Import
+          </Button>
+          <Button variant="ghost" size="sm" onClick={copyAllPending} disabled={pending.length === 0}>
+            <Copy size={11} /> {copied ? "Copied" : "Copy Pending"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={async () => { await clearDone(); await refresh(); }}>
+            Clear Done
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
+            <Plus size={11} /> Add Prompts
+          </Button>
+        </div>
+      }
+    >
+      {showAdd && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+          <div className="w-[560px] max-h-[70vh] flex flex-col gap-3 p-4 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <div className="flex items-center justify-between">
+              <span className="system-label">ADD PROMPTS</span>
+              <button type="button" className="text-dim hover:text-white" onClick={() => setShowAdd(false)}><X size={14} /></button>
+            </div>
+            <div className="overflow-auto flex flex-col gap-1 pr-1">
+              {prompts.map((prompt) => (
+                <label key={prompt.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center p-2 rounded-sm cursor-pointer hover:bg-white/5">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(prompt.id)}
+                    onChange={(event) => {
+                      const next = new Set(selected);
+                      if (event.target.checked) next.add(prompt.id); else next.delete(prompt.id);
+                      setSelected(next);
+                    }}
+                    className="accent-white/70"
+                  />
+                  <span className="font-mono text-[10px] text-muted truncate">{prompt.title}</span>
+                  <ProviderBadge provider={prompt.provider} />
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" disabled={selected.size === 0} onClick={handleAddSelected}>
+                Add {selected.size}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 mb-4">
+        <Badge variant="default">{items.length} total</Badge>
+        <Badge variant="default">{pending.length} pending</Badge>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="flex items-center justify-center h-48 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
+          <span className="font-mono text-[10px] text-dim/50">No queued prompts.</span>
+        </div>
+      ) : (
+        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+            <div className="flex flex-col gap-2">
+              {items.map((item) => (
+                <QueueCard
+                  key={item.id}
+                  item={item}
+                  prompt={promptMap.get(item.prompt_id)}
+                  onCopy={async () => {
+                    await navigator.clipboard.writeText(promptMap.get(item.prompt_id)?.prompt_text ?? item.prompt_text ?? "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1500);
+                  }}
+                  onStatus={async (status) => {
+                    await updateQueueStatus(item.id, status);
+                    await refresh();
+                  }}
+                  onImport={async () => {
+                    await updateQueueStatus(item.id, "done");
+                    await refresh();
+                  }}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
+    </PageContainer>
+  );
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Plus, Star, Trash2, ChevronRight, Layers } from "lucide-react";
+import { Copy, Plus, Star, Trash2, ChevronRight, Layers, Wand2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -9,11 +9,12 @@ import type { Prompt } from "@/types";
 
 // ─── Recipe Card ──────────────────────────────────────────────
 
-function RecipeCard({ recipe, onCopy, onDelete, onOpen }: {
+function RecipeCard({ recipe, onCopy, onDelete, onOpen, onApply }: {
   recipe: Prompt;
   onCopy: (r: Prompt) => void;
   onDelete: (id: string) => void;
   onOpen: (id: string) => void;
+  onApply: (id: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = (e: React.MouseEvent) => {
@@ -94,6 +95,10 @@ function RecipeCard({ recipe, onCopy, onDelete, onOpen }: {
           <Copy size={8} />{copied ? "Copied!" : "Copy prompt"}
         </button>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onApply(recipe.id); }}
+            className="flex items-center gap-1 font-mono text-[9px] text-dim hover:text-white transition-precise">
+            <Wand2 size={9} /> Apply
+          </button>
           <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(recipe.id); }}
             className="flex items-center gap-1 font-mono text-[9px] text-dim hover:text-white transition-precise">
             Use <ChevronRight size={9} />
@@ -148,6 +153,10 @@ export function RecipeLibrary() {
 
   const handleOpen = (id: string) => {
     navigate(`/library/${id}`);
+  };
+
+  const handleApply = (id: string) => {
+    navigate(`/recipes/${id}/apply`);
   };
 
   return (
@@ -230,6 +239,7 @@ export function RecipeLibrary() {
               onCopy={handleCopy}
               onDelete={handleDelete}
               onOpen={handleOpen}
+              onApply={handleApply}
             />
           ))}
         </div>

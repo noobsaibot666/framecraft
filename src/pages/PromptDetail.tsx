@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch,
+  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ListPlus,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
+import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
+import { addToQueue } from "@/lib/queue";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -49,6 +52,8 @@ export function PromptDetail() {
   const [copied, setCopied] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
+  const [showExtractRecipe, setShowExtractRecipe] = useState(false);
+  const [queued, setQueued] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -81,6 +86,13 @@ export function PromptDetail() {
     if (!prompt) return;
     await update(prompt.id, { is_winner: !prompt.is_winner });
     setPrompt((p) => p ? { ...p, is_winner: !p.is_winner } : p);
+  };
+
+  const handleAddToQueue = async () => {
+    if (!prompt) return;
+    await addToQueue(prompt.id);
+    setQueued(true);
+    setTimeout(() => setQueued(false), 1500);
   };
 
   if (loading) {
@@ -124,11 +136,19 @@ export function PromptDetail() {
             <Star size={11} />
             {prompt.is_winner ? "Winner" : "Mark Winner"}
           </Button>
+          {prompt.is_winner && (
+            <Button variant="ghost" size="sm" onClick={() => setShowExtractRecipe((v) => !v)}>
+              <BookOpen size={11} /> Extract Recipe
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
           </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
             <Plus size={11} /> Add Result
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleAddToQueue}>
+            <ListPlus size={11} /> {queued ? "Queued" : "Add to Queue"}
           </Button>
           <Button
             variant={confirmDelete ? "primary" : "ghost"}
@@ -145,6 +165,13 @@ export function PromptDetail() {
       <div className="flex gap-8 min-w-0">
         {/* Main column */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
+          {showExtractRecipe && (
+            <ExtractRecipePanel
+              prompt={prompt}
+              onCancel={() => setShowExtractRecipe(false)}
+              onSaved={(recipeId) => navigate(`/library/${recipeId}`)}
+            />
+          )}
 
           {/* Prompt Text */}
           <div className="flex flex-col gap-3">

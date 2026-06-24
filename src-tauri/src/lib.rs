@@ -75,6 +75,12 @@ pub fn run() {
             sql: include_str!("../migrations/012_deliverable_align.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 13,
+            description: "generation_queue",
+            sql: include_str!("../migrations/013_generation_queue.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

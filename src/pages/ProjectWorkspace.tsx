@@ -681,6 +681,11 @@ export function ProjectWorkspace() {
             Compare Results
           </Button>
           <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/queue?project=${id}`)}
+            className="w-full justify-center text-dim">
+            Generation Queue
+          </Button>
+          <Button variant="ghost" size="sm"
             onClick={() => navigate(`/craft?project=${id}`)}
             className="w-full justify-center text-dim">
             <Plus size={10} /> Craft New Prompt for Project

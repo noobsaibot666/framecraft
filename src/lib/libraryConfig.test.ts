@@ -4,13 +4,36 @@ import {
   DEFAULT_SQLITE_URL,
   FRAMECRAFT_LIBRARY_EXTENSION,
   buildLibraryMetadata,
+  clearSelectedLibraryPath,
+  getActiveLibraryPaths,
+  getActiveLibrarySelection,
+  getActiveSqliteUrl,
   getDefaultLibraryMode,
   getReferenceDir,
   getResultDir,
   isFramecraftLibraryPath,
+  LIBRARY_PATH_STORAGE_KEY,
   normalizeDir,
   resolveLibraryPaths,
+  setSelectedLibraryPath,
+  type LibraryStorage,
 } from "./libraryConfig";
+
+function createStorage(): LibraryStorage & { data: Record<string, string> } {
+  const storage = {
+    data: {} as Record<string, string>,
+    getItem(key: string) {
+      return storage.data[key] ?? null;
+    },
+    setItem(key: string, value: string) {
+      storage.data[key] = value;
+    },
+    removeItem(key: string) {
+      delete storage.data[key];
+    },
+  };
+  return storage;
+}
 
 describe("libraryConfig defaults", () => {
   it("preserves the current app-data sqlite URL by default", () => {
@@ -51,5 +74,41 @@ describe("libraryConfig defaults", () => {
       results_dir: "results",
       references_dir: "references",
     });
+  });
+
+  it("uses app-data paths and sqlite URL when no portable library is selected", async () => {
+    const storage = createStorage();
+
+    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null });
+    expect(getActiveLibraryPaths("/Users/alan/AppData", storage)).toEqual(resolveLibraryPaths("/Users/alan/AppData"));
+    await expect(getActiveSqliteUrl(storage)).resolves.toBe(DEFAULT_SQLITE_URL);
+  });
+
+  it("persists a selected portable library path", async () => {
+    const storage = createStorage();
+
+    setSelectedLibraryPath("/Volumes/NAS/Client.framecraftlib", storage);
+
+    expect(storage.data[LIBRARY_PATH_STORAGE_KEY]).toBe("/Volumes/NAS/Client.framecraftlib");
+    expect(getActiveLibrarySelection(storage)).toEqual({
+      mode: "portable",
+      path: "/Volumes/NAS/Client.framecraftlib",
+    });
+    expect(getActiveLibraryPaths("/Users/alan/AppData", storage)).toEqual(
+      resolveLibraryPaths("/Volumes/NAS/Client.framecraftlib")
+    );
+    await expect(getActiveSqliteUrl(storage)).resolves.toBe(
+      "sqlite:/Volumes/NAS/Client.framecraftlib/framecraft.db"
+    );
+  });
+
+  it("clears a selected portable library path", () => {
+    const storage = createStorage();
+    setSelectedLibraryPath("/Volumes/NAS/Client.framecraftlib", storage);
+
+    clearSelectedLibraryPath(storage);
+
+    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null });
+    expect(storage.data[LIBRARY_PATH_STORAGE_KEY]).toBeUndefined();
   });
 });

@@ -1,5 +1,6 @@
 import { deleteReferenceFiles, readImageAsDataUrl, saveReferenceImage } from "./fileStore";
 import { getFramecraftDb } from "./dbConnection";
+import { getLibrarySettingsState } from "./librarySettings";
 
 const isTauriRuntime = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -36,6 +37,7 @@ export interface ReleaseDiagnosticDeps {
   listTables: () => Promise<readonly string[]>;
   testFileStore: () => Promise<void>;
   testDialogPlugin: () => Promise<void>;
+  validateActiveLibrary: () => Promise<string>;
 }
 
 export function validateRequiredTables(tables: readonly string[]): { ok: boolean; missing: string[] } {
@@ -63,11 +65,19 @@ async function testDialogPluginImport(): Promise<void> {
   await import("@tauri-apps/plugin-dialog");
 }
 
+async function validateActiveLibraryPackage(): Promise<string> {
+  const state = await getLibrarySettingsState();
+  if (!state.validation) return "Using local app-data library.";
+  if (!state.validation.ok) throw new Error(state.validation.errors.join(", "));
+  return "Active portable library package is valid.";
+}
+
 const defaultDeps: ReleaseDiagnosticDeps = {
   isTauri: isTauriRuntime,
   listTables: listSqliteTables,
   testFileStore: testReferenceFileStore,
   testDialogPlugin: testDialogPluginImport,
+  validateActiveLibrary: validateActiveLibraryPackage,
 };
 
 async function check(label: string, id: string, fn: () => Promise<string>): Promise<DiagnosticCheck> {
@@ -107,6 +117,8 @@ export async function runReleaseDiagnostics(deps: ReleaseDiagnosticDeps = defaul
     await deps.testDialogPlugin();
     return "Native dialog plugin is importable.";
   }));
+
+  checks.push(await check("Active library", "active-library", deps.validateActiveLibrary));
 
   return { generatedAt: new Date().toISOString(), checks };
 }

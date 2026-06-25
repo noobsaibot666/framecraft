@@ -27,6 +27,7 @@ describe("release diagnostics", () => {
       listTables: vi.fn(async () => REQUIRED_RELEASE_TABLES),
       testFileStore: vi.fn(async () => undefined),
       testDialogPlugin: vi.fn(async () => undefined),
+      validateActiveLibrary: vi.fn(async () => "Using local app-data library."),
     });
 
     expect(result.checks.map((check) => check.id)).toEqual([
@@ -34,6 +35,7 @@ describe("release diagnostics", () => {
       "sqlite-schema",
       "file-store",
       "dialog-plugin",
+      "active-library",
     ]);
     expect(result.checks.every((check) => check.status === "pass")).toBe(true);
   });
@@ -46,10 +48,14 @@ describe("release diagnostics", () => {
         throw new Error("write failed");
       }),
       testDialogPlugin: vi.fn(async () => undefined),
+      validateActiveLibrary: vi.fn(async () => {
+        throw new Error("Missing framecraft.db");
+      }),
     });
 
     expect(result.checks.find((check) => check.id === "sqlite-schema")?.status).toBe("fail");
     expect(result.checks.find((check) => check.id === "file-store")?.message).toContain("write failed");
-    expect(formatDiagnosticSummary(result)).toBe("2 passed, 2 failed");
+    expect(result.checks.find((check) => check.id === "active-library")?.message).toContain("Missing framecraft.db");
+    expect(formatDiagnosticSummary(result)).toBe("2 passed, 3 failed");
   });
 });

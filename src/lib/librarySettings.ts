@@ -1,0 +1,191 @@
+import { appDataDir } from "@tauri-apps/api/path";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { copyFile, exists, mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  clearSelectedLibraryPath,
+  getActiveLibraryPaths,
+  getActiveLibrarySelection,
+  isFramecraftLibraryPath,
+  setSelectedLibraryPath,
+  type ActiveLibrarySelection,
+  type LibraryPaths,
+  type LibraryStorage,
+} from "./libraryConfig";
+import {
+  createLibraryPackage,
+  listRelativeMediaFilenames,
+  migrateAppDataToLibrary,
+  validateLibraryPackage,
+  type LibraryFileSystem,
+  type LibraryValidationResult,
+} from "./libraryPackage";
+import { getFramecraftDb } from "./dbConnection";
+
+const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export interface LibrarySettingsState {
+  selection: ActiveLibrarySelection;
+  paths: LibraryPaths;
+  validation: LibraryValidationResult | null;
+  nativeAvailable: boolean;
+}
+
+export interface SelectValidatedLibraryDeps {
+  storage?: LibraryStorage;
+  validateLibrary: (path: string) => Promise<LibraryValidationResult>;
+}
+
+export interface SelectValidatedLibraryResult {
+  path: string;
+  restartRequired: true;
+}
+
+export interface PortableMediaSources {
+  resultPaths: string[];
+  referencePaths: string[];
+}
+
+export interface PortableMediaDirs {
+  resultsDir: string;
+  referencesDir: string;
+}
+
+export async function selectValidatedLibrary(
+  path: string,
+  deps: SelectValidatedLibraryDeps
+): Promise<SelectValidatedLibraryResult> {
+  if (!isFramecraftLibraryPath(path)) throw new Error("Library path must end with .framecraftlib.");
+  const validation = await deps.validateLibrary(path);
+  if (!validation.ok) throw new Error(validation.errors.join(", "));
+  setSelectedLibraryPath(path, deps.storage);
+  return { path, restartRequired: true };
+}
+
+export function collectPortableMediaFilenames(
+  sources: PortableMediaSources,
+  dirs: PortableMediaDirs
+): { resultFiles: string[]; referenceFiles: string[] } {
+  return {
+    resultFiles: unique(listRelativeMediaFilenames(sources.resultPaths, dirs.resultsDir)),
+    referenceFiles: unique(listRelativeMediaFilenames(sources.referencePaths, dirs.referencesDir)),
+  };
+}
+
+export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
+  const appDir = isTauri() ? await appDataDir() : "localStorage";
+  const selection = getActiveLibrarySelection();
+  const paths = getActiveLibraryPaths(appDir);
+  const validation = selection.path && isTauri()
+    ? await validateLibraryPackage(selection.path, createTauriLibraryFs())
+    : null;
+  return { selection, paths, validation, nativeAvailable: isTauri() };
+}
+
+export async function createLibraryFromDialog(): Promise<string | null> {
+  if (!isTauri()) throw new Error("Library packages can only be created in the native app.");
+  const path = await save({
+    title: "Create Framecraft Library",
+    filters: [{ name: "Framecraft Library", extensions: ["framecraftlib"] }],
+  });
+  if (!path) return null;
+  const libraryPath = ensureLibraryExtension(path);
+  await createLibraryPackage(libraryPath, createTauriLibraryFs());
+  return libraryPath;
+}
+
+export async function openLibraryFromDialog(): Promise<SelectValidatedLibraryResult | null> {
+  if (!isTauri()) throw new Error("Library packages can only be opened in the native app.");
+  const path = await open({
+    title: "Open Framecraft Library",
+    directory: true,
+    multiple: false,
+  });
+  if (!path || Array.isArray(path)) return null;
+  return selectValidatedLibrary(path, {
+    validateLibrary: (libraryPath) => validateLibraryPackage(libraryPath, createTauriLibraryFs()),
+  });
+}
+
+export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectValidatedLibraryResult | null> {
+  if (!isTauri()) throw new Error("Library migration can only run in the native app.");
+  const path = await save({
+    title: "Migrate Current Data to Framecraft Library",
+    filters: [{ name: "Framecraft Library", extensions: ["framecraftlib"] }],
+  });
+  if (!path) return null;
+
+  const targetBaseDir = ensureLibraryExtension(path);
+  const sourceBaseDir = await appDataDir();
+  const sourcePaths = getActiveLibraryPaths(sourceBaseDir, createEmptyStorage());
+  const media = await collectCurrentMedia(sourcePaths);
+
+  await migrateAppDataToLibrary({
+    sourceBaseDir,
+    targetBaseDir,
+    resultFiles: media.resultFiles,
+    referenceFiles: media.referenceFiles,
+    fs: createTauriLibraryFs(),
+  });
+
+  return selectValidatedLibrary(targetBaseDir, {
+    validateLibrary: (libraryPath) => validateLibraryPackage(libraryPath, createTauriLibraryFs()),
+  });
+}
+
+export async function revealActiveLibraryFolder(): Promise<void> {
+  const state = await getLibrarySettingsState();
+  await revealItemInDir(state.paths.baseDir);
+}
+
+export function useLocalAppDataLibrary(storage?: LibraryStorage): void {
+  clearSelectedLibraryPath(storage);
+}
+
+function createTauriLibraryFs(): LibraryFileSystem {
+  return {
+    exists: (path) => exists(path),
+    mkdir: (path) => mkdir(path, { recursive: true }),
+    writeTextFile: (path, contents) => writeTextFile(path, contents),
+    readTextFile: (path) => readTextFile(path),
+    copyFile: (from, to) => copyFile(from, to),
+  };
+}
+
+async function collectCurrentMedia(sourcePaths: LibraryPaths): Promise<{ resultFiles: string[]; referenceFiles: string[] }> {
+  const db = await getFramecraftDb();
+  const resultRows = await db.select(
+    "SELECT file_path, thumbnail_path FROM results WHERE file_path IS NOT NULL OR thumbnail_path IS NOT NULL"
+  ) as Array<{ file_path?: string | null; thumbnail_path?: string | null }>;
+  const referenceRows = await db.select(
+    `SELECT file_data, thumbnail_data FROM "references" WHERE file_data IS NOT NULL OR thumbnail_data IS NOT NULL`
+  ) as Array<{ file_data?: string | null; thumbnail_data?: string | null }>;
+
+  return collectPortableMediaFilenames(
+    {
+      resultPaths: resultRows.flatMap((row) => [row.file_path, row.thumbnail_path]).filter(isString),
+      referencePaths: referenceRows.flatMap((row) => [row.file_data, row.thumbnail_data]).filter(isString),
+    },
+    sourcePaths
+  );
+}
+
+function ensureLibraryExtension(path: string): string {
+  return isFramecraftLibraryPath(path) ? path : `${path}.framecraftlib`;
+}
+
+function createEmptyStorage(): LibraryStorage {
+  return {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  };
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values));
+}

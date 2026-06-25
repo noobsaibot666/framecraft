@@ -1,11 +1,34 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Download, Upload, Database, Info, Eye, EyeOff, Cpu, Check } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Cpu,
+  Database,
+  Download,
+  Eye,
+  EyeOff,
+  FolderOpen,
+  FolderPlus,
+  HardDrive,
+  Info,
+  RotateCcw,
+  Upload,
+} from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
 import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
+import {
+  createLibraryFromDialog,
+  getLibrarySettingsState,
+  migrateCurrentDataToLibraryFromDialog,
+  openLibraryFromDialog,
+  revealActiveLibraryFolder,
+  useLocalAppDataLibrary,
+  type LibrarySettingsState,
+} from "@/lib/librarySettings";
 import type { Prompt } from "@/types";
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -99,9 +122,41 @@ export function Settings() {
   const [importStatus, setImportStatus] = useState<{ done: number; total: number; finished: boolean } | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult | null>(null);
   const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
+  const [libraryState, setLibraryState] = useState<LibrarySettingsState | null>(null);
+  const [libraryBusy, setLibraryBusy] = useState<string | null>(null);
+  const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
 
 
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+  useEffect(() => {
+    fetchStats();
+    getLibrarySettingsState().then(setLibraryState).catch(() => {});
+  }, [fetchStats]);
+
+  const refreshLibraryState = async () => {
+    setLibraryState(await getLibrarySettingsState());
+  };
+
+  const runLibraryAction = async (label: string, action: () => Promise<string | null | { restartRequired: true }>) => {
+    setLibraryBusy(label);
+    setLibraryError(null);
+    setLibraryMessage(null);
+    try {
+      const result = await action();
+      if (result) {
+        setLibraryMessage(
+          typeof result === "string"
+            ? "Library package created. Use Migrate Current Data to make it active with your current work."
+            : "Library selected. Restart Framecraft to use it."
+        );
+      }
+      await refreshLibraryState();
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : "Library action failed.");
+    } finally {
+      setLibraryBusy(null);
+    }
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -127,6 +182,32 @@ export function Settings() {
     } finally {
       setDiagnosticsRunning(false);
     }
+  };
+
+  const handleCreateLibrary = () => {
+    runLibraryAction("create", createLibraryFromDialog);
+  };
+
+  const handleOpenLibrary = () => {
+    runLibraryAction("open", openLibraryFromDialog);
+  };
+
+  const handleMigrateLibrary = () => {
+    runLibraryAction("migrate", migrateCurrentDataToLibraryFromDialog);
+  };
+
+  const handleRevealLibrary = () => {
+    runLibraryAction("reveal", async () => {
+      await revealActiveLibraryFolder();
+      return null;
+    });
+  };
+
+  const handleUseLocalLibrary = () => {
+    useLocalAppDataLibrary();
+    setLibraryMessage("Local app-data storage selected. Restart Framecraft to use it.");
+    setLibraryError(null);
+    refreshLibraryState();
   };
 
   const handleImport = () => {
@@ -238,6 +319,86 @@ export function Settings() {
             <InfoRow label="TOTAL RESULTS" value={stats.total_results} />
             <InfoRow label="TOTAL RECIPES" value={stats.total_recipes} />
             <InfoRow label="WINNERS" value={stats.total_winners} />
+          </div>
+        </Section>
+
+        <Section label="LIBRARY">
+          <div
+            className="flex flex-col gap-4 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2 min-w-0">
+                <HardDrive size={12} className="text-dim mt-0.5 shrink-0" />
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="font-sans text-[11px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
+                  <span className="font-mono text-[10px] text-muted leading-relaxed">
+                    Use a `.framecraftlib` folder to move work between machines or store it on shared storage.
+                  </span>
+                </div>
+              </div>
+              {libraryState?.selection.mode === "portable" && (
+                <span className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-white/50"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+                  Restart required
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <InfoRow label="MODE" value={libraryState?.selection.mode === "portable" ? "Portable library" : "Local app data"} />
+              <InfoRow label="PATH" value={libraryState?.paths.baseDir ?? "Checking..."} />
+              <InfoRow
+                label="STATUS"
+                value={
+                  libraryState?.validation
+                    ? libraryState.validation.ok
+                      ? "Valid library package"
+                      : libraryState.validation.errors.join(", ")
+                    : libraryState?.nativeAvailable
+                      ? "Local default"
+                      : "Native app required"
+                }
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="ghost" size="sm" onClick={handleMigrateLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <Upload size={11} />
+                {libraryBusy === "migrate" ? "Migrating..." : "Migrate Current Data"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleOpenLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <FolderOpen size={11} />
+                {libraryBusy === "open" ? "Opening..." : "Open Library"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleCreateLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <FolderPlus size={11} />
+                {libraryBusy === "create" ? "Creating..." : "Create Package"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <FolderOpen size={11} />
+                Reveal Folder
+              </Button>
+            </div>
+
+            <Button variant="ghost" size="sm" onClick={handleUseLocalLibrary}
+              disabled={!!libraryBusy || libraryState?.selection.mode !== "portable"}>
+              <RotateCcw size={10} />
+              Use Local App Data
+            </Button>
+
+            {libraryMessage && (
+              <div className="font-mono text-[10px] text-white/50">
+                <Check size={10} className="inline mr-1 text-white/40" />
+                {libraryMessage}
+              </div>
+            )}
+            {libraryError && (
+              <div className="font-mono text-[10px] text-red/70 leading-relaxed">
+                <AlertTriangle size={10} className="inline mr-1" />
+                {libraryError}
+              </div>
+            )}
           </div>
         </Section>
 

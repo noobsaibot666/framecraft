@@ -7,9 +7,12 @@
     "dev": "vite",
     "dev:network": "TAURI_DEV_HOST=0.0.0.0 vite",
     "build": "tsc && vite build",
+    "check": "npm test && tsc --noEmit && npm run build",
     "test": "vitest run",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build": "tauri build",
+    "windows:rc": "powershell -ExecutionPolicy Bypass -File scripts/windows-rc-build.ps1"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

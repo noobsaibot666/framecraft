@@ -9,7 +9,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults } from "@/lib/db";
-import { imageDisplaySrc } from "@/lib/fileStore";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -78,7 +78,7 @@ function EmptyState({
 
 function ResultThumb({ result, promptId }: { result: Result & { prompt_title: string }; promptId: string }) {
   const navigate = useNavigate();
-  const thumb = imageDisplaySrc(result.thumbnail_path);
+  const thumb = useImageDisplaySrc(result.thumbnail_path);
   return (
     <button
       onClick={() => navigate(`/library/${promptId}`)}
@@ -86,8 +86,8 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
       style={{ borderBottom: "var(--border-dim)" }}
     >
       <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center" style={{ border: "var(--border-dim)" }}>
-        {thumb
-          ? <img src={thumb} alt="" className="w-full h-full object-cover" />
+        {thumb.src
+          ? <img src={thumb.src} alt="" className="w-full h-full object-cover" onError={thumb.onError} />
           : <ImageOff size={12} className="text-dim/30" />
         }
       </div>

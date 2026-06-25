@@ -6,6 +6,8 @@ import {
   saveReferenceImage,
   readImageAsDataUrl,
   toDisplaySrc,
+  isDirectImageSrc,
+  isStoredImagePath,
   deleteResultFiles,
   deleteReferenceFiles,
 } from "./fileStore";
@@ -107,6 +109,23 @@ describe("toDisplaySrc — dev mode", () => {
     expect(tauriImageDisplaySrc("/Users/alan/image.jpg")).toBe("asset://localhost/%2FUsers%2Falan%2Fimage.jpg");
 
     vi.unstubAllGlobals();
+  });
+});
+
+describe("image source classifiers", () => {
+  it("treats URLs and data as direct image sources", () => {
+    expect(isDirectImageSrc(JPEG_DATA_URL)).toBe(true);
+    expect(isDirectImageSrc("blob:http://localhost/image")).toBe(true);
+    expect(isDirectImageSrc("asset://localhost/image")).toBe(true);
+    expect(isDirectImageSrc("http://asset.localhost/image")).toBe(true);
+    expect(isDirectImageSrc("https://asset.localhost/image")).toBe(true);
+  });
+
+  it("treats Windows and POSIX file paths as stored image paths", () => {
+    expect(isStoredImagePath("V:/04_SHARED/03_FRAMECRAFT/lib.framecraftlib/results/a.jpg")).toBe(true);
+    expect(isStoredImagePath("C:\\Users\\cyrus\\Pictures\\a.jpg")).toBe(true);
+    expect(isStoredImagePath("/Users/alan/Pictures/a.jpg")).toBe(true);
+    expect(isStoredImagePath(JPEG_DATA_URL)).toBe(false);
   });
 });
 

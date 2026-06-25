@@ -11,7 +11,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
-import { imageDisplaySrc } from "@/lib/fileStore";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
@@ -41,6 +41,12 @@ function RatingDots({ rating, label }: { rating: number; label?: string }) {
       <span className="font-mono text-[10px] text-dim">{rating}/5</span>
     </div>
   );
+}
+
+function ResultImage({ src }: { src?: string }) {
+  const image = useImageDisplaySrc(src);
+  if (!image.src) return <ImageOff size={16} className="text-dim/30" />;
+  return <img src={image.src} alt="Result" className="w-full h-full object-cover" onError={image.onError} />;
 }
 
 export function PromptDetail() {
@@ -259,9 +265,7 @@ export function PromptDetail() {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3">
-                {results.map((r) => {
-                  const thumb = imageDisplaySrc(r.thumbnail_path);
-                  return (
+                {results.map((r) => (
                   <div
                     key={r.id}
                     className="group flex flex-col gap-2 rounded-card overflow-hidden"
@@ -269,11 +273,7 @@ export function PromptDetail() {
                   >
                     {/* Thumbnail */}
                     <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
-                      {thumb ? (
-                        <img src={thumb} alt="Result" className="w-full h-full object-cover" />
-                      ) : (
-                        <ImageOff size={16} className="text-dim/30" />
-                      )}
+                      <ResultImage src={r.thumbnail_path} />
                       <button
                         type="button"
                         onClick={async () => {
@@ -305,7 +305,7 @@ export function PromptDetail() {
                       )}
                     </div>
                   </div>
-                )})}
+                ))}
               </div>
             )}
           </div>

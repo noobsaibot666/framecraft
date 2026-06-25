@@ -129,17 +129,26 @@ export function toDisplaySrc(filePath: string | undefined): string | undefined {
 
 export function imageDisplaySrc(src: string | undefined): string | undefined {
   if (!src) return undefined;
-  if (
+  if (isDirectImageSrc(src)) {
+    return src;
+  }
+  return toDisplaySrc(src);
+}
+
+export function isDirectImageSrc(src: string | undefined): boolean {
+  if (!src) return false;
+  return (
     src.startsWith("data:") ||
     src.startsWith("blob:") ||
     src.startsWith("http://") ||
     src.startsWith("https://") ||
     src.startsWith("asset:") ||
     src.startsWith("tauri://")
-  ) {
-    return src;
-  }
-  return toDisplaySrc(src);
+  );
+}
+
+export function isStoredImagePath(src: string | undefined): boolean {
+  return Boolean(src && !isDirectImageSrc(src));
 }
 
 export async function deleteResultFiles(resultId: string): Promise<void> {

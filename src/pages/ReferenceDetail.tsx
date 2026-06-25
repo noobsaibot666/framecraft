@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check } from "lucide-react";
-import { imageDisplaySrc, saveReferenceImage } from "@/lib/fileStore";
+import { saveReferenceImage } from "@/lib/fileStore";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import {
@@ -130,6 +131,7 @@ function ImageDropZone({ src, onFile }: {
   onFile: (dataUrl: string, thumb: string) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const image = useImageDisplaySrc(src);
 
   const processFile = (file: File) => {
     const reader = new FileReader();
@@ -170,9 +172,9 @@ function ImageDropZone({ src, onFile }: {
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
     >
-      {src ? (
+      {image.src ? (
         <>
-          <img src={src} alt="reference" className="w-full h-full object-contain" />
+          <img src={image.src} alt="reference" className="w-full h-full object-contain" onError={image.onError} />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
             style={{ background: "rgba(0,0,0,0.6)" }}>
             <span className="font-mono text-[10px] text-white/70 tracking-widest uppercase">Replace image</span>
@@ -399,7 +401,7 @@ export function ReferenceDetail() {
           <div className="flex flex-col gap-2">
             <FieldLabel>IMAGE</FieldLabel>
             <ImageDropZone
-              src={imageDisplaySrc(fileData)}
+              src={fileData}
               onFile={(full, thumb) => {
                 setFileData(full);
                 setThumbData(thumb);

@@ -25,17 +25,18 @@ import {
   getWeakestDimension,
 } from "@/lib/comparisons";
 import { createPrompt, createResult } from "@/lib/db";
-import { imageDisplaySrc, saveResultImage } from "@/lib/fileStore";
+import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject } from "@/lib/projects";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type { ComparisonSession, ComparisonResult } from "@/types";
 
 // ─── Score bar ────────────────────────────────────────────────
 
 function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: string; className: string }) {
-  const [failed, setFailed] = useState(false);
-  const displaySrc = failed ? undefined : imageDisplaySrc(src);
+  const image = useImageDisplaySrc(src);
+  const displaySrc = image.src;
   if (!displaySrc) {
     return (
       <div className={cn(className, "flex items-center justify-center bg-black/30")}>
@@ -43,7 +44,7 @@ function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: str
       </div>
     );
   }
-  return <img src={displaySrc} alt={alt} className={className} onError={() => setFailed(true)} />;
+  return <img src={displaySrc} alt={alt} className={className} onError={image.onError} />;
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {

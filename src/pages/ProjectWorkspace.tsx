@@ -22,8 +22,9 @@ import {
 } from "@/lib/projects";
 import { createResult, getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
-import { imageDisplaySrc, saveResultImage } from "@/lib/fileStore";
+import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -115,8 +116,8 @@ function Panel({ title, count, children, action }: {
 }
 
 function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; className: string }) {
-  const [failed, setFailed] = useState(false);
-  const displaySrc = failed ? undefined : imageDisplaySrc(src);
+  const image = useImageDisplaySrc(src);
+  const displaySrc = image.src;
   if (!displaySrc) {
     return (
       <div className={cn(className, "flex items-center justify-center")} style={{ background: "rgba(255,255,255,0.05)" }}>
@@ -124,7 +125,7 @@ function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; c
       </div>
     );
   }
-  return <img src={displaySrc} alt={alt} className={className} onError={() => setFailed(true)} />;
+  return <img src={displaySrc} alt={alt} className={className} onError={image.onError} />;
 }
 
 // ─── Linked prompt row ────────────────────────────────────────

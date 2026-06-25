@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
+import { LibraryLockGuard } from "@/components/LibraryLockGuard";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const PromptLibrary = lazy(() => import("@/pages/PromptLibrary").then((m) => ({ default: m.PromptLibrary })));
@@ -51,37 +52,39 @@ function routeElement(element: ReactNode) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={routeElement(<Dashboard />)} />
-            <Route path="/library" element={routeElement(<PromptLibrary />)} />
-            <Route path="/library/:id" element={routeElement(<PromptDetail />)} />
-            <Route path="/craft" element={routeElement(<CraftPrompt />)} />
-            <Route path="/craft/:id" element={routeElement(<CraftPrompt />)} />
-            <Route path="/recipes" element={routeElement(<RecipeLibrary />)} />
-            <Route path="/recipes/:id/apply" element={routeElement(<RecipeApply />)} />
-            <Route path="/queue" element={routeElement(<GenerationQueue />)} />
-            <Route path="/import" element={routeElement(<ManualImport />)} />
-            <Route path="/srefs" element={routeElement(<SREFLibrary />)} />
-            <Route path="/results/:promptId" element={routeElement(<ResultReview />)} />
-            <Route path="/analyze" element={routeElement(<ImageAnalyzer />)} />
-            <Route path="/brief" element={routeElement(<BriefAnalyzer />)} />
-            <Route path="/frames" element={routeElement(<VideoFrames />)} />
-            <Route path="/references" element={routeElement(<ReferenceLibrary />)} />
-            <Route path="/references/:id" element={routeElement(<ReferenceDetail />)} />
-            <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
-            <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
-            <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />
-            <Route path="/compare" element={routeElement(<ComparisonLab />)} />
-            <Route path="/compare/:projectId" element={routeElement(<ComparisonLab />)} />
-            <Route path="/projects/:id/board" element={routeElement(<ProjectBoard />)} />
-            <Route path="/projects/:id/assistant" element={routeElement(<ProjectAssistant />)} />
-            <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
-            <Route path="/settings" element={routeElement(<Settings />)} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <LibraryLockGuard>
+        <BrowserRouter>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={routeElement(<Dashboard />)} />
+              <Route path="/library" element={routeElement(<PromptLibrary />)} />
+              <Route path="/library/:id" element={routeElement(<PromptDetail />)} />
+              <Route path="/craft" element={routeElement(<CraftPrompt />)} />
+              <Route path="/craft/:id" element={routeElement(<CraftPrompt />)} />
+              <Route path="/recipes" element={routeElement(<RecipeLibrary />)} />
+              <Route path="/recipes/:id/apply" element={routeElement(<RecipeApply />)} />
+              <Route path="/queue" element={routeElement(<GenerationQueue />)} />
+              <Route path="/import" element={routeElement(<ManualImport />)} />
+              <Route path="/srefs" element={routeElement(<SREFLibrary />)} />
+              <Route path="/results/:promptId" element={routeElement(<ResultReview />)} />
+              <Route path="/analyze" element={routeElement(<ImageAnalyzer />)} />
+              <Route path="/brief" element={routeElement(<BriefAnalyzer />)} />
+              <Route path="/frames" element={routeElement(<VideoFrames />)} />
+              <Route path="/references" element={routeElement(<ReferenceLibrary />)} />
+              <Route path="/references/:id" element={routeElement(<ReferenceDetail />)} />
+              <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
+              <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
+              <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />
+              <Route path="/compare" element={routeElement(<ComparisonLab />)} />
+              <Route path="/compare/:projectId" element={routeElement(<ComparisonLab />)} />
+              <Route path="/projects/:id/board" element={routeElement(<ProjectBoard />)} />
+              <Route path="/projects/:id/assistant" element={routeElement(<ProjectAssistant />)} />
+              <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
+              <Route path="/settings" element={routeElement(<Settings />)} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </LibraryLockGuard>
     </QueryClientProvider>
   );
 }

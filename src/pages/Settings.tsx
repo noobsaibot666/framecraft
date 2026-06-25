@@ -25,6 +25,7 @@ import {
   createLibraryFromDialog,
   exportActiveLibraryFromDialog,
   formatLibraryActionError,
+  getActiveSharedIngestStatus,
   getLibrarySettingsState,
   isRepairableLibraryPackageError,
   migrateCurrentDataToLibraryFromDialog,
@@ -32,10 +33,12 @@ import {
   processActiveSharedIngestInbox,
   repairActiveLibraryDatabaseSchema,
   revealActiveLibraryFolder,
+  retryActiveFailedSharedIngestJobs,
   restoreLibraryFromDialog,
   useLocalAppDataLibrary,
   type LibrarySettingsState,
 } from "@/lib/librarySettings";
+import type { SharedIngestStatus } from "@/lib/sharedIngest";
 import type { Prompt } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -134,6 +137,7 @@ export function Settings() {
   const [libraryBusy, setLibraryBusy] = useState<string | null>(null);
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [sharedIngestStatus, setSharedIngestStatus] = useState<SharedIngestStatus | null>(null);
 
   const canRepairLibraryPackage =
     libraryState?.selection.mode === "portable" &&
@@ -141,11 +145,13 @@ export function Settings() {
 
   useEffect(() => {
     fetchStats();
-    getLibrarySettingsState().then(setLibraryState).catch(() => {});
+    refreshLibraryState();
   }, [fetchStats]);
 
   const refreshLibraryState = async () => {
-    setLibraryState(await getLibrarySettingsState());
+    const state = await getLibrarySettingsState();
+    setLibraryState(state);
+    setSharedIngestStatus(await getActiveSharedIngestStatus().catch(() => null));
   };
 
   const runLibraryAction = async (
@@ -168,6 +174,7 @@ export function Settings() {
         );
       }
       await refreshLibraryState();
+      fetchStats();
     } catch (error) {
       setLibraryError(formatLibraryActionError(error));
     } finally {
@@ -242,6 +249,17 @@ export function Settings() {
       async () => {
         const result = await processActiveSharedIngestInbox();
         return `Applied ${result.applied}, skipped ${result.skipped}, failed ${result.failed}.`;
+      },
+      (message) => String(message)
+    );
+  };
+
+  const handleRetryFailedSharedIngest = () => {
+    runLibraryAction(
+      "retry-shared-ingest",
+      async () => {
+        const result = await retryActiveFailedSharedIngestJobs();
+        return `Retried ${result.retried}, skipped ${result.skipped}.`;
       },
       (message) => String(message)
     );
@@ -413,6 +431,34 @@ export function Settings() {
               />
             </div>
 
+            {libraryState?.selection.mode === "portable" && sharedIngestStatus && (
+              <div
+                className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-sm"
+                style={{ border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="system-label">PENDING</span>
+                  <span className="font-mono text-[16px] text-soft-white">{sharedIngestStatus.pending}</span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="system-label">FAILED</span>
+                  <span className={cn("font-mono text-[16px]", sharedIngestStatus.failed ? "text-red/80" : "text-soft-white")}>
+                    {sharedIngestStatus.failed}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="system-label">APPLIED</span>
+                  <span className="font-mono text-[16px] text-soft-white">{sharedIngestStatus.applied}</span>
+                </div>
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="system-label">LAST SYNC</span>
+                  <span className="font-mono text-[10px] text-readable break-words">
+                    {sharedIngestStatus.lastAppliedAt ? new Date(sharedIngestStatus.lastAppliedAt).toLocaleString() : "No jobs applied"}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {canRepairLibraryPackage && (
               <div
                 className="flex flex-col gap-3 p-3 rounded-sm"
@@ -473,6 +519,15 @@ export function Settings() {
               >
                 <Database size={11} />
                 {libraryBusy === "process-shared-ingest" ? "Processing..." : "Process Shared Inbox"}
+              </Button>
+              <Button
+                variant={sharedIngestStatus?.failed ? "primary" : "ghost"}
+                size="sm"
+                onClick={handleRetryFailedSharedIngest}
+                disabled={!!libraryBusy || !sharedIngestStatus?.failed || libraryState?.selection.mode !== "portable"}
+              >
+                <RotateCcw size={11} />
+                {libraryBusy === "retry-shared-ingest" ? "Retrying..." : "Retry Failed Jobs"}
               </Button>
               <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <FolderOpen size={11} />

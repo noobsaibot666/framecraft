@@ -94,6 +94,18 @@ export interface ProcessSharedIngestResult {
   skipped: number;
 }
 
+export interface SharedIngestStatus {
+  pending: number;
+  failed: number;
+  applied: number;
+  lastAppliedAt: string | null;
+}
+
+export interface RetryFailedSharedIngestResult {
+  retried: number;
+  skipped: number;
+}
+
 export function createReferenceImportJob(input: {
   jobId: string;
   referenceId: string;
@@ -224,9 +236,9 @@ export async function processSharedIngestInbox(input: {
   await input.fs.mkdir(input.paths.stagingDir);
   await ensureSyncDirs(input.paths, input.fs);
   const result: ProcessSharedIngestResult = { applied: 0, failed: 0, skipped: 0 };
-  const names = (await input.fs.readDir(input.paths.inboxDir))
+  const names = await orderInboxNames(input.paths, input.fs, (await input.fs.readDir(input.paths.inboxDir))
     .filter((name) => name.endsWith(".json"))
-    .sort();
+    .sort());
 
   for (const name of names) {
     const inboxPath = `${input.paths.inboxDir}${name}`;
@@ -260,6 +272,95 @@ export async function processSharedIngestInbox(input: {
   }
 
   return result;
+}
+
+export async function getSharedIngestStatus(input: {
+  paths: LibraryPaths;
+  fs: SharedIngestFileSystem;
+}): Promise<SharedIngestStatus> {
+  await input.fs.mkdir(input.paths.inboxDir);
+  await ensureSyncDirs(input.paths, input.fs);
+  const pending = (await safeReadJsonNames(input.fs, input.paths.inboxDir)).length;
+  const failed = (await safeReadJsonNames(input.fs, input.paths.failedDir)).length;
+  const appliedNames = await safeReadJsonNames(input.fs, input.paths.appliedDir);
+  const appliedTimes = await Promise.all(appliedNames.map(async (name) => {
+    try {
+      const raw = await input.fs.readTextFile(`${input.paths.appliedDir}${name}`);
+      const parsed = JSON.parse(raw) as { applied_at?: unknown };
+      return typeof parsed.applied_at === "string" ? parsed.applied_at : null;
+    } catch {
+      return null;
+    }
+  }));
+  const sortedAppliedTimes = appliedTimes
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  const lastAppliedAt = sortedAppliedTimes.length ? sortedAppliedTimes[sortedAppliedTimes.length - 1] : null;
+  return { pending, failed, applied: appliedNames.length, lastAppliedAt };
+}
+
+export async function retryFailedSharedIngestJobs(input: {
+  paths: LibraryPaths;
+  fs: SharedIngestFileSystem;
+}): Promise<RetryFailedSharedIngestResult> {
+  await input.fs.mkdir(input.paths.inboxDir);
+  await ensureSyncDirs(input.paths, input.fs);
+  const names = await safeReadJsonNames(input.fs, input.paths.failedDir);
+  const result: RetryFailedSharedIngestResult = { retried: 0, skipped: 0 };
+
+  for (const name of names) {
+    const failedPath = `${input.paths.failedDir}${name}`;
+    try {
+      const raw = await input.fs.readTextFile(failedPath);
+      const failed = JSON.parse(raw) as { job?: unknown };
+      const jobRaw = typeof failed.job === "string" ? failed.job : JSON.stringify(failed.job);
+      if (!jobRaw) {
+        result.skipped += 1;
+        continue;
+      }
+      const job = JSON.parse(jobRaw) as SharedIngestJob;
+      const validation = validateSharedIngestJob(job);
+      if (!validation.ok) {
+        result.skipped += 1;
+        continue;
+      }
+      const inboxPath = `${input.paths.inboxDir}${job.job_id}.json`;
+      if (await input.fs.exists(inboxPath)) {
+        result.skipped += 1;
+        continue;
+      }
+      await input.fs.writeTextFile(inboxPath, jobRaw);
+      await input.fs.removeFile(failedPath);
+      result.retried += 1;
+    } catch {
+      result.skipped += 1;
+    }
+  }
+
+  return result;
+}
+
+async function safeReadJsonNames(fs: SharedIngestFileSystem, path: string): Promise<string[]> {
+  try {
+    return (await fs.readDir(path)).filter((name) => name.endsWith(".json")).sort();
+  } catch {
+    return [];
+  }
+}
+
+async function orderInboxNames(paths: LibraryPaths, fs: SharedIngestFileSystem, names: string[]): Promise<string[]> {
+  const weighted = await Promise.all(names.map(async (name) => {
+    try {
+      const raw = await fs.readTextFile(`${paths.inboxDir}${name}`);
+      const job = JSON.parse(raw) as SharedIngestJob;
+      return { name, weight: job.kind === "project_result.link" ? 1 : 0 };
+    } catch {
+      return { name, weight: 0 };
+    }
+  }));
+  return weighted
+    .sort((a, b) => a.weight - b.weight || a.name.localeCompare(b.name))
+    .map((item) => item.name);
 }
 
 async function applyJob(paths: LibraryPaths, fs: SharedIngestFileSystem, db: SharedIngestDb, job: SharedIngestJob): Promise<void> {

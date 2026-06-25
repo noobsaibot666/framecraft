@@ -27,7 +27,15 @@ import {
   validateLibraryPackageNative,
 } from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
-import { processSharedIngestInbox, type ProcessSharedIngestResult, type SharedIngestFileSystem } from "./sharedIngest";
+import {
+  getSharedIngestStatus,
+  processSharedIngestInbox,
+  retryFailedSharedIngestJobs,
+  type ProcessSharedIngestResult,
+  type RetryFailedSharedIngestResult,
+  type SharedIngestFileSystem,
+  type SharedIngestStatus,
+} from "./sharedIngest";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -211,6 +219,28 @@ export async function processActiveSharedIngestInbox(): Promise<ProcessSharedIng
     paths: state.paths,
     fs: await createTauriSharedIngestFileSystem(),
     db,
+  });
+}
+
+export async function getActiveSharedIngestStatus(): Promise<SharedIngestStatus | null> {
+  if (!isTauri()) return null;
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") return null;
+  if (state.validation && !state.validation.ok) return null;
+  return getSharedIngestStatus({
+    paths: state.paths,
+    fs: await createTauriSharedIngestFileSystem(),
+  });
+}
+
+export async function retryActiveFailedSharedIngestJobs(): Promise<RetryFailedSharedIngestResult> {
+  if (!isTauri()) throw new Error("Shared ingest retry can only run in the native app.");
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") throw new Error("Select a portable library before retrying failed shared ingest jobs.");
+  if (state.validation && !state.validation.ok) throw new Error(state.validation.errors.join(", "));
+  return retryFailedSharedIngestJobs({
+    paths: state.paths,
+    fs: await createTauriSharedIngestFileSystem(),
   });
 }
 

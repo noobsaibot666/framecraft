@@ -4,8 +4,10 @@ import {
   createProjectResultLinkJob,
   createReferenceImportJob,
   createResultImportJob,
+  getSharedIngestStatus,
   processSharedIngestInbox,
   publishSharedIngestJob,
+  retryFailedSharedIngestJobs,
   validateSharedIngestJob,
   type SharedIngestDb,
   type SharedIngestFileSystem,
@@ -283,5 +285,93 @@ describe("sharedIngest", () => {
 
     expect(result).toEqual({ applied: 0, failed: 1, skipped: 0 });
     expect(fs.files["/lib/Work.framecraftlib/sync/failed/job-link.json"]).toContain("Missing result: result-a");
+  });
+
+  it("processes result imports before project links from the same inbox batch", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const resultJob = createResultImportJob({
+      jobId: "job-result",
+      resultId: "result-a",
+      promptId: "prompt-1",
+      idempotencyKey: "result:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: "png",
+      result: { provider: "midjourney" },
+    });
+    const linkJob = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "result-a",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-link.json": JSON.stringify(linkJob),
+      "/lib/Work.framecraftlib/inbox/job-result.json": JSON.stringify(resultJob),
+      "/lib/Work.framecraftlib/staging/job-result/original.png": new Uint8Array([1]),
+      "/lib/Work.framecraftlib/staging/job-result/thumb.jpg": new Uint8Array([2]),
+    });
+    const db = createDb({ promptExists: true, projectExists: true, resultExists: false });
+    db.execute = vi.fn(async function (this: typeof db, sql: string, values: unknown[]) {
+      if (sql.includes("INTO results")) this.results.push(values);
+      if (sql.includes("INTO project_results")) this.projectResults.push(values);
+    });
+    db.select = vi.fn(async (sql: string) => {
+      if (sql.includes("FROM prompts")) return [{ id: "prompt-1" }];
+      if (sql.includes("FROM projects")) return [{ id: "project-1" }];
+      if (sql.includes("FROM results")) return db.results.length ? [{ id: "result-a" }] : [];
+      return [];
+    });
+
+    const result = await processSharedIngestInbox({ paths, fs, db });
+
+    expect(result).toEqual({ applied: 2, failed: 0, skipped: 0 });
+    expect(db.results).toHaveLength(1);
+    expect(db.projectResults).toEqual([["project-1", "result-a"]]);
+  });
+
+  it("reports pending failed applied counts and last applied time", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/a.json": "{}",
+      "/lib/Work.framecraftlib/inbox/b.json": "{}",
+      "/lib/Work.framecraftlib/sync/failed/c.json": "{}",
+      "/lib/Work.framecraftlib/sync/applied/a.json": JSON.stringify({ applied_at: "2026-06-25T10:00:00.000Z" }),
+      "/lib/Work.framecraftlib/sync/applied/b.json": JSON.stringify({ applied_at: "2026-06-25T11:00:00.000Z" }),
+    });
+
+    await expect(getSharedIngestStatus({ paths, fs })).resolves.toEqual({
+      pending: 2,
+      failed: 1,
+      applied: 2,
+      lastAppliedAt: "2026-06-25T11:00:00.000Z",
+    });
+  });
+
+  it("retries failed jobs by restoring their original job into inbox", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const originalJob = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "result-a",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/sync/failed/job-link.json": JSON.stringify({
+        reason: "Missing result: result-a",
+        source: "/lib/Work.framecraftlib/inbox/job-link.json",
+        job: JSON.stringify(originalJob),
+      }),
+    });
+
+    const result = await retryFailedSharedIngestJobs({ paths, fs });
+
+    expect(result).toEqual({ retried: 1, skipped: 0 });
+    expect(fs.files["/lib/Work.framecraftlib/inbox/job-link.json"]).toBe(JSON.stringify(originalJob));
+    expect(fs.removed).toContain("/lib/Work.framecraftlib/sync/failed/job-link.json");
   });
 });

@@ -74,6 +74,15 @@ pub fn release_active_lock(state: &ActiveLockState) {
     }
 }
 
+pub fn release_active_lock_on_run_event(state: &ActiveLockState, event: &tauri::RunEvent) {
+    if matches!(
+        event,
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+    ) {
+        release_active_lock(state);
+    }
+}
+
 fn acquire_library_lock(
     base_dir: &str,
     current: LibraryLockInfo,
@@ -245,6 +254,28 @@ mod tests {
         )
         .unwrap();
         release_active_lock(&state);
+
+        assert!(!root.join(ACTIVE_LIBRARY_LOCK).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn releases_active_state_lock_on_app_exit_event() {
+        let root = test_root("release-exit");
+        let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
+        let state = ActiveLockState::default();
+
+        acquire_library_lock(
+            root.to_str().unwrap(),
+            current,
+            DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
+                .unwrap()
+                .timestamp_millis(),
+            false,
+            &state,
+        )
+        .unwrap();
+        release_active_lock_on_run_event(&state, &tauri::RunEvent::Exit);
 
         assert!(!root.join(ACTIVE_LIBRARY_LOCK).exists());
         let _ = fs::remove_dir_all(root);

@@ -113,6 +113,10 @@ pub fn run() {
                 library_lock::release_active_lock(&state);
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            let state = app_handle.state::<library_lock::ActiveLockState>();
+            library_lock::release_active_lock_on_run_event(&state, &event);
+        });
 }

@@ -85,6 +85,29 @@ describe("toDisplaySrc — dev mode", () => {
 
     vi.unstubAllGlobals();
   });
+
+  it("does not expose raw absolute paths as image src values", async () => {
+    vi.stubGlobal("window", {});
+    const { imageDisplaySrc: importedImageDisplaySrc } = await import("./fileStore");
+
+    expect(importedImageDisplaySrc("/Users/alan/image.jpg")).toBeUndefined();
+    expect(importedImageDisplaySrc(JPEG_DATA_URL)).toBe(JPEG_DATA_URL);
+
+    vi.unstubAllGlobals();
+  });
+
+  it("returns converted asset URLs for absolute paths when Tauri conversion is available", async () => {
+    vi.stubGlobal("window", {
+      __TAURI_INTERNALS__: {
+        convertFileSrc: (path: string, protocol = "asset") => `${protocol}://localhost/${encodeURIComponent(path)}`,
+      },
+    });
+    const { imageDisplaySrc: tauriImageDisplaySrc } = await import("./fileStore");
+
+    expect(tauriImageDisplaySrc("/Users/alan/image.jpg")).toBe("asset://localhost/%2FUsers%2Falan%2Fimage.jpg");
+
+    vi.unstubAllGlobals();
+  });
 });
 
 describe("deleteResultFiles — dev mode", () => {

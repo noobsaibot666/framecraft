@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Copy, Check, Star, AlertTriangle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 import { getRecommendations, type RecommendationSet, type RecommendationContext } from "@/lib/recommendations";
+import { imageDisplaySrc } from "@/lib/fileStore";
 import { cn } from "@/lib/utils";
 
 // ─── Section wrapper ──────────────────────────────────────────
@@ -166,12 +167,13 @@ function ReferenceRow({
   reason: string;
 }) {
   const navigate = useNavigate();
+  const thumb = imageDisplaySrc(thumbnail);
   return (
     <button type="button" onClick={() => navigate(`/references/${id}`)}
       className="flex items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-white/5 transition-precise"
       style={{ border: "var(--border-dim)" }}>
-      {thumbnail ? (
-        <img src={thumbnail} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
+      {thumb ? (
+        <img src={thumb} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
       ) : (
         <div className="w-7 h-7 rounded-sm shrink-0" style={{ background: "rgba(255,255,255,0.05)" }} />
       )}

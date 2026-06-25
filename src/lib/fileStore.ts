@@ -133,6 +133,21 @@ export function toDisplaySrc(filePath: string | undefined): string | undefined {
   return convert(filePath);
 }
 
+export function imageDisplaySrc(src: string | undefined): string | undefined {
+  if (!src) return undefined;
+  if (
+    src.startsWith("data:") ||
+    src.startsWith("blob:") ||
+    src.startsWith("http://") ||
+    src.startsWith("https://") ||
+    src.startsWith("asset:") ||
+    src.startsWith("tauri://")
+  ) {
+    return src;
+  }
+  return toDisplaySrc(src);
+}
+
 export async function deleteResultFiles(resultId: string): Promise<void> {
   if (!isTauri) return;
   const { remove } = await import("@tauri-apps/plugin-fs");

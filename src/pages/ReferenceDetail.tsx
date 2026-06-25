@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check } from "lucide-react";
-import { saveReferenceImage, toDisplaySrc } from "@/lib/fileStore";
+import { imageDisplaySrc, saveReferenceImage } from "@/lib/fileStore";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import {
@@ -399,7 +399,7 @@ export function ReferenceDetail() {
           <div className="flex flex-col gap-2">
             <FieldLabel>IMAGE</FieldLabel>
             <ImageDropZone
-              src={toDisplaySrc(fileData) ?? fileData}
+              src={imageDisplaySrc(fileData)}
               onFile={(full, thumb) => {
                 setFileData(full);
                 setThumbData(thumb);

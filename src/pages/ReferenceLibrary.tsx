@@ -4,7 +4,7 @@ import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Up
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getReferences, searchReferences, deleteReference, createReference } from "@/lib/references";
-import { saveReferenceImage, toDisplaySrc } from "@/lib/fileStore";
+import { imageDisplaySrc, saveReferenceImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
 import { cn } from "@/lib/utils";
 import type { Reference, ReferenceKind, ReferenceFilters } from "@/types";
@@ -67,7 +67,7 @@ function StarRow({ value }: { value: number }) {
 }
 
 function Thumbnail({ src, title }: { src?: string; title: string }) {
-  const resolved = toDisplaySrc(src) ?? src;
+  const resolved = imageDisplaySrc(src);
   if (!resolved) {
     return (
       <div className="w-full aspect-video rounded-sm flex items-center justify-center"

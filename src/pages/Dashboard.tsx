@@ -9,7 +9,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults } from "@/lib/db";
-import { toDisplaySrc } from "@/lib/fileStore";
+import { imageDisplaySrc } from "@/lib/fileStore";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -78,7 +78,7 @@ function EmptyState({
 
 function ResultThumb({ result, promptId }: { result: Result & { prompt_title: string }; promptId: string }) {
   const navigate = useNavigate();
-  const thumb = toDisplaySrc(result.thumbnail_path) ?? result.thumbnail_path;
+  const thumb = imageDisplaySrc(result.thumbnail_path);
   return (
     <button
       onClick={() => navigate(`/library/${promptId}`)}

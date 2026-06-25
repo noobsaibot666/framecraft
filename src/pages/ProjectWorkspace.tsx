@@ -22,7 +22,7 @@ import {
 } from "@/lib/projects";
 import { getPrompts, getRecentResults, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
-import { toDisplaySrc } from "@/lib/fileStore";
+import { imageDisplaySrc } from "@/lib/fileStore";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -152,7 +152,7 @@ function RefRow({ ref: r, onRemove, onOpen }: {
   onRemove: () => void;
   onOpen: () => void;
 }) {
-  const thumbSrc = toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data;
+  const thumbSrc = imageDisplaySrc(r.thumbnail_data);
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm group"
       style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
@@ -270,11 +270,13 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
         className="h-7 px-3 font-mono text-[10px] text-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.15)" }} />
       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-        {items.map((r) => (
+        {items.map((r) => {
+          const thumb = imageDisplaySrc(r.thumbnail_data);
+          return (
           <div key={r.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm hover:bg-white/3 transition-precise">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              {toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data ? (
-                <img src={toDisplaySrc(r.thumbnail_data) ?? r.thumbnail_data} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
+              {thumb ? (
+                <img src={thumb} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
               ) : (
                 <div className="w-7 h-7 rounded-sm shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
                   <Image size={8} className="text-white/20" />
@@ -295,7 +297,7 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
               </button>
             )}
           </div>
-        ))}
+        )})}
         {items.length === 0 && (
           <span className="font-mono text-[9px] text-dim/40 px-2 py-2">No references found.</span>
         )}
@@ -330,7 +332,7 @@ function ResultPicker({ projectId, onAdd, onClose }: {
       <span className="font-mono text-[9px] text-dim/50">Recent results</span>
       <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
         {items.map((r) => {
-          const thumb = toDisplaySrc(r.thumbnail_path) ?? r.thumbnail_path;
+          const thumb = imageDisplaySrc(r.thumbnail_path);
           return (
             <button
               key={r.id}
@@ -658,7 +660,7 @@ export function ProjectWorkspace() {
             ) : (
               <div className="grid grid-cols-6 gap-2">
                 {linkedResults.map((r) => {
-                  const thumb = toDisplaySrc(r.thumbnail_path) ?? r.thumbnail_path;
+                  const thumb = imageDisplaySrc(r.thumbnail_path);
                   return (
                     <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
                       {thumb ? (

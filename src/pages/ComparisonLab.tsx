@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Star, AlertTriangle, Check, X,
-  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare,
+  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +24,10 @@ import {
   getBestDimension,
   getWeakestDimension,
 } from "@/lib/comparisons";
+import { createPrompt, createResult } from "@/lib/db";
+import { imageDisplaySrc, saveResultImage } from "@/lib/fileStore";
+import { fileToDataUrl } from "@/lib/imageUtils";
+import { addPromptToProject, addResultToProject } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import type { ComparisonSession, ComparisonResult } from "@/types";
 
@@ -75,6 +79,7 @@ function ComparisonSlot({
   const best = getBestDimension(r);
   const weak = getWeakestDimension(r);
   const hasDecision = slot.isWinner || slot.isRejected;
+  const thumb = imageDisplaySrc(r.thumbnail_path);
 
   return (
     <div
@@ -87,8 +92,8 @@ function ComparisonSlot({
     >
       {/* Image */}
       <div className="relative w-full aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
-        {r.thumbnail_path ? (
-          <img src={r.thumbnail_path} alt={r.prompt_title} className="w-full h-full object-cover" />
+        {thumb ? (
+          <img src={thumb} alt={r.prompt_title} className="w-full h-full object-cover" />
         ) : (
           <ImageOff size={20} className="text-dim/20" />
         )}
@@ -251,14 +256,28 @@ function ComparisonSlot({
 
 // ─── Empty slot ───────────────────────────────────────────────
 
-function EmptySlot({ onClick }: { onClick?: () => void }) {
+function EmptySlot({ onClick, onDrop, disabled = false }: {
+  onClick?: () => void;
+  onDrop?: (files: FileList) => void;
+  disabled?: boolean;
+}) {
   return (
     <div
-      className="flex flex-col items-center justify-center rounded-card cursor-pointer hover:bg-white/3 transition-precise aspect-[4/3]"
-      style={{ border: "2px dashed rgba(255,255,255,0.08)" }}
+      className={cn(
+        "flex flex-col items-center justify-center rounded-card transition-precise aspect-[4/3]",
+        disabled ? "cursor-wait opacity-60" : "cursor-pointer hover:bg-white/3"
+      )}
+      style={{ border: "2px dashed rgba(215,25,33,0.22)", background: "rgba(215,25,33,0.025)" }}
       onClick={onClick}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (!disabled && e.dataTransfer.files.length) onDrop?.(e.dataTransfer.files);
+      }}
     >
-      <span className="font-mono text-[9px] text-dim/30">+ Add result</span>
+      <Upload size={16} className="text-red/45 mb-2" />
+      <span className="font-mono text-[9px] text-red/60">{disabled ? "Importing image..." : "Drop image or click"}</span>
+      <span className="font-mono text-[8px] text-dim/35 mt-1">Creates a comparison result</span>
     </div>
   );
 }
@@ -274,6 +293,7 @@ function PickerRow({
   selected: boolean;
   onAdd: () => void;
 }) {
+  const thumb = imageDisplaySrc(result.thumbnail_path);
   return (
     <button
       type="button"
@@ -286,8 +306,8 @@ function PickerRow({
       style={{ border: "var(--border-dim)" }}
     >
       <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
-        {result.thumbnail_path
-          ? <img src={result.thumbnail_path} alt="" className="w-full h-full object-cover" />
+        {thumb
+          ? <img src={thumb} alt="" className="w-full h-full object-cover" />
           : <ImageOff size={10} className="text-dim/30" />
         }
       </div>
@@ -357,6 +377,7 @@ function SessionCard({ session, onOpen, onDelete }: {
 export function ComparisonLab() {
   const { projectId } = useParams<{ projectId?: string }>();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Session management
   const [sessions, setSessions] = useState<ComparisonSession[]>([]);
@@ -370,6 +391,8 @@ export function ComparisonLab() {
   // Active comparison state
   const [slots, setSlots] = useState<(SlotState | null)[]>([null, null, null, null]);
   const [layout, setLayout] = useState<"2up" | "4up">("2up");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   // Sync feedback
   const [synced, setSynced] = useState(false);
@@ -433,12 +456,12 @@ export function ComparisonLab() {
 
   // ── Add result to slot ─────────────────────────────────────
 
-  const handleAddResult = async (result: ComparisonResult) => {
+  const handleAddResult = async (result: ComparisonResult, persist = true) => {
     const firstEmpty = slots.findIndex((s) => s === null);
     if (firstEmpty === -1) return; // all slots filled
 
     let itemId: string | undefined;
-    if (activeSessionId) {
+    if (activeSessionId && persist) {
       itemId = await addItemToSession(activeSessionId, result.result_id, firstEmpty);
     }
 
@@ -447,6 +470,94 @@ export function ComparisonLab() {
       next[firstEmpty] = { result, itemId, notes: "", isWinner: false, isRejected: false };
       return next;
     });
+  };
+
+  const handleUploadFiles = async (files: FileList | File[]) => {
+    const file = Array.from(files).find((f) => f.type.startsWith("image/"));
+    if (!file || uploading) return;
+    if (slots.every(Boolean)) {
+      setUploadError("All comparison slots are full. Remove one before adding another image.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError("");
+    try {
+      const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ") || "Comparison upload";
+      const dataUrl = await fileToDataUrl(file);
+      let result: ComparisonResult;
+
+      if (projectId) {
+        const promptId = await createPrompt({
+          title: `Comparison upload — ${title}`,
+          provider: "midjourney",
+          prompt_text: `Uploaded comparison image: ${title}`,
+          tags: ["comparison-upload"],
+        });
+        await addPromptToProject(projectId, promptId);
+
+        const resultId = crypto.randomUUID().replace(/-/g, "");
+        const saved = await saveResultImage(resultId, dataUrl);
+        await createResult({
+          id: resultId,
+          prompt_id: promptId,
+          file_path: saved.filePath,
+          thumbnail_path: saved.thumbPath,
+          provider: "midjourney",
+          notes: `Imported in Comparison Lab from ${file.name}`,
+        });
+        await addResultToProject(projectId, resultId);
+
+        result = {
+          result_id: resultId,
+          prompt_id: promptId,
+          prompt_title: title,
+          prompt_provider: "midjourney",
+          prompt_version: 1,
+          thumbnail_path: saved.thumbPath,
+          file_path: saved.filePath,
+          score_overall: 0,
+          score_realism: 0,
+          score_brand_fit: 0,
+          score_composition: 0,
+          score_lighting: 0,
+          score_ai_risk: 0,
+          is_winner: false,
+          is_failed: false,
+          artifacts: [],
+          created_at: new Date().toISOString(),
+        };
+        setAvailableResults((prev) => [result, ...prev.filter((r) => r.result_id !== result.result_id)]);
+      } else {
+        const id = `local_${crypto.randomUUID().replace(/-/g, "")}`;
+        result = {
+          result_id: id,
+          prompt_id: id,
+          prompt_title: title,
+          prompt_provider: "midjourney",
+          prompt_version: 1,
+          thumbnail_path: dataUrl,
+          file_path: dataUrl,
+          score_overall: 0,
+          score_realism: 0,
+          score_brand_fit: 0,
+          score_composition: 0,
+          score_lighting: 0,
+          score_ai_risk: 0,
+          is_winner: false,
+          is_failed: false,
+          artifacts: [],
+          created_at: new Date().toISOString(),
+        };
+      }
+
+      await handleAddResult(result, Boolean(projectId));
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : "Failed to import image.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleRemoveSlot = async (index: number) => {
@@ -599,11 +710,37 @@ export function ComparisonLab() {
         </div>
       }
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
+      />
       <div className="flex gap-5 min-w-0">
 
         {/* Left: result picker */}
-        {availableResults.length > 0 && (
+        {(availableResults.length > 0 || projectId) && (
           <div className="flex flex-col gap-3 w-56 shrink-0">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files.length) handleUploadFiles(e.dataTransfer.files);
+              }}
+              disabled={uploading}
+              className="flex flex-col items-center justify-center gap-1.5 rounded-card py-4 transition-precise disabled:opacity-60"
+              style={{ border: "2px dashed rgba(215,25,33,0.24)", background: "rgba(215,25,33,0.035)" }}
+            >
+              <Upload size={15} className="text-red/55" />
+              <span className="font-mono text-[9px] text-red/65">{uploading ? "Importing..." : "Drop image or browse"}</span>
+              <span className="font-mono text-[8px] text-dim/35">Adds to comparison</span>
+            </button>
+            {uploadError && (
+              <span className="font-mono text-[9px] text-red/65 leading-snug">{uploadError}</span>
+            )}
             <span className="system-label">PROJECT RESULTS</span>
             {loadingResults ? (
               <span className="font-mono text-[9px] text-dim/30">Loading…</span>
@@ -644,7 +781,12 @@ export function ComparisonLab() {
                   onApplyDecision={() => handleApplyDecision()}
                 />
               ) : (
-                <EmptySlot key={i} />
+                <EmptySlot
+                  key={i}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleUploadFiles}
+                  disabled={uploading}
+                />
               )
             )}
           </div>

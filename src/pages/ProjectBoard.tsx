@@ -36,10 +36,12 @@ function CreateForm({
   projectId,
   onCreated,
   initialOpen = false,
+  compact = false,
 }: {
   projectId: string;
   onCreated: (d: Deliverable) => void;
   initialOpen?: boolean;
+  compact?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState("");
@@ -85,7 +87,10 @@ function CreateForm({
   }
 
   return (
-    <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+    <div className="flex flex-col gap-2 p-3 rounded-sm" style={{
+      border: "1px solid rgba(215,25,33,0.28)",
+      background: compact ? "rgba(215,25,33,0.035)" : "var(--surface-card)",
+    }}>
       <input
         autoFocus
         value={title}
@@ -341,7 +346,7 @@ function BoardColumn({
   onCraftPrompt: (d: Deliverable) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 min-w-[200px] w-[200px] shrink-0">
+    <div className="flex flex-col gap-2 min-w-0">
       {/* Column header */}
       <div className="flex items-center justify-between px-1 mb-1">
         <span className="system-label">{STATUS_LABEL[status]}</span>
@@ -367,8 +372,36 @@ function BoardColumn({
 
       {/* Add new — only in PLANNED */}
       {status === "planned" && (
-        <CreateForm projectId={projectId} onCreated={onCreated} />
+        <CreateForm projectId={projectId} onCreated={onCreated} compact />
       )}
+    </div>
+  );
+}
+
+function WorkflowGuide({ activeStep }: { activeStep: number }) {
+  const steps = [
+    { label: "1. Plan", body: "Create deliverables" },
+    { label: "2. Prompt", body: "Craft prompt drafts" },
+    { label: "3. Result", body: "Attach reviewed images" },
+    { label: "4. Final", body: "Move approved work" },
+  ];
+
+  return (
+    <div className="grid grid-cols-4 gap-2 mb-4">
+      {steps.map((step, index) => {
+        const active = index === activeStep;
+        return (
+          <div key={step.label}
+            className="flex flex-col gap-1 px-3 py-2 rounded-sm"
+            style={{
+              border: active ? "1px solid rgba(215,25,33,0.38)" : "var(--border-dim)",
+              background: active ? "rgba(215,25,33,0.055)" : "rgba(255,255,255,0.025)",
+            }}>
+            <span className={cn("font-mono text-[8px] tracking-widest uppercase", active ? "text-red/70" : "text-dim/45")}>{step.label}</span>
+            <span className="font-sans text-[11px] text-soft-white/75 truncate">{step.body}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -384,6 +417,7 @@ export function ProjectBoard() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [loading, setLoading] = useState(true);
   const [showTopCreate, setShowTopCreate] = useState(false);
+  const [createdTitle, setCreatedTitle] = useState("");
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -402,6 +436,8 @@ export function ProjectBoard() {
 
   const handleCreated = (d: Deliverable) => {
     setDeliverables((prev) => [...prev, d]);
+    setCreatedTitle(d.title);
+    setTimeout(() => setCreatedTitle(""), 2400);
   };
 
   const handleAdvance = async (deliverableId: string) => {
@@ -487,6 +523,12 @@ export function ProjectBoard() {
         </div>
       }
     >
+      <WorkflowGuide activeStep={deliverables.length ? 1 : 0} />
+      {createdTitle && (
+        <div className="mb-4 saved-chip">
+          <Check size={10} /> Deliverable created: {createdTitle}
+        </div>
+      )}
       {showTopCreate && (
         <div className="mb-4 max-w-[360px]">
           <CreateForm
@@ -500,18 +542,18 @@ export function ProjectBoard() {
         </div>
       )}
       {deliverables.length === 0 ? (
-        <div className="flex flex-col gap-6">
+        <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
           <div className="flex flex-col items-center justify-center py-16 gap-3"
-            style={{ border: "2px dashed rgba(255,255,255,0.06)", borderRadius: "8px" }}>
-            <span className="font-mono text-[10px] text-dim/30">No deliverables yet.</span>
-            <span className="font-mono text-[9px] text-dim/20">Add one in the PLANNED column below.</span>
+            style={{ border: "2px dashed rgba(215,25,33,0.18)", borderRadius: "8px", background: "rgba(215,25,33,0.025)" }}>
+            <span className="font-mono text-[10px] text-red/60">Start with one planned deliverable.</span>
+            <span className="font-mono text-[9px] text-dim/40">Name the output you need, then add format or ratio if useful.</span>
           </div>
-          <div className="w-[200px]">
-            <CreateForm projectId={id!} onCreated={handleCreated} />
+          <div>
+            <CreateForm initialOpen projectId={id!} onCreated={handleCreated} compact />
           </div>
         </div>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-4 -mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4 min-w-0">
           {STATUS_ORDER.map((status) => (
             <BoardColumn
               key={status}

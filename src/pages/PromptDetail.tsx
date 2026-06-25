@@ -11,6 +11,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
+import { imageDisplaySrc } from "@/lib/fileStore";
 import { addToQueue } from "@/lib/queue";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
@@ -258,7 +259,9 @@ export function PromptDetail() {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3">
-                {results.map((r) => (
+                {results.map((r) => {
+                  const thumb = imageDisplaySrc(r.thumbnail_path);
+                  return (
                   <div
                     key={r.id}
                     className="group flex flex-col gap-2 rounded-card overflow-hidden"
@@ -266,8 +269,8 @@ export function PromptDetail() {
                   >
                     {/* Thumbnail */}
                     <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
-                      {r.thumbnail_path ? (
-                        <img src={r.thumbnail_path} alt="Result" className="w-full h-full object-cover" />
+                      {thumb ? (
+                        <img src={thumb} alt="Result" className="w-full h-full object-cover" />
                       ) : (
                         <ImageOff size={16} className="text-dim/30" />
                       )}
@@ -302,7 +305,7 @@ export function PromptDetail() {
                       )}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>

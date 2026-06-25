@@ -304,9 +304,15 @@ export async function loadProjectResults(projectId: string): Promise<ComparisonR
        r.artifacts,
        r.created_at
      FROM results r
-     JOIN project_prompts pp ON pp.prompt_id = r.prompt_id
      JOIN prompts p ON p.id = r.prompt_id
-     WHERE pp.project_id = $1
+     WHERE EXISTS (
+       SELECT 1 FROM project_results pr
+       WHERE pr.project_id = $1 AND pr.result_id = r.id
+     )
+     OR EXISTS (
+       SELECT 1 FROM project_prompts pp
+       WHERE pp.project_id = $1 AND pp.prompt_id = r.prompt_id
+     )
      ORDER BY r.created_at DESC`,
     [projectId]
   )) as Record<string, unknown>[];

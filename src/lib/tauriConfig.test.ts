@@ -20,9 +20,9 @@ describe("Tauri media asset config", () => {
     expect(config.app?.security?.csp).toContain("asset:");
     expect(config.app?.security?.csp).toContain("http://asset.localhost");
     expect(config.app?.security?.assetProtocol?.enable).toBe(true);
-    expect(config.app?.security?.assetProtocol?.scope).toContain("$APPDATA/**/*");
-    expect(config.app?.security?.assetProtocol?.scope).toContain("$HOME/**/*");
-    expect(config.app?.security?.assetProtocol?.scope).toContain("/Volumes/**/*");
+    expect(config.app?.security?.assetProtocol?.scope).toEqual(
+      expect.arrayContaining(["$APPDATA", "$APPDATA/**", "$HOME", "$HOME/**", "/Volumes", "/Volumes/**"])
+    );
     expect(config.app?.security?.assetProtocol?.scope).toContain("**/*");
   });
 });

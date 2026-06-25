@@ -21,7 +21,7 @@
     "fs:allow-appdata-write-recursive",
     {
       "identifier": "fs:scope",
-      "allow": ["$APPDATA/**/*", "$HOME/**/*", "/Volumes/**/*", "**/*"]
+      "allow": ["$APPDATA", "$APPDATA/**", "$HOME", "$HOME/**", "/Volumes", "/Volumes/**", "**/*"]
     },
     "sql:default",
     "sql:allow-execute",

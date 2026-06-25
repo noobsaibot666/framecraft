@@ -14,9 +14,23 @@ describe("Tauri FS capabilities", () => {
         typeof permission === "object" && permission.identifier === "fs:scope"
     );
 
-    expect(fsScope?.allow).toContain("$APPDATA/**/*");
-    expect(fsScope?.allow).toContain("$HOME/**/*");
-    expect(fsScope?.allow).toContain("/Volumes/**/*");
+    expect(fsScope?.allow).toEqual(
+      expect.arrayContaining(["$APPDATA", "$APPDATA/**", "$HOME", "$HOME/**", "/Volumes", "/Volumes/**"])
+    );
     expect(fsScope?.allow).toContain("**/*");
+  });
+
+  it("allows selected library directories before their child files exist", () => {
+    const capabilityPath = resolve(process.cwd(), "src-tauri/capabilities/default.json");
+    const capability = JSON.parse(readFileSync(capabilityPath, "utf8")) as {
+      permissions?: Array<string | { identifier?: string; allow?: string[] }>;
+    };
+
+    const fsScope = capability.permissions?.find(
+      (permission): permission is { identifier: string; allow: string[] } =>
+        typeof permission === "object" && permission.identifier === "fs:scope"
+    );
+
+    expect(fsScope?.allow).toEqual(expect.arrayContaining(["$HOME", "$HOME/**", "/Volumes", "/Volumes/**"]));
   });
 });

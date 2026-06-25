@@ -1,29 +1,31 @@
+import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
-import { Dashboard } from "@/pages/Dashboard";
-import { PromptLibrary } from "@/pages/PromptLibrary";
-import { PromptDetail } from "@/pages/PromptDetail";
-import { CraftPrompt } from "@/pages/CraftPrompt";
-import { ManualImport } from "@/pages/ManualImport";
-import { ResultReview } from "@/pages/ResultReview";
-import { SREFLibrary } from "@/pages/SREFLibrary";
-import { RecipeLibrary } from "@/pages/RecipeLibrary";
-import { RecipeApply } from "@/pages/RecipeApply";
-import { GenerationQueue } from "@/pages/GenerationQueue";
-import { Settings } from "@/pages/Settings";
-import { ImageAnalyzer } from "@/pages/ImageAnalyzer";
-import { BriefAnalyzer } from "@/pages/BriefAnalyzer";
-import { VideoFrames } from "@/pages/VideoFrames";
-import { ReferenceLibrary } from "@/pages/ReferenceLibrary";
-import { ReferenceDetail } from "@/pages/ReferenceDetail";
-import { ProjectLibrary } from "@/pages/ProjectLibrary";
-import { ProjectWorkspace } from "@/pages/ProjectWorkspace";
-import { LineageView } from "@/pages/LineageView";
-import { ComparisonLab } from "@/pages/ComparisonLab";
-import { ProjectBoard } from "@/pages/ProjectBoard";
-import { ProjectAssistant } from "@/pages/ProjectAssistant";
-import { ProjectExport } from "@/pages/ProjectExport";
+
+const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
+const PromptLibrary = lazy(() => import("@/pages/PromptLibrary").then((m) => ({ default: m.PromptLibrary })));
+const PromptDetail = lazy(() => import("@/pages/PromptDetail").then((m) => ({ default: m.PromptDetail })));
+const CraftPrompt = lazy(() => import("@/pages/CraftPrompt").then((m) => ({ default: m.CraftPrompt })));
+const ManualImport = lazy(() => import("@/pages/ManualImport").then((m) => ({ default: m.ManualImport })));
+const ResultReview = lazy(() => import("@/pages/ResultReview").then((m) => ({ default: m.ResultReview })));
+const SREFLibrary = lazy(() => import("@/pages/SREFLibrary").then((m) => ({ default: m.SREFLibrary })));
+const RecipeLibrary = lazy(() => import("@/pages/RecipeLibrary").then((m) => ({ default: m.RecipeLibrary })));
+const RecipeApply = lazy(() => import("@/pages/RecipeApply").then((m) => ({ default: m.RecipeApply })));
+const GenerationQueue = lazy(() => import("@/pages/GenerationQueue").then((m) => ({ default: m.GenerationQueue })));
+const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.Settings })));
+const ImageAnalyzer = lazy(() => import("@/pages/ImageAnalyzer").then((m) => ({ default: m.ImageAnalyzer })));
+const BriefAnalyzer = lazy(() => import("@/pages/BriefAnalyzer").then((m) => ({ default: m.BriefAnalyzer })));
+const VideoFrames = lazy(() => import("@/pages/VideoFrames").then((m) => ({ default: m.VideoFrames })));
+const ReferenceLibrary = lazy(() => import("@/pages/ReferenceLibrary").then((m) => ({ default: m.ReferenceLibrary })));
+const ReferenceDetail = lazy(() => import("@/pages/ReferenceDetail").then((m) => ({ default: m.ReferenceDetail })));
+const ProjectLibrary = lazy(() => import("@/pages/ProjectLibrary").then((m) => ({ default: m.ProjectLibrary })));
+const ProjectWorkspace = lazy(() => import("@/pages/ProjectWorkspace").then((m) => ({ default: m.ProjectWorkspace })));
+const LineageView = lazy(() => import("@/pages/LineageView").then((m) => ({ default: m.LineageView })));
+const ComparisonLab = lazy(() => import("@/pages/ComparisonLab").then((m) => ({ default: m.ComparisonLab })));
+const ProjectBoard = lazy(() => import("@/pages/ProjectBoard").then((m) => ({ default: m.ProjectBoard })));
+const ProjectAssistant = lazy(() => import("@/pages/ProjectAssistant").then((m) => ({ default: m.ProjectAssistant })));
+const ProjectExport = lazy(() => import("@/pages/ProjectExport").then((m) => ({ default: m.ProjectExport })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,37 +36,49 @@ const queryClient = new QueryClient({
   },
 });
 
+function RouteFallback() {
+  return (
+    <div className="flex min-h-full items-center justify-center p-8">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-dim/50">Loading</span>
+    </div>
+  );
+}
+
+function routeElement(element: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
           <Route element={<AppShell />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/library" element={<PromptLibrary />} />
-            <Route path="/library/:id" element={<PromptDetail />} />
-            <Route path="/craft" element={<CraftPrompt />} />
-            <Route path="/craft/:id" element={<CraftPrompt />} />
-            <Route path="/recipes" element={<RecipeLibrary />} />
-            <Route path="/recipes/:id/apply" element={<RecipeApply />} />
-            <Route path="/queue" element={<GenerationQueue />} />
-            <Route path="/import" element={<ManualImport />} />
-            <Route path="/srefs" element={<SREFLibrary />} />
-            <Route path="/results/:promptId" element={<ResultReview />} />
-            <Route path="/analyze" element={<ImageAnalyzer />} />
-            <Route path="/brief" element={<BriefAnalyzer />} />
-            <Route path="/frames" element={<VideoFrames />} />
-            <Route path="/references" element={<ReferenceLibrary />} />
-            <Route path="/references/:id" element={<ReferenceDetail />} />
-            <Route path="/projects" element={<ProjectLibrary />} />
-            <Route path="/projects/:id" element={<ProjectWorkspace />} />
-            <Route path="/lineage/:promptId" element={<LineageView />} />
-            <Route path="/compare" element={<ComparisonLab />} />
-            <Route path="/compare/:projectId" element={<ComparisonLab />} />
-            <Route path="/projects/:id/board" element={<ProjectBoard />} />
-            <Route path="/projects/:id/assistant" element={<ProjectAssistant />} />
-            <Route path="/projects/:id/export" element={<ProjectExport />} />
-            <Route path="/settings" element={<Settings />} />
+            <Route path="/" element={routeElement(<Dashboard />)} />
+            <Route path="/library" element={routeElement(<PromptLibrary />)} />
+            <Route path="/library/:id" element={routeElement(<PromptDetail />)} />
+            <Route path="/craft" element={routeElement(<CraftPrompt />)} />
+            <Route path="/craft/:id" element={routeElement(<CraftPrompt />)} />
+            <Route path="/recipes" element={routeElement(<RecipeLibrary />)} />
+            <Route path="/recipes/:id/apply" element={routeElement(<RecipeApply />)} />
+            <Route path="/queue" element={routeElement(<GenerationQueue />)} />
+            <Route path="/import" element={routeElement(<ManualImport />)} />
+            <Route path="/srefs" element={routeElement(<SREFLibrary />)} />
+            <Route path="/results/:promptId" element={routeElement(<ResultReview />)} />
+            <Route path="/analyze" element={routeElement(<ImageAnalyzer />)} />
+            <Route path="/brief" element={routeElement(<BriefAnalyzer />)} />
+            <Route path="/frames" element={routeElement(<VideoFrames />)} />
+            <Route path="/references" element={routeElement(<ReferenceLibrary />)} />
+            <Route path="/references/:id" element={routeElement(<ReferenceDetail />)} />
+            <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
+            <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
+            <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />
+            <Route path="/compare" element={routeElement(<ComparisonLab />)} />
+            <Route path="/compare/:projectId" element={routeElement(<ComparisonLab />)} />
+            <Route path="/projects/:id/board" element={routeElement(<ProjectBoard />)} />
+            <Route path="/projects/:id/assistant" element={routeElement(<ProjectAssistant />)} />
+            <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
+            <Route path="/settings" element={routeElement(<Settings />)} />
           </Route>
         </Routes>
       </BrowserRouter>

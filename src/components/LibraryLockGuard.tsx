@@ -87,8 +87,10 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       releaseLibraryLock(baseDir.current, fs, session.current).catch(() => {});
     };
     window.addEventListener("beforeunload", release);
+    window.addEventListener("pagehide", release);
     return () => {
       window.removeEventListener("beforeunload", release);
+      window.removeEventListener("pagehide", release);
       release();
     };
   }, [fs]);

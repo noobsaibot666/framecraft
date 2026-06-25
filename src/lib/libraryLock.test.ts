@@ -56,6 +56,20 @@ describe("libraryLock", () => {
     });
   });
 
+  it("allows the same user and machine to recover a fresh lock after restart", () => {
+    const existing = lock("2026-06-25T09:59:00.000Z", "previous-session");
+    const current = {
+      ...lock("2026-06-25T10:00:00.000Z", "session-a"),
+      machine: existing.machine,
+      user: existing.user,
+    };
+
+    expect(evaluateLibraryLock(existing, current.session_id, Date.parse("2026-06-25T10:00:00.000Z"), current)).toEqual({
+      status: "owned",
+      lock: existing,
+    });
+  });
+
   it("detects stale locks", () => {
     const existing = lock("2026-06-25T09:40:00.000Z");
 
@@ -66,7 +80,10 @@ describe("libraryLock", () => {
   });
 
   it("requires explicit takeover for a stale lock", async () => {
-    const fs = createFs(lock("2026-06-25T09:40:00.000Z"));
+    const fs = createFs({
+      ...lock("2026-06-25T09:40:00.000Z"),
+      machine: "other-workstation",
+    });
     const current = lock("2026-06-25T10:00:00.000Z", "session-a");
 
     await expect(

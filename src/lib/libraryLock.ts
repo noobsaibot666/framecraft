@@ -39,10 +39,14 @@ export class LibraryLockStaleError extends Error {
 export function evaluateLibraryLock(
   existing: LibraryLockInfo | null,
   sessionId: string,
-  nowMs: number
+  nowMs: number,
+  currentOwner?: Pick<LibraryLockInfo, "machine" | "user">
 ): LibraryLockEvaluation {
   if (!existing) return { status: "available" };
   if (existing.session_id === sessionId) return { status: "owned", lock: existing };
+  if (currentOwner && existing.machine === currentOwner.machine && existing.user === currentOwner.user) {
+    return { status: "owned", lock: existing };
+  }
 
   const updatedMs = Date.parse(existing.updated_at);
   if (!Number.isFinite(updatedMs) || nowMs - updatedMs > LIBRARY_LOCK_STALE_MS) {
@@ -61,7 +65,7 @@ export async function acquireLibraryLock(
 ): Promise<LibraryLockInfo> {
   const path = lockPath(baseDir);
   const existing = await readLibraryLock(path, fs);
-  const evaluation = evaluateLibraryLock(existing, current.session_id, nowMs);
+  const evaluation = evaluateLibraryLock(existing, current.session_id, nowMs, current);
 
   if (evaluation.status === "conflict") throw new LibraryLockConflictError(evaluation.lock);
   if (evaluation.status === "stale" && !forceTakeover) throw new LibraryLockStaleError(evaluation.lock);

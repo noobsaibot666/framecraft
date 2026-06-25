@@ -1,7 +1,6 @@
 import { appDataDir } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { copyFile, exists, mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import {
   clearSelectedLibraryPath,
   getActiveLibraryPaths,
@@ -13,15 +12,16 @@ import {
   type LibraryStorage,
 } from "./libraryConfig";
 import {
-  backupLibraryPackage,
-  copyLibraryPackage,
-  createLibraryPackage,
   listRelativeMediaFilenames,
-  migrateAppDataToLibrary,
-  validateLibraryPackage,
-  type LibraryFileSystem,
   type LibraryValidationResult,
 } from "./libraryPackage";
+import {
+  backupLibraryPackageNative,
+  copyLibraryPackageNative,
+  createLibraryPackageNative,
+  migrateAppDataToLibraryNative,
+  validateLibraryPackageNative,
+} from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -79,7 +79,7 @@ export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
   const selection = getActiveLibrarySelection();
   const paths = getActiveLibraryPaths(appDir);
   const validation = selection.path && isTauri()
-    ? await validateLibraryPackage(selection.path, createTauriLibraryFs())
+    ? await validateLibraryPackageNative(selection.path)
     : null;
   return { selection, paths, validation, nativeAvailable: isTauri() };
 }
@@ -92,7 +92,7 @@ export async function createLibraryFromDialog(): Promise<string | null> {
   });
   if (!path) return null;
   const libraryPath = ensureLibraryExtension(path);
-  await createLibraryPackage(libraryPath, createTauriLibraryFs());
+  await createLibraryPackageNative(libraryPath);
   return libraryPath;
 }
 
@@ -105,7 +105,7 @@ export async function openLibraryFromDialog(): Promise<SelectValidatedLibraryRes
   });
   if (!path || Array.isArray(path)) return null;
   return selectValidatedLibrary(path, {
-    validateLibrary: (libraryPath) => validateLibraryPackage(libraryPath, createTauriLibraryFs()),
+    validateLibrary: validateLibraryPackageNative,
   });
 }
 
@@ -122,16 +122,15 @@ export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectVal
   const sourcePaths = getActiveLibraryPaths(sourceBaseDir, createEmptyStorage());
   const media = await collectCurrentMedia(sourcePaths);
 
-  await migrateAppDataToLibrary({
+  await migrateAppDataToLibraryNative({
     sourceBaseDir,
     targetBaseDir,
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
-    fs: createTauriLibraryFs(),
   });
 
   return selectValidatedLibrary(targetBaseDir, {
-    validateLibrary: (libraryPath) => validateLibraryPackage(libraryPath, createTauriLibraryFs()),
+    validateLibrary: validateLibraryPackageNative,
   });
 }
 
@@ -139,11 +138,10 @@ export async function backupActiveLibrary(): Promise<string> {
   if (!isTauri()) throw new Error("Library backup can only run in the native app.");
   const state = await getLibrarySettingsState();
   const media = await collectCurrentMedia(state.paths);
-  const result = await backupLibraryPackage({
+  const result = await backupLibraryPackageNative({
     sourceBaseDir: state.paths.baseDir,
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
-    fs: createTauriLibraryFs(),
   });
   return result.paths.baseDir;
 }
@@ -159,12 +157,11 @@ export async function exportActiveLibraryFromDialog(): Promise<string | null> {
   const state = await getLibrarySettingsState();
   const media = await collectCurrentMedia(state.paths);
   const targetBaseDir = ensureLibraryExtension(path);
-  const result = await copyLibraryPackage({
+  const result = await copyLibraryPackageNative({
     sourceBaseDir: state.paths.baseDir,
     targetBaseDir,
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
-    fs: createTauriLibraryFs(),
   });
   return result.paths.baseDir;
 }
@@ -193,16 +190,6 @@ export function formatLibraryActionError(error: unknown): string {
   } catch {
     return "Library action failed.";
   }
-}
-
-function createTauriLibraryFs(): LibraryFileSystem {
-  return {
-    exists: (path) => exists(path),
-    mkdir: (path) => mkdir(path, { recursive: true }),
-    writeTextFile: (path, contents) => writeTextFile(path, contents),
-    readTextFile: (path) => readTextFile(path),
-    copyFile: (from, to) => copyFile(from, to),
-  };
 }
 
 async function collectCurrentMedia(sourcePaths: LibraryPaths): Promise<{ resultFiles: string[]; referenceFiles: string[] }> {

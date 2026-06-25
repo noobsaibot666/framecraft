@@ -1,5 +1,7 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod library_package;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let migrations = vec![
@@ -92,7 +94,13 @@ pub fn run() {
                 .add_migrations("sqlite:framecraft.db", migrations)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![
+            library_package::create_library_package_native,
+            library_package::validate_library_package_native,
+            library_package::migrate_app_data_to_library_native,
+            library_package::copy_library_package_native,
+            library_package::backup_library_package_native,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

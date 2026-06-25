@@ -20,6 +20,24 @@ describe("Tauri FS capabilities", () => {
     expect(fsScope?.allow).toContain("**/*");
   });
 
+  it("uses built-in recursive scopes for common user-selected library locations", () => {
+    const capabilityPath = resolve(process.cwd(), "src-tauri/capabilities/default.json");
+    const capability = JSON.parse(readFileSync(capabilityPath, "utf8")) as {
+      permissions?: Array<string | { identifier?: string; allow?: string[] }>;
+    };
+
+    expect(capability.permissions).toEqual(
+      expect.arrayContaining([
+        "fs:allow-home-read-recursive",
+        "fs:allow-home-write-recursive",
+        "fs:allow-download-read-recursive",
+        "fs:allow-download-write-recursive",
+        "fs:allow-document-read-recursive",
+        "fs:allow-document-write-recursive",
+      ])
+    );
+  });
+
   it("allows selected library directories before their child files exist", () => {
     const capabilityPath = resolve(process.cwd(), "src-tauri/capabilities/default.json");
     const capability = JSON.parse(readFileSync(capabilityPath, "utf8")) as {

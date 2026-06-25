@@ -44,10 +44,10 @@ import { cn } from "@/lib/utils";
 
 function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("flex flex-col gap-5", className)}>
+    <div className={cn("flex flex-col gap-6", className)}>
       <div className="flex items-center gap-3">
-        <span className="system-label">{label}</span>
-        <div className="flex-1 h-px bg-white/12" />
+        <span className="system-label text-[12px] text-soft-white">{label}</span>
+        <div className="flex-1 h-px bg-white/16" />
       </div>
       {children}
     </div>
@@ -56,9 +56,9 @@ function Section({ label, children, className }: { label: string; children: Reac
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="grid grid-cols-[150px_minmax(0,1fr)] items-baseline gap-5">
-      <span className="system-label">{label}</span>
-      <span className="font-mono text-[12px] leading-relaxed text-soft-white break-words">{value}</span>
+    <div className="grid grid-cols-[170px_minmax(0,1fr)] items-baseline gap-6">
+      <span className="system-label text-[11px] text-muted">{label}</span>
+      <span className="font-mono text-[13px] leading-relaxed text-white break-words">{value}</span>
     </div>
   );
 }
@@ -85,7 +85,7 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60">{label}</span>
+        <span className="font-mono text-[10px] tracking-widest uppercase text-muted">{label}</span>
         {hasValue && (
           <span
             className={`font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm ${validation.valid ? "text-white/40" : "text-red/70"}`}
@@ -103,8 +103,8 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
             onChange={(e) => setValue(e.target.value)}
             onFocus={() => setShow(true)}
             placeholder={placeholder}
-            className="w-full h-8 pl-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none transition-precise"
-            style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+            className="w-full h-9 pl-3 pr-8 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
           <button type="button" onClick={() => setShow((v) => !v)}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise">
@@ -116,7 +116,7 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
         </Button>
       </div>
       {hasValue && !validation.valid && (
-        <span className="font-mono text-[9px] text-red/60">{validation.message}</span>
+        <span className="font-mono text-[10.5px] text-red/80">{validation.message}</span>
       )}
     </div>
   );
@@ -354,17 +354,17 @@ export function Settings() {
 
   return (
     <PageContainer title="Settings" subtitle="APP CONFIGURATION">
-      <div className="flex flex-col gap-10 max-w-3xl">
+      <div className="flex flex-col gap-12 max-w-5xl">
 
         {/* App Info */}
         <Section label="APPLICATION" className="order-50">
           <div
-            className="flex flex-col gap-4 p-5 rounded-card"
+            className="flex flex-col gap-5 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-center gap-2 mb-2">
-              <Info size={13} className="text-readable" />
-              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
+              <Info size={15} className="text-readable" />
+              <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
             <InfoRow label="BUILD" value="V1 · All Phases Complete" />
@@ -376,12 +376,12 @@ export function Settings() {
         {/* Database Stats */}
         <Section label="DATABASE" className="order-60">
           <div
-            className="flex flex-col gap-4 p-5 rounded-card"
+            className="flex flex-col gap-5 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-center gap-2 mb-2">
-              <Database size={13} className="text-readable" />
-              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">STORAGE</span>
+              <Database size={15} className="text-readable" />
+              <span className="font-sans text-[14px] font-semibold text-white tracking-wide">STORAGE</span>
             </div>
             <InfoRow label="LOCATION" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "~/.local/share/framecraft/framecraft.db" : "localStorage (dev)"} />
             <InfoRow label="TOTAL PROMPTS" value={stats.total_prompts} />
@@ -393,28 +393,28 @@ export function Settings() {
 
         <Section label="LIBRARY" className="order-10">
           <div
-            className="flex flex-col gap-6 p-5 rounded-card"
+            className="flex flex-col gap-7 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2 min-w-0">
-                <HardDrive size={13} className="text-readable mt-0.5 shrink-0" />
-                <div className="flex flex-col gap-1.5 min-w-0">
-                  <span className="font-sans text-[12px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
-                  <span className="font-mono text-[11px] text-readable leading-relaxed">
+              <div className="flex items-start gap-3 min-w-0">
+                <HardDrive size={15} className="text-readable mt-0.5 shrink-0" />
+                <div className="flex flex-col gap-2 min-w-0">
+                  <span className="font-sans text-[14px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
+                  <span className="font-mono text-[12px] text-readable leading-relaxed">
                     Use a `.framecraftlib` folder to move work between machines or store it on shared storage.
                   </span>
                 </div>
               </div>
               {libraryState?.selection.mode === "portable" && (
                 <span className="font-mono text-[8.5px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable"
-                  style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
+                  style={{ border: "1px solid rgba(255,255,255,0.22)" }}>
                   Restart required
                 </span>
               )}
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <InfoRow label="MODE" value={libraryState?.selection.mode === "portable" ? "Portable library" : "Local app data"} />
               <InfoRow label="PATH" value={libraryState?.paths.baseDir ?? "Checking..."} />
               {libraryState?.selection.mode === "portable" && (
@@ -443,26 +443,26 @@ export function Settings() {
 
             {libraryState?.selection.mode === "portable" && sharedIngestStatus && (
               <div
-                className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-sm"
-                style={{ border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}
+                className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-sm"
+                style={{ border: "1px solid rgba(255,255,255,0.16)", background: "rgba(255,255,255,0.035)" }}
               >
                 <div className="flex flex-col gap-1">
                   <span className="system-label">PENDING</span>
-                  <span className="font-mono text-[16px] text-soft-white">{sharedIngestStatus.pending}</span>
+                  <span className="font-mono text-[20px] text-soft-white">{sharedIngestStatus.pending}</span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="system-label">FAILED</span>
-                  <span className={cn("font-mono text-[16px]", sharedIngestStatus.failed ? "text-red/80" : "text-soft-white")}>
+                  <span className={cn("font-mono text-[20px]", sharedIngestStatus.failed ? "text-red" : "text-soft-white")}>
                     {sharedIngestStatus.failed}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="system-label">APPLIED</span>
-                  <span className="font-mono text-[16px] text-soft-white">{sharedIngestStatus.applied}</span>
+                  <span className="font-mono text-[20px] text-soft-white">{sharedIngestStatus.applied}</span>
                 </div>
                 <div className="flex flex-col gap-1 min-w-0">
                   <span className="system-label">LAST SYNC</span>
-                  <span className="font-mono text-[10px] text-readable break-words">
+                  <span className="font-mono text-[11px] text-readable break-words">
                     {sharedIngestStatus.lastAppliedAt ? new Date(sharedIngestStatus.lastAppliedAt).toLocaleString() : "No jobs applied"}
                   </span>
                 </div>
@@ -471,14 +471,14 @@ export function Settings() {
 
             {canRepairLibraryPackage && (
               <div
-                className="flex flex-col gap-3 p-3 rounded-sm"
+                className="flex flex-col gap-4 p-4 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}
               >
                 <div className="flex items-start gap-2">
                   <AlertTriangle size={12} className="text-red/75 mt-0.5 shrink-0" />
                   <div className="flex flex-col gap-1 min-w-0">
-                    <span className="font-sans text-[12px] font-semibold text-white tracking-wide">LIBRARY PACKAGE NEEDS REPAIR</span>
-                    <span className="font-mono text-[10.5px] text-readable leading-relaxed">
+                    <span className="font-sans text-[13px] font-semibold text-white tracking-wide">LIBRARY PACKAGE NEEDS REPAIR</span>
+                    <span className="font-mono text-[11.5px] text-readable leading-relaxed">
                       Initialize missing package folders or an empty database schema. Existing partial databases are refused to protect data.
                     </span>
                   </div>
@@ -496,7 +496,7 @@ export function Settings() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               <Button variant="ghost" size="sm" onClick={handleMigrateLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <Upload size={11} />
                 {libraryBusy === "migrate" ? "Migrating..." : "Migrate Current Data"}
@@ -531,7 +531,7 @@ export function Settings() {
                 {libraryBusy === "process-shared-ingest" ? "Processing..." : "Process Shared Inbox"}
               </Button>
               <Button
-                variant={sharedIngestStatus?.failed ? "primary" : "ghost"}
+                variant={sharedIngestStatus?.failed ? "accent" : "ghost"}
                 size="sm"
                 onClick={handleRetryFailedSharedIngest}
                 disabled={!!libraryBusy || !sharedIngestStatus?.failed || libraryState?.selection.mode !== "portable"}
@@ -568,13 +568,13 @@ export function Settings() {
 
         {/* AI Integration */}
         <Section label="AI INTEGRATION" className="order-30">
-          <div className="flex flex-col gap-5 p-5 rounded-card"
+          <div className="flex flex-col gap-6 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center gap-2">
-              <Cpu size={13} className="text-readable" />
-              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">API KEYS</span>
+            <div className="flex items-center gap-3">
+              <Cpu size={15} className="text-readable" />
+              <span className="font-sans text-[14px] font-semibold text-white tracking-wide">API KEYS</span>
             </div>
-            <p className="font-mono text-[11px] text-readable leading-relaxed -mt-2">
+            <p className="font-mono text-[12px] text-readable leading-relaxed -mt-2">
               Keys are stored locally and never leave your device.
             </p>
             <ApiKeyField
@@ -596,16 +596,16 @@ export function Settings() {
         </Section>
 
         <Section label="RELEASE DIAGNOSTICS" className="order-20">
-          <div className="flex flex-col gap-5 p-5 rounded-card"
+          <div className="flex flex-col gap-6 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-col gap-1.5 min-w-0">
-                <span className="font-sans text-[12px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
-                <span className="font-mono text-[11px] text-readable leading-relaxed">
-                  Checks Tauri runtime, required SQLite tables, file storage, and native dialog plugin availability.
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-2 min-w-0">
+                <span className="font-sans text-[14px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
+                <span className="font-mono text-[12px] text-readable leading-relaxed">
+                  Checks runtime, SQLite schema, file storage, dialogs, active library, and shared-library folders.
                 </span>
               </div>
-              <Button variant="primary" size="sm" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-[126px]">
+              <Button variant="accent" size="md" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-[150px]">
                 {diagnosticsRunning ? "Running..." : "Run Checks"}
               </Button>
             </div>
@@ -613,25 +613,25 @@ export function Settings() {
             {diagnostics && (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[9px] tracking-widest uppercase text-dim/60">
+                  <span className="font-mono text-[10px] tracking-widest uppercase text-muted">
                     {formatDiagnosticSummary(diagnostics)}
                   </span>
-                  <span className="font-mono text-[8px] text-dim/35">
+                  <span className="font-mono text-[10px] text-readable">
                     {new Date(diagnostics.generatedAt).toLocaleString()}
                   </span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-2">
                   {diagnostics.checks.map((check) => (
-                    <div key={check.id} className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 px-3 py-2.5 rounded-sm"
-                      style={{ border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}>
-                      <span className={`font-mono text-[8px] tracking-widest uppercase ${
-                        check.status === "pass" ? "text-white/60" : check.status === "fail" ? "text-red/70" : "text-dim/50"
+                    <div key={check.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-4 px-4 py-3.5 rounded-sm"
+                      style={{ border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.035)" }}>
+                      <span className={`font-mono text-[10px] tracking-widest uppercase ${
+                        check.status === "pass" ? "text-readable" : check.status === "fail" ? "text-red" : "text-muted"
                       }`}>
                         {check.status}
                       </span>
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="font-mono text-[11px] text-soft-white">{check.label}</span>
-                        <span className="font-mono text-[10px] text-readable leading-relaxed">{check.message}</span>
+                      <div className="flex flex-col gap-1 min-w-0">
+                        <span className="font-mono text-[13px] text-soft-white">{check.label}</span>
+                        <span className="font-mono text-[11.5px] text-readable leading-relaxed">{check.message}</span>
                       </div>
                     </div>
                   ))}
@@ -644,10 +644,10 @@ export function Settings() {
         {/* Export / Import */}
         <Section label="BACKUP" className="order-40">
           <div
-            className="flex flex-col gap-5 p-5 rounded-card"
+            className="flex flex-col gap-6 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <p className="font-mono text-[11px] text-readable leading-relaxed">
+            <p className="font-mono text-[12px] text-readable leading-relaxed">
               Export your prompt library as JSON to back it up or transfer to another device.
             </p>
             <div className="flex flex-wrap items-center gap-3">
@@ -667,7 +667,7 @@ export function Settings() {
               </Button>
             </div>
             {importStatus && (
-              <div className="font-mono text-[10px] text-white/50">
+              <div className="font-mono text-[11px] text-readable">
                 {importStatus.finished
                   ? <span className="flex items-center gap-1.5"><Check size={10} className="text-white/40" /> Imported {importStatus.done} of {importStatus.total} prompts.</span>
                   : `Importing… ${importStatus.done} / ${importStatus.total}`}
@@ -679,28 +679,28 @@ export function Settings() {
         {/* Danger Zone */}
         <Section label="DANGER ZONE" className="order-70">
           <div
-            className="flex flex-col gap-5 p-5 rounded-card"
+            className="flex flex-col gap-6 p-7 rounded-card"
             style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}
           >
             <div className="flex items-start gap-2">
               <AlertTriangle size={12} className="text-red/60 mt-0.5 shrink-0" />
-              <div className="flex flex-col gap-1.5">
-                <span className="font-sans text-[12px] font-semibold text-red/80">CLEAR ALL DATA</span>
-                <p className="font-mono text-[11px] text-readable leading-relaxed">
+              <div className="flex flex-col gap-2">
+                <span className="font-sans text-[14px] font-semibold text-red">CLEAR ALL DATA</span>
+                <p className="font-mono text-[12px] text-readable leading-relaxed">
                   This will permanently delete all prompts, results, recipes, and SREFs. This action cannot be undone.
                 </p>
               </div>
             </div>
 
             {cleared && (
-              <div className="font-mono text-[10px] text-white/50">
+              <div className="font-mono text-[11px] text-readable">
                 All data cleared successfully.
               </div>
             )}
 
             {confirmClear && (
               <div
-                className="px-3 py-2 rounded-sm font-mono text-[10px] text-red/80"
+                className="px-4 py-3 rounded-sm font-mono text-[11px] text-red"
                 style={{ border: "var(--border-active)", background: "rgba(215,25,33,0.08)" }}
               >
                 Click the button again to confirm. This cannot be undone.

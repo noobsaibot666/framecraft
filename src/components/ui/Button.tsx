@@ -2,7 +2,7 @@ import { forwardRef, ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "ghost" | "danger" | "muted";
+  variant?: "primary" | "accent" | "ghost" | "danger" | "muted";
   size?: "sm" | "md" | "lg";
 }
 
@@ -19,13 +19,15 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red/60",
           {
             // size
-            "h-7 px-3": size === "sm",
-            "h-8 px-4": size === "md",
-            "h-9 px-5": size === "lg",
+            "h-8 px-3.5": size === "sm",
+            "h-9 px-4": size === "md",
+            "h-10 px-5": size === "lg",
             // variants
-            "bg-red/12 border border-red/55 text-white hover:bg-red/18 hover:border-red/75 rounded-[6px]":
+            "bg-red/14 border border-red/60 text-white hover:bg-red/22 hover:border-red/80 rounded-[6px]":
               variant === "primary",
-            "border border-white/14 text-readable hover:border-white/28 hover:text-white rounded-[6px]":
+            "bg-amber/12 border border-amber/60 text-white hover:bg-amber/18 hover:border-amber/80 rounded-[6px]":
+              variant === "accent",
+            "border border-white/18 text-readable hover:border-cyan/55 hover:text-white rounded-[6px]":
               variant === "ghost",
             "border border-red/50 text-red hover:bg-red/10 hover:border-red/70 rounded-[6px]":
               variant === "danger",

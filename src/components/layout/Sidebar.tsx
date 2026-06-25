@@ -57,11 +57,11 @@ function NavItem({
       end={to === "/"}
       className={({ isActive }) =>
         cn(
-          "relative flex items-center gap-3 px-4 py-2.5",
+          "relative flex items-center gap-3 px-4 py-3",
           "group transition-all duration-150",
           isActive
-            ? "text-white bg-red/8"
-            : "text-readable hover:text-red"
+            ? "text-white bg-red/10"
+            : "text-readable hover:text-cyan"
         )
       }
     >
@@ -79,13 +79,13 @@ function NavItem({
           <span
             className={cn(
               "font-mono text-[10px] tabular-nums shrink-0 transition-colors",
-              isActive ? "text-red" : "text-dim group-hover:text-red/80"
+              isActive ? "text-red" : "text-muted group-hover:text-cyan"
             )}
           >
             {num}
           </span>
           {/* Label */}
-          <span className="font-sans text-[12px] font-medium tracking-[0.04em] uppercase">
+          <span className="font-sans text-[12.5px] font-semibold tracking-[0.04em] uppercase">
             {label}
           </span>
           {badge != null && badge > 0 && (
@@ -110,14 +110,14 @@ export function Sidebar() {
 
   return (
     <aside
-      className="w-50 flex flex-col shrink-0"
+      className="w-52 flex flex-col shrink-0"
       style={{ borderRight: "var(--border-default)" }}
     >
       {/* Navigation */}
-      <nav className="flex-1 pt-3 pb-2 flex flex-col gap-2 overflow-y-auto">
+      <nav className="flex-1 pt-4 pb-3 flex flex-col gap-3 overflow-y-auto">
         {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="flex flex-col gap-0.5">
-            <span className="px-4 pt-2 pb-1 font-mono text-[9px] tracking-widest uppercase text-muted/75">
+          <div key={group.label} className="flex flex-col gap-1">
+            <span className="px-4 pt-2 pb-1 font-mono text-[10px] tracking-widest uppercase text-muted">
               {group.label}
             </span>
             {group.items.map((item) => (
@@ -136,9 +136,9 @@ export function Sidebar() {
           to="/settings"
           className={({ isActive }) =>
             cn(
-              "relative flex items-center gap-3 px-4 py-2.5",
+              "relative flex items-center gap-3 px-4 py-3",
               "transition-all duration-150",
-              isActive ? "text-white" : "text-readable hover:text-red"
+              isActive ? "text-white" : "text-readable hover:text-cyan"
             )
           }
         >
@@ -152,7 +152,7 @@ export function Sidebar() {
                 )}
               />
               <Settings size={12} className="shrink-0" />
-              <span className="font-sans text-[12px] font-medium tracking-[0.04em] uppercase">
+              <span className="font-sans text-[12.5px] font-semibold tracking-[0.04em] uppercase">
                 Settings
               </span>
             </>
@@ -162,7 +162,7 @@ export function Sidebar() {
 
       {/* Bottom identifier */}
       <div className="px-4 pb-3 pt-1">
-        <span className="system-label text-[8.5px] text-muted/70">
+        <span className="system-label text-[9px] text-muted">
           FRAMECRAFT / LOCAL
         </span>
       </div>

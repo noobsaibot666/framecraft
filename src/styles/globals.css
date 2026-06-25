@@ -49,12 +49,18 @@
   --color-line:        #333333;
   --color-white:       #F4F4F0;
   --color-soft-white:  #E8E8E3;
-  --color-readable:    #C7C7BE;
-  --color-muted:       #B2B2AA;
-  --color-dim:         #74746D;
+  --color-readable:    #D8D8CF;
+  --color-muted:       #C4C4BA;
+  --color-dim:         #909088;
   --color-red:         #D71921;
   --color-red-muted:   rgba(215, 25, 33, 0.15);
   --color-red-border:  rgba(215, 25, 33, 0.65);
+  --color-amber:       #DFA83A;
+  --color-amber-muted: rgba(223, 168, 58, 0.13);
+  --color-amber-border: rgba(223, 168, 58, 0.58);
+  --color-cyan:        #38B7C8;
+  --color-cyan-muted:  rgba(56, 183, 200, 0.12);
+  --color-cyan-border: rgba(56, 183, 200, 0.55);
 
   /* Fonts — Tailwind v4 uses --font-* for font-family utilities */
   --font-ndot:    "Ndot55", monospace;
@@ -76,15 +82,15 @@
 
 :root {
   /* Surfaces */
-  --surface-base:   rgba(255, 255, 255, 0.03);
-  --surface-card:   rgba(255, 255, 255, 0.05);
-  --surface-hover:  rgba(255, 255, 255, 0.09);
+  --surface-base:   rgba(255, 255, 255, 0.035);
+  --surface-card:   rgba(255, 255, 255, 0.06);
+  --surface-hover:  rgba(255, 255, 255, 0.105);
   --surface-active: rgba(215, 25, 33, 0.05);
   --surface-signal: rgba(215, 25, 33, 0.10);
 
   /* Borders */
-  --border-default: 1px solid rgba(255, 255, 255, 0.14);
-  --border-strong:  1px solid rgba(255, 255, 255, 0.22);
+  --border-default: 1px solid rgba(255, 255, 255, 0.17);
+  --border-strong:  1px solid rgba(255, 255, 255, 0.28);
   --border-active:  1px solid rgba(215, 25, 33, 0.72);
   --border-dim:     1px solid rgba(255, 255, 255, 0.05);
 
@@ -107,7 +113,7 @@
   }
 
   html {
-    font-size: 16.5px;
+    font-size: 17px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -181,16 +187,16 @@
 
 .system-label {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: 11.5px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(232, 232, 227, 0.86);
+  color: rgba(232, 232, 227, 0.92);
   line-height: 1.2;
 }
 
 .prompt-text {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 13px;
+  font-size: 13.5px;
   line-height: 1.7;
   color: var(--color-soft-white);
 }

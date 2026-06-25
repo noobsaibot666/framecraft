@@ -51,6 +51,11 @@ describe("libraryPackage", () => {
       "/Volumes/NAS/Client.framecraftlib/references/",
       "/Volumes/NAS/Client.framecraftlib/backups/",
       "/Volumes/NAS/Client.framecraftlib/locks/",
+      "/Volumes/NAS/Client.framecraftlib/inbox/",
+      "/Volumes/NAS/Client.framecraftlib/staging/",
+      "/Volumes/NAS/Client.framecraftlib/sync/",
+      "/Volumes/NAS/Client.framecraftlib/sync/applied/",
+      "/Volumes/NAS/Client.framecraftlib/sync/failed/",
     ]);
     expect(fs.text["/Volumes/NAS/Client.framecraftlib/library.json"]).toContain('"format_version": 1');
     expect(fs.text["/Volumes/NAS/Client.framecraftlib/framecraft.db"]).toBe("");
@@ -62,6 +67,10 @@ describe("libraryPackage", () => {
       "/lib/Work.framecraftlib/framecraft.db",
       "/lib/Work.framecraftlib/results/",
       "/lib/Work.framecraftlib/references/",
+      "/lib/Work.framecraftlib/inbox/",
+      "/lib/Work.framecraftlib/staging/",
+      "/lib/Work.framecraftlib/sync/applied/",
+      "/lib/Work.framecraftlib/sync/failed/",
     ]);
     fs.text["/lib/Work.framecraftlib/library.json"] = JSON.stringify({
       format_version: 1,
@@ -87,6 +96,10 @@ describe("libraryPackage", () => {
         "Missing framecraft.db",
         "Missing results directory",
         "Missing references directory",
+        "Missing inbox directory",
+        "Missing staging directory",
+        "Missing sync applied directory",
+        "Missing sync failed directory",
         "Invalid library metadata",
       ],
     });

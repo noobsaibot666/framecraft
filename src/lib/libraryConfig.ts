@@ -23,6 +23,11 @@ export interface LibraryPaths {
   referencesDir: string;
   backupsDir: string;
   locksDir: string;
+  inboxDir: string;
+  stagingDir: string;
+  syncDir: string;
+  appliedDir: string;
+  failedDir: string;
 }
 
 export interface LibraryMetadata {
@@ -59,6 +64,11 @@ export function resolveLibraryPaths(baseDir: string): LibraryPaths {
     referencesDir: getReferenceDir(base),
     backupsDir: `${base}backups/`,
     locksDir: `${base}locks/`,
+    inboxDir: `${base}inbox/`,
+    stagingDir: `${base}staging/`,
+    syncDir: `${base}sync/`,
+    appliedDir: `${base}sync/applied/`,
+    failedDir: `${base}sync/failed/`,
   };
 }
 

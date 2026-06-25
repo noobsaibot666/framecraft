@@ -26,8 +26,10 @@ import {
   exportActiveLibraryFromDialog,
   formatLibraryActionError,
   getLibrarySettingsState,
+  isRepairableLibraryPackageError,
   migrateCurrentDataToLibraryFromDialog,
   openLibraryFromDialog,
+  processActiveSharedIngestInbox,
   repairActiveLibraryDatabaseSchema,
   revealActiveLibraryFolder,
   restoreLibraryFromDialog,
@@ -133,9 +135,9 @@ export function Settings() {
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
 
-  const canRepairLibrarySchema =
+  const canRepairLibraryPackage =
     libraryState?.selection.mode === "portable" &&
-    libraryState.validation?.errors.includes("Missing database schema");
+    libraryState.validation?.errors.some(isRepairableLibraryPackageError);
 
   useEffect(() => {
     fetchStats();
@@ -223,14 +225,25 @@ export function Settings() {
     runLibraryAction("restore", restoreLibraryFromDialog, () => "Backup/library selected. Restart Framecraft to use it.");
   };
 
-  const handleRepairLibrarySchema = () => {
+  const handleRepairLibraryPackage = () => {
     runLibraryAction(
-      "repair-schema",
+      "repair-package",
       async () => {
         await repairActiveLibraryDatabaseSchema();
         return "repaired";
       },
-      () => "Library database schema repaired. Restart Framecraft, then run diagnostics again."
+      () => "Library package repaired. Restart Framecraft, then run diagnostics again."
+    );
+  };
+
+  const handleProcessSharedIngest = () => {
+    runLibraryAction(
+      "process-shared-ingest",
+      async () => {
+        const result = await processActiveSharedIngestInbox();
+        return `Applied ${result.applied}, skipped ${result.skipped}, failed ${result.failed}.`;
+      },
+      (message) => String(message)
     );
   };
 
@@ -400,7 +413,7 @@ export function Settings() {
               />
             </div>
 
-            {canRepairLibrarySchema && (
+            {canRepairLibraryPackage && (
               <div
                 className="flex flex-col gap-3 p-3 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}
@@ -408,21 +421,21 @@ export function Settings() {
                 <div className="flex items-start gap-2">
                   <AlertTriangle size={12} className="text-red/75 mt-0.5 shrink-0" />
                   <div className="flex flex-col gap-1 min-w-0">
-                    <span className="font-sans text-[12px] font-semibold text-white tracking-wide">DATABASE SCHEMA MISSING</span>
+                    <span className="font-sans text-[12px] font-semibold text-white tracking-wide">LIBRARY PACKAGE NEEDS REPAIR</span>
                     <span className="font-mono text-[10.5px] text-readable leading-relaxed">
-                      Initialize the empty portable database for this library. Existing partial databases are refused to protect data.
+                      Initialize missing package folders or an empty database schema. Existing partial databases are refused to protect data.
                     </span>
                   </div>
                 </div>
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={handleRepairLibrarySchema}
+                  onClick={handleRepairLibraryPackage}
                   disabled={!!libraryBusy || !libraryState?.nativeAvailable}
                   className="self-start"
                 >
                   <Database size={11} />
-                  {libraryBusy === "repair-schema" ? "Repairing..." : "Repair Database Schema"}
+                  {libraryBusy === "repair-package" ? "Repairing..." : "Repair Library Package"}
                 </Button>
               </div>
             )}
@@ -451,6 +464,15 @@ export function Settings() {
               <Button variant="ghost" size="sm" onClick={handleExportLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <Download size={11} />
                 {libraryBusy === "export" ? "Exporting..." : "Export Copy"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleProcessSharedIngest}
+                disabled={!!libraryBusy || !libraryState?.nativeAvailable || libraryState?.selection.mode !== "portable"}
+              >
+                <Database size={11} />
+                {libraryBusy === "process-shared-ingest" ? "Processing..." : "Process Shared Inbox"}
               </Button>
               <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <FolderOpen size={11} />

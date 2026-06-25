@@ -81,6 +81,11 @@ export async function createLibraryPackage(
   await fs.mkdir(paths.referencesDir);
   await fs.mkdir(paths.backupsDir);
   await fs.mkdir(paths.locksDir);
+  await fs.mkdir(paths.inboxDir);
+  await fs.mkdir(paths.stagingDir);
+  await fs.mkdir(paths.syncDir);
+  await fs.mkdir(paths.appliedDir);
+  await fs.mkdir(paths.failedDir);
   await fs.writeTextFile(`${paths.baseDir}library.json`, JSON.stringify(buildLibraryMetadata(createdAt), null, 2));
   if (options.createEmptyDb !== false && !(await fs.exists(paths.dbPath))) await fs.writeTextFile(paths.dbPath, "");
   return { paths };
@@ -98,6 +103,10 @@ export async function validateLibraryPackage(
   if (!(await fs.exists(paths.dbPath))) errors.push("Missing framecraft.db");
   if (!(await fs.exists(paths.resultsDir))) errors.push("Missing results directory");
   if (!(await fs.exists(paths.referencesDir))) errors.push("Missing references directory");
+  if (!(await fs.exists(paths.inboxDir))) errors.push("Missing inbox directory");
+  if (!(await fs.exists(paths.stagingDir))) errors.push("Missing staging directory");
+  if (!(await fs.exists(paths.appliedDir))) errors.push("Missing sync applied directory");
+  if (!(await fs.exists(paths.failedDir))) errors.push("Missing sync failed directory");
 
   if (await fs.exists(metadataPath)) {
     try {
@@ -158,6 +167,11 @@ export async function copyLibraryPackage(input: CopyLibraryPackageInput): Promis
   await input.fs.mkdir(target.referencesDir);
   await input.fs.mkdir(target.backupsDir);
   await input.fs.mkdir(target.locksDir);
+  await input.fs.mkdir(target.inboxDir);
+  await input.fs.mkdir(target.stagingDir);
+  await input.fs.mkdir(target.syncDir);
+  await input.fs.mkdir(target.appliedDir);
+  await input.fs.mkdir(target.failedDir);
 
   await input.fs.copyFile(`${source.baseDir}library.json`, `${target.baseDir}library.json`);
   copiedFiles.push(`${target.baseDir}library.json`);

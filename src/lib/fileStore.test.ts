@@ -12,6 +12,7 @@ import {
   deleteResultFiles,
   deleteReferenceFiles,
 } from "./fileStore";
+import { resolveLibraryPaths } from "./libraryConfig";
 
 // JSDOM canvas stub: getContext returns null — thumbnailFromDataUrl falls back to input
 const JPEG_DATA_URL = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARC";
@@ -132,14 +133,7 @@ describe("image source classifiers", () => {
 
 describe("portable image path resolution", () => {
   it("remaps stale result and reference paths into the active portable library", () => {
-    const paths = {
-      baseDir: "/Volumes/NAS/Client.framecraftlib/",
-      dbPath: "/Volumes/NAS/Client.framecraftlib/framecraft.db",
-      resultsDir: "/Volumes/NAS/Client.framecraftlib/results/",
-      referencesDir: "/Volumes/NAS/Client.framecraftlib/references/",
-      backupsDir: "/Volumes/NAS/Client.framecraftlib/backups/",
-      locksDir: "/Volumes/NAS/Client.framecraftlib/locks/",
-    };
+    const paths = resolveLibraryPaths("/Volumes/NAS/Client.framecraftlib");
 
     expect(resolvePortableImagePath("C:\\Users\\cyrus\\Old.framecraftlib\\results\\campaign\\a_thumb.jpg", paths))
       .toBe("/Volumes/NAS/Client.framecraftlib/results/campaign/a_thumb.jpg");
@@ -148,14 +142,7 @@ describe("portable image path resolution", () => {
   });
 
   it("leaves direct sources and paths without library media folders unchanged", () => {
-    const paths = {
-      baseDir: "/Volumes/NAS/Client.framecraftlib/",
-      dbPath: "/Volumes/NAS/Client.framecraftlib/framecraft.db",
-      resultsDir: "/Volumes/NAS/Client.framecraftlib/results/",
-      referencesDir: "/Volumes/NAS/Client.framecraftlib/references/",
-      backupsDir: "/Volumes/NAS/Client.framecraftlib/backups/",
-      locksDir: "/Volumes/NAS/Client.framecraftlib/locks/",
-    };
+    const paths = resolveLibraryPaths("/Volumes/NAS/Client.framecraftlib");
 
     expect(resolvePortableImagePath(JPEG_DATA_URL, paths)).toBe(JPEG_DATA_URL);
     expect(resolvePortableImagePath("/Users/alan/Desktop/image.jpg", paths)).toBe("/Users/alan/Desktop/image.jpg");

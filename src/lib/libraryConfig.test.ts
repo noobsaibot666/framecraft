@@ -59,6 +59,11 @@ describe("libraryConfig defaults", () => {
     expect(paths.dbPath).toBe("/data/Framecraft/framecraft.db");
     expect(paths.resultsDir).toBe("/data/Framecraft/results/");
     expect(paths.referencesDir).toBe("/data/Framecraft/references/");
+    expect(paths.inboxDir).toBe("/data/Framecraft/inbox/");
+    expect(paths.stagingDir).toBe("/data/Framecraft/staging/");
+    expect(paths.syncDir).toBe("/data/Framecraft/sync/");
+    expect(paths.appliedDir).toBe("/data/Framecraft/sync/applied/");
+    expect(paths.failedDir).toBe("/data/Framecraft/sync/failed/");
     expect(getResultDir(paths.baseDir)).toBe(paths.resultsDir);
     expect(getReferenceDir(paths.baseDir)).toBe(paths.referencesDir);
   });
@@ -75,6 +80,11 @@ describe("libraryConfig defaults", () => {
       referencesDir: "C:/Users/Alan/Work.framecraftlib/references/",
       backupsDir: "C:/Users/Alan/Work.framecraftlib/backups/",
       locksDir: "C:/Users/Alan/Work.framecraftlib/locks/",
+      inboxDir: "C:/Users/Alan/Work.framecraftlib/inbox/",
+      stagingDir: "C:/Users/Alan/Work.framecraftlib/staging/",
+      syncDir: "C:/Users/Alan/Work.framecraftlib/sync/",
+      appliedDir: "C:/Users/Alan/Work.framecraftlib/sync/applied/",
+      failedDir: "C:/Users/Alan/Work.framecraftlib/sync/failed/",
     });
     await expect(getActiveSqliteUrl(storage)).resolves.toBe("sqlite:C:/Users/Alan/Work.framecraftlib/framecraft.db");
   });

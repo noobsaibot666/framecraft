@@ -14,6 +14,11 @@ pub struct LibraryPathsDto {
     references_dir: String,
     backups_dir: String,
     locks_dir: String,
+    inbox_dir: String,
+    staging_dir: String,
+    sync_dir: String,
+    applied_dir: String,
+    failed_dir: String,
 }
 
 #[derive(Serialize)]
@@ -212,6 +217,11 @@ fn create_package_dirs(paths: &LibraryPathsDto) -> Result<(), String> {
         &paths.references_dir,
         &paths.backups_dir,
         &paths.locks_dir,
+        &paths.inbox_dir,
+        &paths.staging_dir,
+        &paths.sync_dir,
+        &paths.applied_dir,
+        &paths.failed_dir,
     ] {
         fs::create_dir_all(path).map_err(format_io_error)?;
     }
@@ -248,6 +258,18 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
     if !Path::new(&paths.references_dir).exists() {
         errors.push("Missing references directory".to_string());
+    }
+    if !Path::new(&paths.inbox_dir).exists() {
+        errors.push("Missing inbox directory".to_string());
+    }
+    if !Path::new(&paths.staging_dir).exists() {
+        errors.push("Missing staging directory".to_string());
+    }
+    if !Path::new(&paths.applied_dir).exists() {
+        errors.push("Missing sync applied directory".to_string());
+    }
+    if !Path::new(&paths.failed_dir).exists() {
+        errors.push("Missing sync failed directory".to_string());
     }
 
     if Path::new(&metadata_path).exists() {
@@ -419,6 +441,11 @@ fn resolve_library_paths(base_dir: &str) -> LibraryPathsDto {
         references_dir: format!("{base}references/"),
         backups_dir: format!("{base}backups/"),
         locks_dir: format!("{base}locks/"),
+        inbox_dir: format!("{base}inbox/"),
+        staging_dir: format!("{base}staging/"),
+        sync_dir: format!("{base}sync/"),
+        applied_dir: format!("{base}sync/applied/"),
+        failed_dir: format!("{base}sync/failed/"),
         base_dir: base,
     }
 }
@@ -460,6 +487,10 @@ mod tests {
         assert!(validation.ok, "{:?}", validation.errors);
         assert!(Path::new(&result.results_dir).is_dir());
         assert!(Path::new(&result.references_dir).is_dir());
+        assert!(package.join("inbox").is_dir());
+        assert!(package.join("staging").is_dir());
+        assert!(package.join("sync/applied").is_dir());
+        assert!(package.join("sync/failed").is_dir());
         assert!(sqlite_table_exists(&result.db_path, "prompts"));
 
         let _ = fs::remove_dir_all(root);
@@ -518,6 +549,18 @@ mod tests {
         assert!(validation
             .errors
             .contains(&"Missing database schema".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing inbox directory".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing staging directory".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing sync applied directory".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing sync failed directory".to_string()));
 
         let _ = fs::remove_dir_all(root);
     }

@@ -27,6 +27,7 @@ import {
   validateLibraryPackageNative,
 } from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
+import { processSharedIngestInbox, type ProcessSharedIngestResult, type SharedIngestFileSystem } from "./sharedIngest";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -108,6 +109,10 @@ export async function openLibraryFromDialog(): Promise<SelectValidatedLibraryRes
     multiple: false,
   });
   if (!path || Array.isArray(path)) return null;
+  const validation = await validateLibraryPackageNative(path);
+  if (!validation.ok && validation.errors.every(isRepairableLibraryPackageError)) {
+    await repairLibraryDatabaseSchemaNative(path);
+  }
   return selectValidatedLibrary(path, {
     validateLibrary: validateLibraryPackageNative,
   });
@@ -184,6 +189,29 @@ export async function repairActiveLibraryDatabaseSchema(): Promise<LibraryValida
   const validation = await repairLibraryDatabaseSchemaNative(state.paths.baseDir);
   if (!validation.ok) throw new Error(validation.errors.join(", "));
   return validation;
+}
+
+export function isRepairableLibraryPackageError(error: string): boolean {
+  return [
+    "Missing database schema",
+    "Missing inbox directory",
+    "Missing staging directory",
+    "Missing sync applied directory",
+    "Missing sync failed directory",
+  ].includes(error);
+}
+
+export async function processActiveSharedIngestInbox(): Promise<ProcessSharedIngestResult> {
+  if (!isTauri()) throw new Error("Shared ingest can only run in the native app.");
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") throw new Error("Select a portable library before processing shared ingest jobs.");
+  if (state.validation && !state.validation.ok) throw new Error(state.validation.errors.join(", "));
+  const db = await getFramecraftDb();
+  return processSharedIngestInbox({
+    paths: state.paths,
+    fs: await createTauriSharedIngestFileSystem(),
+    db,
+  });
 }
 
 export async function revealActiveLibraryFolder(): Promise<void> {
@@ -276,4 +304,19 @@ async function executeMediaPathRewrite(
        AND substr(${column}, 1, length($2)) = $2`,
     [rewrite.targetPrefix, rewrite.sourcePrefix]
   );
+}
+
+async function createTauriSharedIngestFileSystem(): Promise<SharedIngestFileSystem> {
+  const fs = await import("@tauri-apps/plugin-fs");
+  return {
+    mkdir: (path) => fs.mkdir(path, { recursive: true }),
+    exists: (path) => fs.exists(path),
+    writeTextFile: (path, contents) => fs.writeTextFile(path, contents),
+    writeFile: (path, contents) => fs.writeFile(path, contents),
+    readTextFile: (path) => fs.readTextFile(path),
+    readDir: async (path) => (await fs.readDir(path)).map((entry) => entry.name),
+    renameFile: (from, to) => fs.rename(from, to),
+    copyFile: (from, to) => fs.copyFile(from, to),
+    removeFile: (path) => fs.remove(path),
+  };
 }

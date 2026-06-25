@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { LIBRARY_PATH_STORAGE_KEY, type LibraryStorage } from "./libraryConfig";
-import { collectPortableMediaFilenames, formatLibraryActionError, selectValidatedLibrary } from "./librarySettings";
+import {
+  collectPortableMediaFilenames,
+  formatLibraryActionError,
+  isRepairableLibraryPackageError,
+  selectValidatedLibrary,
+} from "./librarySettings";
 
 function createStorage(): LibraryStorage & { data: Record<string, string> } {
   const storage = {
@@ -74,5 +79,14 @@ describe("librarySettings", () => {
     expect(formatLibraryActionError("copyFile failed")).toBe("copyFile failed");
     expect(formatLibraryActionError({ message: "Destination exists" })).toBe("Destination exists");
     expect(formatLibraryActionError({ reason: "permission denied" })).toBe('{"reason":"permission denied"}');
+  });
+
+  it("identifies package upgrade validation errors that can be repaired safely", () => {
+    expect(isRepairableLibraryPackageError("Missing inbox directory")).toBe(true);
+    expect(isRepairableLibraryPackageError("Missing staging directory")).toBe(true);
+    expect(isRepairableLibraryPackageError("Missing sync applied directory")).toBe(true);
+    expect(isRepairableLibraryPackageError("Missing sync failed directory")).toBe(true);
+    expect(isRepairableLibraryPackageError("Missing database schema")).toBe(true);
+    expect(isRepairableLibraryPackageError("Invalid library metadata")).toBe(false);
   });
 });

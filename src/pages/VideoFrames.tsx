@@ -136,9 +136,9 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button type="button"
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+      className="flex items-center gap-2 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan transition-precise px-3 py-2 rounded-sm"
       style={{ border: "var(--border-dim)" }}>
-      {copied ? <Check size={8} className="text-white/60" /> : <Copy size={8} />}
+      {copied ? <Check size={10} className="text-cyan" /> : <Copy size={10} />}
       {copied ? "Copied!" : "Copy"}
     </button>
   );
@@ -152,27 +152,27 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
   disabled?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-[112px_1fr] gap-4 p-4 rounded-card"
+    <div className="grid grid-cols-1 md:grid-cols-[144px_1fr] gap-5 p-5 rounded-card"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
       <div className="relative">
         <img src={frame.thumbUrl} alt={formatTime(frame.timestamp)}
-          className="w-28 aspect-video object-cover rounded-sm"
+          className="w-full md:w-36 aspect-video object-cover rounded-sm"
           style={{ border: "1px solid rgba(215,25,33,0.24)" }} />
-        <span className="absolute bottom-1 left-1 font-mono text-[8px] text-white/80 px-1.5 py-0.5 rounded-sm"
+        <span className="absolute bottom-1 left-1 font-mono text-[10px] text-white px-2 py-1 rounded-sm"
           style={{ background: "rgba(0,0,0,0.68)" }}>
           {formatTime(frame.timestamp)}
         </span>
       </div>
 
       <div className="flex flex-col gap-2 flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-sans text-[12px] font-semibold text-white truncate">{result.title}</span>
-            <span className="font-mono text-[8px] text-red/55 uppercase tracking-widest">Recommended next prompt</span>
+            <span className="font-sans text-[15px] font-semibold text-white truncate">{result.title}</span>
+            <span className="font-mono text-[10px] text-amber uppercase tracking-widest">Recommended next prompt</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {result.aspect_ratio && (
-              <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/50"
+                <span className="font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable"
                 style={{ border: "var(--border-dim)" }}>{result.aspect_ratio}</span>
             )}
             <CopyButton text={result.suggested_prompt} />
@@ -180,7 +180,7 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
               <span className="flex items-center gap-1 font-mono text-[8px] text-white/40"><Check size={8} /> Saved</span>
             ) : (
               <button type="button" onClick={onImport} disabled={disabled}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-precise px-2 py-1 rounded-sm"
+                className="flex items-center gap-2 font-mono text-[10px] tracking-widest uppercase text-cyan hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-precise px-3 py-2 rounded-sm"
                 style={{ border: "var(--border-dim)" }}>
                 <ArrowRight size={8} /> Import
               </button>
@@ -188,23 +188,23 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
           </div>
         </div>
 
-        <p className="font-mono text-[10px] text-soft-white/80 leading-relaxed line-clamp-2">
+        <p className="font-mono text-[12px] text-soft-white leading-relaxed line-clamp-3">
           {result.suggested_prompt}
         </p>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
-            <span className="system-label text-[8px]">STYLE NOTES</span>
-            <p className="font-mono text-[9px] text-dim/55 leading-relaxed line-clamp-2">
+            <span className="system-label text-[10px]">STYLE NOTES</span>
+            <p className="font-mono text-[11px] text-readable leading-relaxed line-clamp-2">
               {result.style_notes}
             </p>
           </div>
           {result.avoidance_suggestions?.length > 0 && (
             <div className="flex flex-col gap-1">
-              <span className="system-label text-[8px] text-red/60">AVOID</span>
+              <span className="system-label text-[10px] text-red/75">AVOID</span>
               <div className="flex flex-wrap gap-1">
                 {result.avoidance_suggestions.slice(0, 4).map((item) => (
-                  <span key={item} className="font-mono text-[7px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-red/55"
+                  <span key={item} className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-red/75"
                     style={{ border: "1px solid rgba(215,25,33,0.20)" }}>
                     {item}
                   </span>
@@ -216,9 +216,9 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
 
         {result.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 items-center">
-            <Tag size={8} className="text-dim/30" />
+            <Tag size={10} className="text-cyan" />
             {result.tags.map((tag) => (
-              <span key={tag} className="font-mono text-[7px] tracking-widest uppercase px-1 py-0.5 rounded-sm text-dim/40"
+              <span key={tag} className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable"
                 style={{ border: "var(--border-dim)" }}>{tag}</span>
             ))}
           </div>
@@ -488,14 +488,14 @@ export function VideoFrames() {
 
   return (
     <PageContainer title="Video Frames" subtitle="FRAME EXTRACTION + AI PROMPT RECONSTRUCTION">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
 
         {/* ── Video preview — full width, big ── */}
         <div {...getRootProps()}
           className={cn(
-            "relative w-full max-h-[520px] rounded-card overflow-hidden cursor-pointer transition-precise",
-            !videoFile && "flex flex-col items-center justify-center gap-3",
-            isDragActive ? "bg-white/5" : !videoFile && "hover:border-white/20"
+            "relative w-full max-h-[560px] rounded-card overflow-hidden cursor-pointer transition-precise",
+            !videoFile && "flex flex-col items-center justify-center gap-4",
+            isDragActive ? "bg-cyan/8" : !videoFile && "hover:border-cyan/40"
           )}
           style={{
             aspectRatio: "16 / 9",
@@ -533,10 +533,10 @@ export function VideoFrames() {
             </>
           ) : (
             <>
-              <Film size={32} className="text-dim/30" />
-              <div className="flex flex-col items-center gap-1">
-                <span className="font-mono text-[11px] text-dim/50">Drop video here or click to browse</span>
-                <span className="font-mono text-[9px] text-dim/25">MP4 · MOV · WEBM · AVI · MKV</span>
+                <Film size={36} className="text-cyan" />
+              <div className="flex flex-col items-center gap-1.5">
+                <span className="font-mono text-[13px] text-soft-white">Drop video here or click to browse</span>
+                <span className="font-mono text-[11px] text-readable">MP4 · MOV · WEBM · AVI · MKV</span>
               </div>
             </>
           )}
@@ -546,8 +546,8 @@ export function VideoFrames() {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
               style={{ background: "rgba(0,0,0,0.75)" }}>
               <div className="w-6 h-6 border border-white/20 border-t-white/70 rounded-full animate-spin" />
-              <span className="font-mono text-[11px] text-white/60">
-                Extracting frame {extractProgress.current} of {extractProgress.total}…
+              <span className="font-mono text-[13px] text-white">
+                Extracting frame {extractProgress.current} of {extractProgress.total}...
               </span>
               {extractProgress.total > 0 && (
                 <div className="w-48 h-px bg-white/10 rounded-full overflow-hidden">
@@ -561,25 +561,25 @@ export function VideoFrames() {
 
         {/* ── Player controls ── */}
         {videoFile && (
-          <div className="flex items-center gap-3 px-1 py-2 rounded-sm"
+          <div className="flex items-center gap-4 px-4 py-3 rounded-card overflow-x-auto"
             style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
 
             {/* Skip back */}
             <button type="button" onClick={() => skip(-5)}
-              className="text-dim hover:text-white transition-precise shrink-0" title="-5s">
-              <SkipBack size={14} />
+              className="text-readable hover:text-cyan transition-precise shrink-0" title="-5s">
+              <SkipBack size={16} />
             </button>
 
             {/* Play / Pause */}
             <button type="button" onClick={togglePlay}
-              className="text-white hover:text-white/70 transition-precise shrink-0">
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+              className="text-cyan hover:text-white transition-precise shrink-0">
+              {isPlaying ? <Pause size={18} /> : <Play size={18} />}
             </button>
 
             {/* Skip forward */}
             <button type="button" onClick={() => skip(5)}
-              className="text-dim hover:text-white transition-precise shrink-0" title="+5s">
-              <SkipForward size={14} />
+              className="text-readable hover:text-cyan transition-precise shrink-0" title="+5s">
+              <SkipForward size={16} />
             </button>
 
             {/* Scrubber */}
@@ -600,14 +600,14 @@ export function VideoFrames() {
             </div>
 
             {/* Time */}
-            <span className="font-mono text-[9px] text-dim/60 shrink-0 tabular-nums">
+            <span className="font-mono text-[11px] text-readable shrink-0 tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
 
             {/* Capture current frame */}
             <button type="button" onClick={captureCurrentFrame}
               disabled={!videoFile || duration === 0}
-              className="flex items-center gap-1.5 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-precise shrink-0 px-2 py-1 rounded-sm"
+              className="flex items-center gap-2 font-mono text-[10px] tracking-widest uppercase text-amber hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-precise shrink-0 px-3 py-2 rounded-sm"
               style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(215,25,33,0.08)" }}
               title={`Capture frame at ${formatTime(currentTime)}`}>
               + Frame
@@ -615,16 +615,16 @@ export function VideoFrames() {
 
             {/* Mute */}
             <button type="button" onClick={toggleMute}
-              className="text-dim hover:text-white transition-precise shrink-0">
-              {isMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
+              className="text-readable hover:text-cyan transition-precise shrink-0">
+              {isMuted ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>
 
             <div className="w-px h-4 bg-white/10 shrink-0" />
 
             {/* Replace video */}
-            <label className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise cursor-pointer shrink-0 px-2 py-1 rounded-sm"
+            <label className="flex items-center gap-2 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan transition-precise cursor-pointer shrink-0 px-3 py-2 rounded-sm"
               style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-              <Upload size={9} /> Replace
+              <Upload size={11} /> Replace
               <input type="file" accept="video/*" className="hidden" onChange={(e) => {
                 const f = e.target.files?.[0];
                 if (f) onDrop([f]);
@@ -634,10 +634,10 @@ export function VideoFrames() {
         )}
 
         {/* ── Action controls bar ── */}
-        <div className="flex items-center gap-3 flex-wrap py-1">
+        <div className="flex items-center gap-4 flex-wrap py-1">
           {/* Filename */}
           {videoFile && (
-            <span className="font-mono text-[9px] text-dim/40 truncate max-w-45">
+            <span className="font-mono text-[11px] text-readable truncate max-w-72">
               {videoFile.name}
             </span>
           )}
@@ -646,13 +646,13 @@ export function VideoFrames() {
 
           {/* Frame count */}
           <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[8px] tracking-widest uppercase text-dim/30">FRAMES</span>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">FRAMES</span>
             <div className="flex gap-1">
               {FRAME_COUNTS.map((n) => (
                 <button key={n} type="button" onClick={() => setFrameCount(n)}
                   className={cn(
-                    "w-8 py-1 font-mono text-[10px] rounded-sm transition-precise",
-                    frameCount === n ? "text-white" : "text-dim hover:text-muted"
+                    "w-10 py-2 font-mono text-[11px] rounded-sm transition-precise",
+                    frameCount === n ? "text-white" : "text-readable hover:text-cyan"
                   )}
                   style={{ border: frameCount === n ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(255,255,255,0.06)" }}>
                   {n}
@@ -671,7 +671,7 @@ export function VideoFrames() {
           {/* API key warning (compact) */}
           {frames.length > 0 && !apiKey && (
             <button type="button" onClick={() => navigate("/settings")}
-              className="flex items-center gap-1.5 font-mono text-[9px] text-red/60 hover:text-red/80 transition-precise">
+              className="flex items-center gap-2 font-mono text-[11px] text-red/80 hover:text-red transition-precise">
               <AlertTriangle size={9} /> No {selectedModel.provider} key — Settings
             </button>
           )}
@@ -682,7 +682,7 @@ export function VideoFrames() {
               <select
                 value={selectedModel.id}
                 onChange={(e) => setSelectedModel(AI_MODELS.find((m) => m.id === e.target.value) ?? AI_MODELS[0])}
-                className="accent-selected appearance-none h-7 pl-3 pr-7 font-mono text-[10px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
+                className="accent-selected appearance-none h-9 pl-3 pr-8 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
                 <optgroup label="Anthropic">
                   {AI_MODELS.filter((m) => m.provider === "anthropic").map((m) => (
                     <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
@@ -716,7 +716,7 @@ export function VideoFrames() {
           <div className="flex items-start gap-2 p-3 rounded-sm"
             style={{ border: "1px solid rgba(215,25,33,0.22)", background: "rgba(215,25,33,0.04)" }}>
             <AlertTriangle size={10} className="text-red/60 shrink-0 mt-0.5" />
-            <span className="font-mono text-[10px] text-red/70">
+            <span className="font-mono text-[12px] text-red/80">
               {extractError || saveFrameError}
             </span>
           </div>
@@ -725,17 +725,17 @@ export function VideoFrames() {
         {/* ── Frame grid ── */}
         {frames.length > 0 && !extracting && (
           <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="system-label">{frames.length} FRAMES · click to select</span>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="system-label text-readable">{frames.length} FRAMES · click to select</span>
               {selected.size > 0 && (
                 <button type="button" onClick={() => setSelected(new Set())}
-                  className="font-mono text-[8px] text-dim/40 hover:text-dim transition-precise">
+                  className="font-mono text-[10px] text-readable hover:text-cyan transition-precise">
                   Clear selection ({selected.size})
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
               {frames.map((frame, idx) => {
                 const isSelected = selected.has(idx);
                 return (
@@ -762,7 +762,7 @@ export function VideoFrames() {
                     <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
                       <button type="button"
                         onClick={(e) => { e.stopPropagation(); handleSaveFrame(frame, idx); }}
-                        className="flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-sm font-mono text-[9px] tracking-widest uppercase text-white hover:text-cyan transition-precise"
                         style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
                         title="Save frame as PNG">
                         {savedFrameIdx === idx ? <Check size={8} /> : <Download size={8} />}
@@ -770,7 +770,7 @@ export function VideoFrames() {
                       </button>
                       <button type="button"
                         onClick={(e) => { e.stopPropagation(); handleSaveFrameAsRef(frame, idx); }}
-                        className="flex items-center gap-1 px-1.5 py-1 rounded-sm font-mono text-[7px] tracking-widest uppercase text-white/70 hover:text-white transition-precise"
+                        className="flex items-center gap-1.5 px-2 py-1.5 rounded-sm font-mono text-[9px] tracking-widest uppercase text-white hover:text-cyan transition-precise"
                         style={{ background: "rgba(0,0,0,0.65)", border: "1px solid rgba(255,255,255,0.12)" }}
                         title="Save frame as Reference">
                         {savedRefFrameIdx === idx ? <Check size={8} /> : <Bookmark size={8} />}
@@ -786,7 +786,7 @@ export function VideoFrames() {
                     </button>
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-                      <span className="font-mono text-[9px] text-white/70">{formatTime(frame.timestamp)}</span>
+                      <span className="font-mono text-[11px] text-white">{formatTime(frame.timestamp)}</span>
                     </div>
                     {isSelected && (
                       <div className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-sm flex items-center justify-center"
@@ -804,8 +804,8 @@ export function VideoFrames() {
         {/* ── Results ── */}
         {results.length > 0 && (
           <div className="flex flex-col gap-3 mt-2">
-            <div className="flex items-center justify-between">
-              <span className="system-label">{results.length} ANALYZED</span>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="system-label text-readable">{results.length} ANALYZED</span>
               {unsavedImportCount > 0 && (
                 <Button variant="ghost" size="sm" onClick={handleImportAll} disabled={importingAll}>
                   <ArrowRight size={10} /> {importingAll ? "Importing..." : `Import All Analyzed (${unsavedImportCount})`}
@@ -817,7 +817,7 @@ export function VideoFrames() {
                 <div key={frameIdx} className="flex items-center gap-3 p-3 rounded-sm"
                   style={{ border: "1px solid rgba(215,25,33,0.20)", background: "rgba(215,25,33,0.04)" }}>
                   <AlertTriangle size={10} className="text-red/60 shrink-0" />
-                  <span className="font-mono text-[10px] text-red/70">
+                  <span className="font-mono text-[12px] text-red/80">
                     Frame {formatTime(frames[frameIdx].timestamp)}: {error}
                   </span>
                 </div>

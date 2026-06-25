@@ -259,6 +259,9 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     if !Path::new(&paths.references_dir).exists() {
         errors.push("Missing references directory".to_string());
     }
+    if !Path::new(&paths.locks_dir).exists() {
+        errors.push("Missing locks directory".to_string());
+    }
     if !Path::new(&paths.inbox_dir).exists() {
         errors.push("Missing inbox directory".to_string());
     }
@@ -555,6 +558,9 @@ mod tests {
         assert!(validation
             .errors
             .contains(&"Missing staging directory".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing locks directory".to_string()));
         assert!(validation
             .errors
             .contains(&"Missing sync applied directory".to_string()));

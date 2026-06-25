@@ -102,6 +102,7 @@ pub fn run() {
             library_lock::refresh_library_lock_native,
             library_lock::release_library_lock_native,
             library_lock::get_library_lock_identity_native,
+            library_lock::get_library_lock_status_native,
             library_package::create_library_package_native,
             library_package::validate_library_package_native,
             library_package::repair_library_database_schema_native,

@@ -36,6 +36,8 @@ import {
   type SharedIngestFileSystem,
   type SharedIngestStatus,
 } from "./sharedIngest";
+import { getLibraryLockStatusNative } from "./libraryLockNative";
+import type { LibraryLockInfo } from "./libraryLock";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -44,6 +46,7 @@ export interface LibrarySettingsState {
   paths: LibraryPaths;
   validation: LibraryValidationResult | null;
   nativeAvailable: boolean;
+  activeLock: LibraryLockInfo | null;
 }
 
 export interface SelectValidatedLibraryDeps {
@@ -94,7 +97,10 @@ export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
   const validation = selection.path && isTauri()
     ? await validateLibraryPackageNative(selection.path)
     : null;
-  return { selection, paths, validation, nativeAvailable: isTauri() };
+  const activeLock = selection.path && isTauri()
+    ? await getLibraryLockStatusNative(paths.baseDir).catch(() => null)
+    : null;
+  return { selection, paths, validation, nativeAvailable: isTauri(), activeLock };
 }
 
 export async function createLibraryFromDialog(): Promise<string | null> {
@@ -204,6 +210,7 @@ export function isRepairableLibraryPackageError(error: string): boolean {
     "Missing database schema",
     "Missing inbox directory",
     "Missing staging directory",
+    "Missing locks directory",
     "Missing sync applied directory",
     "Missing sync failed directory",
   ].includes(error);

@@ -417,6 +417,16 @@ export function Settings() {
             <div className="flex flex-col gap-3">
               <InfoRow label="MODE" value={libraryState?.selection.mode === "portable" ? "Portable library" : "Local app data"} />
               <InfoRow label="PATH" value={libraryState?.paths.baseDir ?? "Checking..."} />
+              {libraryState?.selection.mode === "portable" && (
+                <InfoRow
+                  label="WRITER"
+                  value={
+                    libraryState.activeLock
+                      ? `${libraryState.activeLock.user} on ${libraryState.activeLock.machine} · ${new Date(libraryState.activeLock.updated_at).toLocaleString()}`
+                      : "No active writer lock"
+                  }
+                />
+              )}
               <InfoRow
                 label="STATUS"
                 value={

@@ -67,6 +67,7 @@ describe("libraryPackage", () => {
       "/lib/Work.framecraftlib/framecraft.db",
       "/lib/Work.framecraftlib/results/",
       "/lib/Work.framecraftlib/references/",
+      "/lib/Work.framecraftlib/locks/",
       "/lib/Work.framecraftlib/inbox/",
       "/lib/Work.framecraftlib/staging/",
       "/lib/Work.framecraftlib/sync/applied/",
@@ -96,6 +97,7 @@ describe("libraryPackage", () => {
         "Missing framecraft.db",
         "Missing results directory",
         "Missing references directory",
+        "Missing locks directory",
         "Missing inbox directory",
         "Missing staging directory",
         "Missing sync applied directory",
@@ -199,6 +201,7 @@ describe("libraryPackage", () => {
       "/source/Work.framecraftlib/framecraft.db",
       "/source/Work.framecraftlib/results/",
       "/source/Work.framecraftlib/references/",
+      "/source/Work.framecraftlib/locks/",
     ]);
     fs.text["/source/Work.framecraftlib/library.json"] = JSON.stringify({
       format_version: 1,
@@ -230,6 +233,7 @@ describe("libraryPackage", () => {
       "/source/Work.framecraftlib/framecraft.db",
       "/source/Work.framecraftlib/results/",
       "/source/Work.framecraftlib/references/",
+      "/source/Work.framecraftlib/locks/",
     ]);
     fs.text["/source/Work.framecraftlib/library.json"] = JSON.stringify({
       format_version: 1,

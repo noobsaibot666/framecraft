@@ -81,6 +81,11 @@ pub fn get_library_lock_identity_native() -> LibraryLockIdentity {
     }
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_library_lock_status_native(base_dir: String) -> Result<Option<LibraryLockInfo>, String> {
+    Ok(read_library_lock(&lock_path(&base_dir)))
+}
+
 pub fn release_active_lock(state: &ActiveLockState) {
     let active = state.active.lock().ok().and_then(|mut guard| guard.take());
     if let Some(active) = active {
@@ -386,6 +391,19 @@ mod tests {
             read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
             current
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reads_existing_lock_status() {
+        let root = test_root("lock-status");
+        let lock = lock_info("session-a", "2026-06-25T10:00:00.000Z");
+        write_test_lock(&root, &lock);
+
+        let status = get_library_lock_status_native(root.to_str().unwrap().to_string()).unwrap();
+
+        assert_eq!(status, Some(lock));
+
         let _ = fs::remove_dir_all(root);
     }
 

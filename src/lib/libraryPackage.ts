@@ -103,6 +103,7 @@ export async function validateLibraryPackage(
   if (!(await fs.exists(paths.dbPath))) errors.push("Missing framecraft.db");
   if (!(await fs.exists(paths.resultsDir))) errors.push("Missing results directory");
   if (!(await fs.exists(paths.referencesDir))) errors.push("Missing references directory");
+  if (!(await fs.exists(paths.locksDir))) errors.push("Missing locks directory");
   if (!(await fs.exists(paths.inboxDir))) errors.push("Missing inbox directory");
   if (!(await fs.exists(paths.stagingDir))) errors.push("Missing staging directory");
   if (!(await fs.exists(paths.appliedDir))) errors.push("Missing sync applied directory");

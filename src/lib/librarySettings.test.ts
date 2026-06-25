@@ -84,6 +84,7 @@ describe("librarySettings", () => {
   it("identifies package upgrade validation errors that can be repaired safely", () => {
     expect(isRepairableLibraryPackageError("Missing inbox directory")).toBe(true);
     expect(isRepairableLibraryPackageError("Missing staging directory")).toBe(true);
+    expect(isRepairableLibraryPackageError("Missing locks directory")).toBe(true);
     expect(isRepairableLibraryPackageError("Missing sync applied directory")).toBe(true);
     expect(isRepairableLibraryPackageError("Missing sync failed directory")).toBe(true);
     expect(isRepairableLibraryPackageError("Missing database schema")).toBe(true);

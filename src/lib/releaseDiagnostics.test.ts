@@ -28,6 +28,7 @@ describe("release diagnostics", () => {
       testFileStore: vi.fn(async () => undefined),
       testDialogPlugin: vi.fn(async () => undefined),
       validateActiveLibrary: vi.fn(async () => "Using local app-data library."),
+      validateSharedLibrary: vi.fn(async () => "Using local app-data library."),
     });
 
     expect(result.checks.map((check) => check.id)).toEqual([
@@ -36,6 +37,7 @@ describe("release diagnostics", () => {
       "file-store",
       "dialog-plugin",
       "active-library",
+      "shared-library",
     ]);
     expect(result.checks.every((check) => check.status === "pass")).toBe(true);
   });
@@ -51,12 +53,16 @@ describe("release diagnostics", () => {
       validateActiveLibrary: vi.fn(async () => {
         throw new Error("Missing framecraft.db");
       }),
+      validateSharedLibrary: vi.fn(async () => {
+        throw new Error("Missing inbox directory");
+      }),
     });
 
     expect(result.checks.find((check) => check.id === "sqlite-schema")?.status).toBe("fail");
     expect(result.checks.find((check) => check.id === "file-store")?.message).toContain("write failed");
     expect(result.checks.find((check) => check.id === "active-library")?.message).toContain("Missing framecraft.db");
-    expect(formatDiagnosticSummary(result)).toBe("2 passed, 3 failed");
+    expect(result.checks.find((check) => check.id === "shared-library")?.message).toContain("Missing inbox directory");
+    expect(formatDiagnosticSummary(result)).toBe("2 passed, 4 failed");
   });
 
   it("reports non-Error native diagnostic failures", async () => {
@@ -68,6 +74,7 @@ describe("release diagnostics", () => {
       testFileStore: vi.fn(async () => undefined),
       testDialogPlugin: vi.fn(async () => undefined),
       validateActiveLibrary: vi.fn(async () => "Using local app-data library."),
+      validateSharedLibrary: vi.fn(async () => "Using local app-data library."),
     });
 
     expect(result.checks.find((check) => check.id === "sqlite-schema")?.message).toBe("database is locked");

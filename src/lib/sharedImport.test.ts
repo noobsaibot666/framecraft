@@ -16,6 +16,7 @@ function deps(mode: "portable" | "appData", valid = true): SharedImportDeps {
       paths: resolveLibraryPaths("/lib/Work.framecraftlib"),
       validation: mode === "portable" ? { ok: valid, errors: valid ? [] : ["Missing inbox directory"] } : null,
       nativeAvailable: true,
+      activeLock: null,
     })),
     getIdentity: vi.fn(async () => ({ machine: "mac", user: "alan" })),
     createFs: vi.fn(async () => ({

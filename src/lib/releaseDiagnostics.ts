@@ -1,6 +1,6 @@
 import { deleteReferenceFiles, readImageAsDataUrl, saveReferenceImage } from "./fileStore";
 import { getFramecraftDb } from "./dbConnection";
-import { getLibrarySettingsState } from "./librarySettings";
+import { getActiveSharedIngestStatus, getLibrarySettingsState } from "./librarySettings";
 
 const isTauriRuntime = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -38,6 +38,7 @@ export interface ReleaseDiagnosticDeps {
   testFileStore: () => Promise<void>;
   testDialogPlugin: () => Promise<void>;
   validateActiveLibrary: () => Promise<string>;
+  validateSharedLibrary: () => Promise<string>;
 }
 
 export function validateRequiredTables(tables: readonly string[]): { ok: boolean; missing: string[] } {
@@ -72,12 +73,21 @@ async function validateActiveLibraryPackage(): Promise<string> {
   return "Active portable library package is valid.";
 }
 
+async function validateSharedLibraryStructure(): Promise<string> {
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") return "Using local app-data library.";
+  if (state.validation && !state.validation.ok) throw new Error(state.validation.errors.join(", "));
+  const status = await getActiveSharedIngestStatus();
+  return `Shared folders ready. Pending ${status?.pending ?? 0}, failed ${status?.failed ?? 0}.`;
+}
+
 const defaultDeps: ReleaseDiagnosticDeps = {
   isTauri: isTauriRuntime,
   listTables: listSqliteTables,
   testFileStore: testReferenceFileStore,
   testDialogPlugin: testDialogPluginImport,
   validateActiveLibrary: validateActiveLibraryPackage,
+  validateSharedLibrary: validateSharedLibraryStructure,
 };
 
 async function check(label: string, id: string, fn: () => Promise<string>): Promise<DiagnosticCheck> {
@@ -128,6 +138,8 @@ export async function runReleaseDiagnostics(deps: ReleaseDiagnosticDeps = defaul
   }));
 
   checks.push(await check("Active library", "active-library", deps.validateActiveLibrary));
+
+  checks.push(await check("Shared library", "shared-library", deps.validateSharedLibrary));
 
   return { generatedAt: new Date().toISOString(), checks };
 }

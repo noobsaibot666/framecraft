@@ -33,6 +33,19 @@ import type { ComparisonSession, ComparisonResult } from "@/types";
 
 // ─── Score bar ────────────────────────────────────────────────
 
+function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  const displaySrc = failed ? undefined : imageDisplaySrc(src);
+  if (!displaySrc) {
+    return (
+      <div className={cn(className, "flex items-center justify-center bg-black/30")}>
+        <ImageOff size={20} className="text-dim/25" />
+      </div>
+    );
+  }
+  return <img src={displaySrc} alt={alt} className={className} onError={() => setFailed(true)} />;
+}
+
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-2">
@@ -79,7 +92,6 @@ function ComparisonSlot({
   const best = getBestDimension(r);
   const weak = getWeakestDimension(r);
   const hasDecision = slot.isWinner || slot.isRejected;
-  const thumb = imageDisplaySrc(r.thumbnail_path);
 
   return (
     <div
@@ -92,11 +104,7 @@ function ComparisonSlot({
     >
       {/* Image */}
       <div className="relative w-full aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
-        {thumb ? (
-          <img src={thumb} alt={r.prompt_title} className="w-full h-full object-cover" />
-        ) : (
-          <ImageOff size={20} className="text-dim/20" />
-        )}
+        <SafeResultImage src={r.thumbnail_path ?? r.file_path} alt="" className="w-full h-full object-cover" />
 
         {/* Winner / Rejected badges */}
         {slot.isWinner && (
@@ -155,6 +163,7 @@ function ComparisonSlot({
 
         {/* Score bars */}
         <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[8px] text-dim/35 tracking-widest uppercase">Review scores</span>
           <ScoreBar label="REALISM" value={r.score_realism} />
           <ScoreBar label="BRAND FIT" value={r.score_brand_fit} />
           <ScoreBar label="COMPOSIT." value={r.score_composition} />
@@ -277,7 +286,7 @@ function EmptySlot({ onClick, onDrop, disabled = false }: {
     >
       <Upload size={16} className="text-red/45 mb-2" />
       <span className="font-mono text-[9px] text-red/60">{disabled ? "Importing image..." : "Drop image or click"}</span>
-      <span className="font-mono text-[8px] text-dim/35 mt-1">Creates a comparison result</span>
+      <span className="font-mono text-[8px] text-dim/35 mt-1">Import into next slot</span>
     </div>
   );
 }
@@ -293,7 +302,6 @@ function PickerRow({
   selected: boolean;
   onAdd: () => void;
 }) {
-  const thumb = imageDisplaySrc(result.thumbnail_path);
   return (
     <button
       type="button"
@@ -306,10 +314,7 @@ function PickerRow({
       style={{ border: "var(--border-dim)" }}
     >
       <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
-        {thumb
-          ? <img src={thumb} alt="" className="w-full h-full object-cover" />
-          : <ImageOff size={10} className="text-dim/30" />
-        }
+        <SafeResultImage src={result.thumbnail_path ?? result.file_path} alt="" className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
         <span className="font-sans text-[10px] text-soft-white block truncate">{result.prompt_title}</span>
@@ -717,11 +722,25 @@ export function ComparisonLab() {
         className="hidden"
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
-      <div className="flex gap-5 min-w-0">
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-3 gap-2 max-w-3xl">
+          {[
+            ["1", "Import or select results"],
+            ["2", "Compare review scores"],
+            ["3", "Mark winner or reject"],
+          ].map(([n, label]) => (
+            <div key={n} className="flex items-center gap-2 px-3 py-2 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.025)" }}>
+              <span className="w-5 h-5 rounded-sm flex items-center justify-center font-mono text-[9px] text-red/70" style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(215,25,33,0.06)" }}>{n}</span>
+              <span className="font-mono text-[9px] text-dim/65">{label}</span>
+            </div>
+          ))}
+        </div>
+
+      <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-5 min-w-0">
 
         {/* Left: result picker */}
         {(availableResults.length > 0 || projectId) && (
-          <div className="flex flex-col gap-3 w-56 shrink-0">
+          <div className="flex flex-col gap-4 min-w-0">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -731,17 +750,20 @@ export function ComparisonLab() {
                 if (e.dataTransfer.files.length) handleUploadFiles(e.dataTransfer.files);
               }}
               disabled={uploading}
-              className="flex flex-col items-center justify-center gap-1.5 rounded-card py-4 transition-precise disabled:opacity-60"
-              style={{ border: "2px dashed rgba(215,25,33,0.24)", background: "rgba(215,25,33,0.035)" }}
+              className="flex flex-col items-center justify-center gap-1.5 rounded-card py-5 transition-precise disabled:opacity-60"
+              style={{ border: "2px dashed rgba(215,25,33,0.30)", background: "rgba(215,25,33,0.045)" }}
             >
               <Upload size={15} className="text-red/55" />
-              <span className="font-mono text-[9px] text-red/65">{uploading ? "Importing..." : "Drop image or browse"}</span>
-              <span className="font-mono text-[8px] text-dim/35">Adds to comparison</span>
+              <span className="font-mono text-[9px] text-red/70">{uploading ? "Importing..." : "Import image"}</span>
+              <span className="font-mono text-[8px] text-dim/45">Creates a project result and fills a slot</span>
             </button>
             {uploadError && (
               <span className="font-mono text-[9px] text-red/65 leading-snug">{uploadError}</span>
             )}
-            <span className="system-label">PROJECT RESULTS</span>
+            <div className="flex flex-col gap-1">
+              <span className="system-label">PROJECT RESULTS</span>
+              <span className="font-mono text-[8px] text-dim/35">Scores are defined in Result Review.</span>
+            </div>
             {loadingResults ? (
               <span className="font-mono text-[9px] text-dim/30">Loading…</span>
             ) : (
@@ -755,7 +777,7 @@ export function ComparisonLab() {
                   />
                 ))}
                 {availableResults.length === 0 && (
-                  <span className="font-mono text-[9px] text-dim/30">No results in this project yet.</span>
+                  <span className="font-mono text-[9px] text-dim/30">No results yet. Import an image above.</span>
                 )}
               </div>
             )}
@@ -766,7 +788,7 @@ export function ComparisonLab() {
         <div className="flex-1 min-w-0">
           <div className={cn(
             "grid gap-4",
-            layout === "2up" ? "grid-cols-2" : "grid-cols-2"
+            layout === "2up" ? "grid-cols-2" : "grid-cols-2 xl:grid-cols-4"
           )}>
             {displaySlots.map((slot, i) =>
               slot ? (
@@ -796,12 +818,13 @@ export function ComparisonLab() {
             <div className="flex flex-col items-center justify-center py-20 gap-2">
               <span className="font-mono text-[9px] text-dim/30">
                 {projectId
-                  ? "This project has no results yet — add results to prompts first."
+                  ? "This project has no results yet. Import an image to create the first result."
                   : "Navigate to a project comparison to load results automatically."}
               </span>
             </div>
           )}
         </div>
+      </div>
       </div>
     </PageContainer>
   );

@@ -114,6 +114,19 @@ function Panel({ title, count, children, action }: {
   );
 }
 
+function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  const displaySrc = failed ? undefined : imageDisplaySrc(src);
+  if (!displaySrc) {
+    return (
+      <div className={cn(className, "flex items-center justify-center")} style={{ background: "rgba(255,255,255,0.05)" }}>
+        <Image size={12} className="text-white/20" />
+      </div>
+    );
+  }
+  return <img src={displaySrc} alt={alt} className={className} onError={() => setFailed(true)} />;
+}
+
 // ─── Linked prompt row ────────────────────────────────────────
 
 function PromptRow({ prompt, onRemove, onOpen }: {
@@ -153,18 +166,10 @@ function RefRow({ ref: r, onRemove, onOpen }: {
   onRemove: () => void;
   onOpen: () => void;
 }) {
-  const thumbSrc = imageDisplaySrc(r.thumbnail_data);
   return (
     <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm group"
       style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
-      {thumbSrc ? (
-        <img src={thumbSrc} alt="" className="w-8 h-8 object-cover rounded-sm shrink-0" />
-      ) : (
-        <div className="w-8 h-8 rounded-sm shrink-0 flex items-center justify-center"
-          style={{ background: "rgba(255,255,255,0.05)" }}>
-          <Image size={10} className="text-white/20" />
-        </div>
-      )}
+      <SafeThumb src={r.thumbnail_data} className="w-8 h-8 object-cover rounded-sm shrink-0" />
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
         <span className="font-sans text-[10px] text-soft-white truncate block">{r.title}</span>
         <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{r.kind}</span>
@@ -222,8 +227,8 @@ function PromptPicker({ projectId, onAdd, onClose }: {
               <span className="flex items-center gap-1 font-mono text-[8px] text-white/30"><Check size={8} /> Added</span>
             ) : (
               <button type="button" onClick={() => handleAdd(p.id)}
-                className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white transition-precise"
-                style={{ border: "var(--border-dim)" }}>
+                className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-red/70 hover:text-white transition-precise"
+                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                 <Plus size={7} className="inline mr-0.5" /> Add
               </button>
             )}
@@ -272,18 +277,10 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
         className="h-7 px-3 font-mono text-[10px] text-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.15)" }} />
       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-        {items.map((r) => {
-          const thumb = imageDisplaySrc(r.thumbnail_data);
-          return (
+        {items.map((r) => (
           <div key={r.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm hover:bg-white/3 transition-precise">
             <div className="flex items-center gap-2 flex-1 min-w-0">
-              {thumb ? (
-                <img src={thumb} alt="" className="w-7 h-7 object-cover rounded-sm shrink-0" />
-              ) : (
-                <div className="w-7 h-7 rounded-sm shrink-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
-                  <Image size={8} className="text-white/20" />
-                </div>
-              )}
+              <SafeThumb src={r.thumbnail_data} className="w-7 h-7 object-cover rounded-sm shrink-0" />
               <div className="min-w-0">
                 <span className="font-sans text-[10px] text-soft-white truncate block">{r.title}</span>
                 <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{r.kind}</span>
@@ -293,13 +290,13 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
               <span className="flex items-center gap-1 font-mono text-[8px] text-white/30"><Check size={8} /> Added</span>
             ) : (
               <button type="button" onClick={() => handleAdd(r.id)}
-                className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white transition-precise"
-                style={{ border: "var(--border-dim)" }}>
+                className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-red/70 hover:text-white transition-precise"
+                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                 <Plus size={7} className="inline mr-0.5" /> Add
               </button>
             )}
           </div>
-        )})}
+        ))}
         {items.length === 0 && (
           <span className="font-mono text-[9px] text-dim/40 px-2 py-2">No references found.</span>
         )}
@@ -334,9 +331,7 @@ function ResultPicker({ projectId, onAdd, onClose }: {
     <div className="flex flex-col gap-2">
       <span className="font-mono text-[9px] text-dim/50">Recent results</span>
       <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-        {items.map((r) => {
-          const thumb = imageDisplaySrc(r.thumbnail_path);
-          return (
+        {items.map((r) => (
             <button
               key={r.id}
               type="button"
@@ -345,20 +340,13 @@ function ResultPicker({ projectId, onAdd, onClose }: {
               className="relative aspect-square rounded-sm overflow-hidden text-left disabled:opacity-50"
               style={{ border: added.has(r.id) ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}
             >
-              {thumb ? (
-                <img src={thumb} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Image size={12} className="text-white/20" />
-                </div>
-              )}
+              <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
               <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[7px] text-white/70 truncate"
                 style={{ background: "rgba(0,0,0,0.65)" }}>
                 {added.has(r.id) ? "Added" : r.prompt_title || r.id.slice(0, 6)}
               </span>
             </button>
-          );
-        })}
+        ))}
         {items.length === 0 && (
           <span className="col-span-4 font-mono text-[9px] text-dim/30">No results yet. Add results from a prompt or the generation queue.</span>
         )}
@@ -397,6 +385,7 @@ export function ProjectWorkspace() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const hydratedRef = useRef(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -445,6 +434,7 @@ export function ProjectWorkspace() {
       setLinkedRefs(refs);
       setLinkedResults(results);
       setLoading(false);
+      hydratedRef.current = true;
     })();
   }, [id]);
 
@@ -471,6 +461,20 @@ export function ProjectWorkspace() {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!id || loading || !hydratedRef.current || !title.trim()) return;
+    const timer = window.setTimeout(() => {
+      setSaving(true);
+      updateProject(id, buildInput())
+        .then(() => {
+          setSaved(true);
+          window.setTimeout(() => setSaved(false), 1200);
+        })
+        .finally(() => setSaving(false));
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [id, loading, title, client, campaign, status, briefText, productionGoal, category, tags, notes]);
 
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
@@ -592,11 +596,6 @@ export function ProjectWorkspace() {
         </div>
       }
     >
-      {saved && (
-        <div className="mb-4 saved-chip">
-          <Check size={10} /> Project saved
-        </div>
-      )}
       <input
         ref={resultInputRef}
         type="file"
@@ -661,8 +660,8 @@ export function ProjectWorkspace() {
             action={
               <button type="button"
                 onClick={() => setPickerMode(pickerMode === "prompts" ? null : "prompts")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
-                style={{ border: "var(--border-dim)" }}>
+                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                 <Plus size={8} /> Add
               </button>
             }
@@ -699,15 +698,15 @@ export function ProjectWorkspace() {
               <div className="flex items-center gap-1.5">
                 <button type="button"
                   onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
-                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
-                  style={{ border: "var(--border-dim)" }}>
+                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                  style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                   <Plus size={8} /> Add Existing
                 </button>
                 <button type="button"
                   onClick={() => resultInputRef.current?.click()}
                   disabled={resultImporting || linkedPrompts.length === 0}
-                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-35 disabled:hover:text-dim transition-precise px-2 py-1 rounded-sm"
-                  style={{ border: "var(--border-dim)" }}>
+                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white disabled:opacity-35 disabled:hover:text-red/70 transition-precise px-2 py-1 rounded-sm"
+                  style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                   <Upload size={8} /> {resultImporting ? "Importing" : "Import Image"}
                 </button>
               </div>
@@ -754,18 +753,9 @@ export function ProjectWorkspace() {
               </div>
             ) : (
               <div className="grid grid-cols-6 gap-2">
-                {linkedResults.map((r) => {
-                  const thumb = imageDisplaySrc(r.thumbnail_path);
-                  return (
+                {linkedResults.map((r) => (
                     <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
-                      {thumb ? (
-                        <img src={thumb} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center"
-                          style={{ background: "rgba(255,255,255,0.05)" }}>
-                          <Image size={12} className="text-white/20" />
-                        </div>
-                      )}
+                      <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
                       {r.is_winner && (
                         <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-sm bg-white/20 flex items-center justify-center">
                           <Star size={8} className="text-white/80 fill-white/60" />
@@ -777,8 +767,7 @@ export function ProjectWorkspace() {
                         </span>
                       )}
                     </div>
-                  );
-                })}
+                ))}
               </div>
             )}
           </Panel>
@@ -813,8 +802,8 @@ export function ProjectWorkspace() {
             action={
               <button type="button"
                 onClick={() => setPickerMode(pickerMode === "references" ? null : "references")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
-                style={{ border: "var(--border-dim)" }}>
+                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
                 <Plus size={8} /> Add
               </button>
             }

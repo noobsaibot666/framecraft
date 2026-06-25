@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
-  Star, AlertTriangle, Check, Image, FileText,
+  Star, AlertTriangle, Check, Image, FileText, Upload,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -20,9 +20,10 @@ import {
   removeReferenceFromProject,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { getPrompts, getRecentResults, searchPrompts } from "@/lib/db";
+import { createResult, getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
-import { imageDisplaySrc } from "@/lib/fileStore";
+import { imageDisplaySrc, saveResultImage } from "@/lib/fileStore";
+import { fileToDataUrl } from "@/lib/imageUtils";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -182,7 +183,7 @@ type PickerMode = "prompts" | "references" | "results" | null;
 
 function PromptPicker({ projectId, onAdd, onClose }: {
   projectId: string;
-  onAdd: () => void;
+  onAdd: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -200,7 +201,8 @@ function PromptPicker({ projectId, onAdd, onClose }: {
   const handleAdd = async (id: string) => {
     await addPromptToProject(projectId, id);
     setAdded((prev) => new Set([...prev, id]));
-    onAdd();
+    await onAdd();
+    onClose();
   };
 
   return (
@@ -242,7 +244,7 @@ function PromptPicker({ projectId, onAdd, onClose }: {
 
 function ReferencePicker({ projectId, onAdd, onClose }: {
   projectId: string;
-  onAdd: () => void;
+  onAdd: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -313,7 +315,7 @@ function ReferencePicker({ projectId, onAdd, onClose }: {
 
 function ResultPicker({ projectId, onAdd, onClose }: {
   projectId: string;
-  onAdd: () => void;
+  onAdd: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const [items, setItems] = useState<Awaited<ReturnType<typeof getRecentResults>>>([]);
@@ -324,7 +326,8 @@ function ResultPicker({ projectId, onAdd, onClose }: {
   const handleAdd = async (resultId: string) => {
     await addResultToProject(projectId, resultId);
     setAdded((prev) => new Set([...prev, resultId]));
-    onAdd();
+    await onAdd();
+    onClose();
   };
 
   return (
@@ -388,6 +391,7 @@ function StatChip({ label, value, alert = false }: { label: string; value: numbe
 export function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const resultInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -409,6 +413,9 @@ export function ProjectWorkspace() {
   const [linkedPrompts, setLinkedPrompts] = useState<Awaited<ReturnType<typeof getPromptsForProject>>>([]);
   const [linkedRefs, setLinkedRefs] = useState<Awaited<ReturnType<typeof getReferencesForProject>>>([]);
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
+  const [resultImporting, setResultImporting] = useState(false);
+  const [resultImportError, setResultImportError] = useState("");
+  const [resultImportSaved, setResultImportSaved] = useState(false);
 
   // Picker
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
@@ -493,6 +500,50 @@ export function ProjectWorkspace() {
     setLinkedResults(results);
   };
 
+  const handleImportProjectResult = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!id || !file || resultImporting) return;
+
+    const prompt = linkedPrompts[0];
+    if (!prompt) {
+      setResultImportError("Link a prompt before importing a result.");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setResultImportError("Choose an image file.");
+      return;
+    }
+
+    setResultImporting(true);
+    setResultImportError("");
+    setResultImportSaved(false);
+    try {
+      const resultId = crypto.randomUUID().replace(/-/g, "");
+      const dataUrl = await fileToDataUrl(file);
+      const saved = await saveResultImage(resultId, dataUrl);
+
+      await createResult({
+        id: resultId,
+        prompt_id: prompt.id,
+        file_path: saved.filePath,
+        thumbnail_path: saved.thumbPath,
+        provider: prompt.provider,
+        notes: `Imported from project workspace: ${file.name}`,
+      });
+      await addResultToProject(id, resultId);
+      await recomputePromptResultSummary(prompt.id);
+      await reloadLinks();
+      setPickerMode(null);
+      setResultImportSaved(true);
+      setTimeout(() => setResultImportSaved(false), 1800);
+    } catch (error) {
+      setResultImportError(error instanceof Error ? error.message : "Result import failed.");
+    } finally {
+      setResultImporting(false);
+      if (resultInputRef.current) resultInputRef.current.value = "";
+    }
+  };
+
   const winnerCount = linkedPrompts.filter((p) => p.is_winner).length;
   const failedCount = linkedPrompts.filter((p) => p.is_failed).length;
 
@@ -546,6 +597,13 @@ export function ProjectWorkspace() {
           <Check size={10} /> Project saved
         </div>
       )}
+      <input
+        ref={resultInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => handleImportProjectResult(event.target.files)}
+      />
       <div className="grid grid-cols-[1fr_300px] gap-6">
 
         {/* Left column — brief + details */}
@@ -638,14 +696,34 @@ export function ProjectWorkspace() {
             title="RESULTS"
             count={linkedResults.length}
             action={
-              <button type="button"
-                onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
-                style={{ border: "var(--border-dim)" }}>
-                <Plus size={8} /> Add
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button type="button"
+                  onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
+                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white transition-precise px-2 py-1 rounded-sm"
+                  style={{ border: "var(--border-dim)" }}>
+                  <Plus size={8} /> Add Existing
+                </button>
+                <button type="button"
+                  onClick={() => resultInputRef.current?.click()}
+                  disabled={resultImporting || linkedPrompts.length === 0}
+                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white disabled:opacity-35 disabled:hover:text-dim transition-precise px-2 py-1 rounded-sm"
+                  style={{ border: "var(--border-dim)" }}>
+                  <Upload size={8} /> {resultImporting ? "Importing" : "Import Image"}
+                </button>
+              </div>
             }
           >
+            {(resultImportError || resultImportSaved) && (
+              <div
+                className={cn(
+                  "mb-2 px-2 py-1.5 rounded-sm font-mono text-[9px]",
+                  resultImportError ? "text-red/70" : "text-white/50"
+                )}
+                style={{ border: resultImportError ? "1px solid rgba(215,25,33,0.30)" : "var(--border-dim)", background: resultImportError ? "rgba(215,25,33,0.08)" : "rgba(255,255,255,0.04)" }}
+              >
+                {resultImportError || "Result imported and linked."}
+              </div>
+            )}
             {pickerMode === "results" && (
               <div className="mb-2 p-3 rounded-sm" style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
                 <ResultPicker
@@ -656,7 +734,24 @@ export function ProjectWorkspace() {
               </div>
             )}
             {linkedResults.length === 0 && pickerMode !== "results" ? (
-              <span className="font-mono text-[9px] text-dim/30">No results linked yet.</span>
+              <div className="flex flex-col gap-2">
+                <span className="font-mono text-[9px] text-dim/30">
+                  {linkedPrompts.length === 0
+                    ? "No results linked yet. Link a prompt first, then import an image result."
+                    : "No results linked yet. Import an image result or add an existing result."}
+                </span>
+                {linkedPrompts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => resultInputRef.current?.click()}
+                    disabled={resultImporting}
+                    className="self-start flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm font-mono text-[9px] text-white/60 hover:text-white disabled:opacity-50 transition-precise"
+                    style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}
+                  >
+                    <Upload size={9} /> {resultImporting ? "Importing..." : "Import Image Result"}
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="grid grid-cols-6 gap-2">
                 {linkedResults.map((r) => {

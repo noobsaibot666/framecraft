@@ -38,7 +38,8 @@ export function getDefaultLibraryMode(): LibraryMode {
 }
 
 export function normalizeDir(path: string): string {
-  return path.endsWith("/") ? path : `${path}/`;
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.endsWith("/") ? normalized : `${normalized}/`;
 }
 
 export function getResultDir(baseDir: string): string {

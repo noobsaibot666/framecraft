@@ -47,6 +47,11 @@ describe("libraryConfig defaults", () => {
     expect(normalizeDir("/Users/alan/Library/")).toBe("/Users/alan/Library/");
   });
 
+  it("normalizes Windows paths to portable separators", () => {
+    expect(normalizeDir("C:\\Users\\Alan\\Framecraft")).toBe("C:/Users/Alan/Framecraft/");
+    expect(normalizeDir("\\\\nas\\team\\Client.framecraftlib")).toBe("//nas/team/Client.framecraftlib/");
+  });
+
   it("resolves the current media folder names under a base directory", () => {
     const paths = resolveLibraryPaths("/data/Framecraft");
 
@@ -56,6 +61,22 @@ describe("libraryConfig defaults", () => {
     expect(paths.referencesDir).toBe("/data/Framecraft/references/");
     expect(getResultDir(paths.baseDir)).toBe(paths.resultsDir);
     expect(getReferenceDir(paths.baseDir)).toBe(paths.referencesDir);
+  });
+
+  it("resolves portable library paths for Windows drive paths", async () => {
+    const storage = createStorage();
+
+    setSelectedLibraryPath("C:\\Users\\Alan\\Work.framecraftlib", storage);
+
+    expect(getActiveLibraryPaths("C:\\Users\\Alan\\AppData\\Roaming\\com.alan.framecraft", storage)).toEqual({
+      baseDir: "C:/Users/Alan/Work.framecraftlib/",
+      dbPath: "C:/Users/Alan/Work.framecraftlib/framecraft.db",
+      resultsDir: "C:/Users/Alan/Work.framecraftlib/results/",
+      referencesDir: "C:/Users/Alan/Work.framecraftlib/references/",
+      backupsDir: "C:/Users/Alan/Work.framecraftlib/backups/",
+      locksDir: "C:/Users/Alan/Work.framecraftlib/locks/",
+    });
+    await expect(getActiveSqliteUrl(storage)).resolves.toBe("sqlite:C:/Users/Alan/Work.framecraftlib/framecraft.db");
   });
 
   it("identifies portable library package paths", () => {

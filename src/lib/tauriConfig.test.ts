@@ -23,5 +23,6 @@ describe("Tauri media asset config", () => {
     expect(config.app?.security?.assetProtocol?.scope).toContain("$APPDATA/**/*");
     expect(config.app?.security?.assetProtocol?.scope).toContain("$HOME/**/*");
     expect(config.app?.security?.assetProtocol?.scope).toContain("/Volumes/**/*");
+    expect(config.app?.security?.assetProtocol?.scope).toContain("**/*");
   });
 });

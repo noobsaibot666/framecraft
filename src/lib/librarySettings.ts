@@ -13,6 +13,8 @@ import {
   type LibraryStorage,
 } from "./libraryConfig";
 import {
+  backupLibraryPackage,
+  copyLibraryPackage,
   createLibraryPackage,
   listRelativeMediaFilenames,
   migrateAppDataToLibrary,
@@ -131,6 +133,44 @@ export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectVal
   return selectValidatedLibrary(targetBaseDir, {
     validateLibrary: (libraryPath) => validateLibraryPackage(libraryPath, createTauriLibraryFs()),
   });
+}
+
+export async function backupActiveLibrary(): Promise<string> {
+  if (!isTauri()) throw new Error("Library backup can only run in the native app.");
+  const state = await getLibrarySettingsState();
+  const media = await collectCurrentMedia(state.paths);
+  const result = await backupLibraryPackage({
+    sourceBaseDir: state.paths.baseDir,
+    resultFiles: media.resultFiles,
+    referenceFiles: media.referenceFiles,
+    fs: createTauriLibraryFs(),
+  });
+  return result.paths.baseDir;
+}
+
+export async function exportActiveLibraryFromDialog(): Promise<string | null> {
+  if (!isTauri()) throw new Error("Library export can only run in the native app.");
+  const path = await save({
+    title: "Export Framecraft Library Copy",
+    filters: [{ name: "Framecraft Library", extensions: ["framecraftlib"] }],
+  });
+  if (!path) return null;
+
+  const state = await getLibrarySettingsState();
+  const media = await collectCurrentMedia(state.paths);
+  const targetBaseDir = ensureLibraryExtension(path);
+  const result = await copyLibraryPackage({
+    sourceBaseDir: state.paths.baseDir,
+    targetBaseDir,
+    resultFiles: media.resultFiles,
+    referenceFiles: media.referenceFiles,
+    fs: createTauriLibraryFs(),
+  });
+  return result.paths.baseDir;
+}
+
+export async function restoreLibraryFromDialog(): Promise<SelectValidatedLibraryResult | null> {
+  return openLibraryFromDialog();
 }
 
 export async function revealActiveLibraryFolder(): Promise<void> {

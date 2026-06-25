@@ -21,11 +21,14 @@ import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
 import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import {
+  backupActiveLibrary,
   createLibraryFromDialog,
+  exportActiveLibraryFromDialog,
   getLibrarySettingsState,
   migrateCurrentDataToLibraryFromDialog,
   openLibraryFromDialog,
   revealActiveLibraryFolder,
+  restoreLibraryFromDialog,
   useLocalAppDataLibrary,
   type LibrarySettingsState,
 } from "@/lib/librarySettings";
@@ -137,7 +140,11 @@ export function Settings() {
     setLibraryState(await getLibrarySettingsState());
   };
 
-  const runLibraryAction = async (label: string, action: () => Promise<string | null | { restartRequired: true }>) => {
+  const runLibraryAction = async (
+    label: string,
+    action: () => Promise<string | null | { restartRequired: true }>,
+    message?: (result: string | { restartRequired: true }) => string
+  ) => {
     setLibraryBusy(label);
     setLibraryError(null);
     setLibraryMessage(null);
@@ -145,9 +152,11 @@ export function Settings() {
       const result = await action();
       if (result) {
         setLibraryMessage(
-          typeof result === "string"
-            ? "Library package created. Use Migrate Current Data to make it active with your current work."
-            : "Library selected. Restart Framecraft to use it."
+          message
+            ? message(result)
+            : typeof result === "string"
+              ? "Library package created. Use Migrate Current Data to make it active with your current work."
+              : "Library selected. Restart Framecraft to use it."
         );
       }
       await refreshLibraryState();
@@ -194,6 +203,18 @@ export function Settings() {
 
   const handleMigrateLibrary = () => {
     runLibraryAction("migrate", migrateCurrentDataToLibraryFromDialog);
+  };
+
+  const handleBackupLibrary = () => {
+    runLibraryAction("backup", backupActiveLibrary, (path) => `Backup created and validated: ${String(path)}`);
+  };
+
+  const handleExportLibrary = () => {
+    runLibraryAction("export", exportActiveLibraryFromDialog, (path) => `Export copy created and validated: ${String(path)}`);
+  };
+
+  const handleRestoreLibrary = () => {
+    runLibraryAction("restore", restoreLibraryFromDialog, () => "Backup/library selected. Restart Framecraft to use it.");
   };
 
   const handleRevealLibrary = () => {
@@ -367,13 +388,25 @@ export function Settings() {
                 <Upload size={11} />
                 {libraryBusy === "migrate" ? "Migrating..." : "Migrate Current Data"}
               </Button>
+              <Button variant="ghost" size="sm" onClick={handleBackupLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <Download size={11} />
+                {libraryBusy === "backup" ? "Backing up..." : "Backup Active"}
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleOpenLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <FolderOpen size={11} />
                 {libraryBusy === "open" ? "Opening..." : "Open Library"}
               </Button>
+              <Button variant="ghost" size="sm" onClick={handleRestoreLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <RotateCcw size={11} />
+                {libraryBusy === "restore" ? "Opening..." : "Open Backup"}
+              </Button>
               <Button variant="ghost" size="sm" onClick={handleCreateLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <FolderPlus size={11} />
                 {libraryBusy === "create" ? "Creating..." : "Create Package"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleExportLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <Download size={11} />
+                {libraryBusy === "export" ? "Exporting..." : "Export Copy"}
               </Button>
               <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <FolderOpen size={11} />

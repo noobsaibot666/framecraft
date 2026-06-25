@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createLibraryPackage,
+  backupLibraryPackage,
+  copyLibraryPackage,
   migrateAppDataToLibrary,
   validateLibraryPackage,
   type LibraryFileSystem,
@@ -28,6 +30,7 @@ function createFs(existing: string[] = []): LibraryFileSystem & {
     readTextFile: vi.fn(async (path: string) => fs.text[path] ?? ""),
     copyFile: vi.fn(async (from: string, to: string) => {
       paths.add(to);
+      fs.text[to] = fs.text[from] ?? "";
       fs.copies.push([from, to]);
     }),
   };
@@ -153,5 +156,64 @@ describe("libraryPackage", () => {
         fs,
       })
     ).rejects.toThrow("Unsafe library media path");
+  });
+
+  it("copies a library package and validates the copy", async () => {
+    const fs = createFs([
+      "/source/Work.framecraftlib/library.json",
+      "/source/Work.framecraftlib/framecraft.db",
+      "/source/Work.framecraftlib/results/",
+      "/source/Work.framecraftlib/references/",
+    ]);
+    fs.text["/source/Work.framecraftlib/library.json"] = JSON.stringify({
+      format_version: 1,
+      created_at: "2026-06-25T10:00:00.000Z",
+      db_filename: "framecraft.db",
+      results_dir: "results",
+      references_dir: "references",
+    });
+    const result = await copyLibraryPackage({
+      sourceBaseDir: "/source/Work.framecraftlib",
+      targetBaseDir: "/export/Work Copy.framecraftlib",
+      resultFiles: ["a.png"],
+      referenceFiles: ["refs/b.jpg"],
+      fs,
+    });
+
+    expect(result.validation.ok).toBe(true);
+    expect(result.copiedFiles).toEqual([
+      "/export/Work Copy.framecraftlib/library.json",
+      "/export/Work Copy.framecraftlib/framecraft.db",
+      "/export/Work Copy.framecraftlib/results/a.png",
+      "/export/Work Copy.framecraftlib/references/refs/b.jpg",
+    ]);
+  });
+
+  it("creates a timestamped backup inside the source library", async () => {
+    const fs = createFs([
+      "/source/Work.framecraftlib/library.json",
+      "/source/Work.framecraftlib/framecraft.db",
+      "/source/Work.framecraftlib/results/",
+      "/source/Work.framecraftlib/references/",
+    ]);
+    fs.text["/source/Work.framecraftlib/library.json"] = JSON.stringify({
+      format_version: 1,
+      created_at: "2026-06-25T10:00:00.000Z",
+      db_filename: "framecraft.db",
+      results_dir: "results",
+      references_dir: "references",
+    });
+    const result = await backupLibraryPackage({
+      sourceBaseDir: "/source/Work.framecraftlib",
+      resultFiles: [],
+      referenceFiles: [],
+      fs,
+      createdAt: "2026-06-25T10:00:00.000Z",
+    });
+
+    expect(result.paths.baseDir).toBe(
+      "/source/Work.framecraftlib/backups/framecraft-backup-2026-06-25T10-00-00-000Z.framecraftlib/"
+    );
+    expect(result.validation.ok).toBe(true);
   });
 });

@@ -36,6 +36,28 @@ export interface MigrateAppDataResult {
   copiedFiles: string[];
 }
 
+export interface CopyLibraryPackageInput {
+  sourceBaseDir: string;
+  targetBaseDir: string;
+  resultFiles: string[];
+  referenceFiles: string[];
+  fs: LibraryFileSystem;
+}
+
+export interface CopyLibraryPackageResult {
+  paths: LibraryPaths;
+  copiedFiles: string[];
+  validation: LibraryValidationResult;
+}
+
+export interface BackupLibraryPackageInput {
+  sourceBaseDir: string;
+  resultFiles: string[];
+  referenceFiles: string[];
+  fs: LibraryFileSystem;
+  createdAt?: string;
+}
+
 export async function createLibraryPackage(
   baseDir: string,
   fs: LibraryFileSystem,
@@ -114,6 +136,43 @@ export async function migrateAppDataToLibrary(input: MigrateAppDataInput): Promi
   return { paths: target, copiedFiles };
 }
 
+export async function copyLibraryPackage(input: CopyLibraryPackageInput): Promise<CopyLibraryPackageResult> {
+  const source = resolveLibraryPaths(input.sourceBaseDir);
+  const target = resolveLibraryPaths(input.targetBaseDir);
+  const copiedFiles: string[] = [];
+
+  await input.fs.mkdir(target.baseDir);
+  await input.fs.mkdir(target.resultsDir);
+  await input.fs.mkdir(target.referencesDir);
+  await input.fs.mkdir(target.backupsDir);
+  await input.fs.mkdir(target.locksDir);
+
+  await input.fs.copyFile(`${source.baseDir}library.json`, `${target.baseDir}library.json`);
+  copiedFiles.push(`${target.baseDir}library.json`);
+  await input.fs.copyFile(source.dbPath, target.dbPath);
+  copiedFiles.push(target.dbPath);
+
+  await copyMediaFiles(input.resultFiles, source.resultsDir, target.resultsDir, input.fs, copiedFiles);
+  await copyMediaFiles(input.referenceFiles, source.referencesDir, target.referencesDir, input.fs, copiedFiles);
+
+  const validation = await validateLibraryPackage(target.baseDir, input.fs);
+  if (!validation.ok) throw new Error(`Invalid library copy: ${validation.errors.join(", ")}`);
+
+  return { paths: target, copiedFiles, validation };
+}
+
+export async function backupLibraryPackage(input: BackupLibraryPackageInput): Promise<CopyLibraryPackageResult> {
+  const source = resolveLibraryPaths(input.sourceBaseDir);
+  const stamp = safeTimestamp(input.createdAt ?? new Date().toISOString());
+  return copyLibraryPackage({
+    sourceBaseDir: input.sourceBaseDir,
+    targetBaseDir: `${source.backupsDir}framecraft-backup-${stamp}.framecraftlib`,
+    resultFiles: input.resultFiles,
+    referenceFiles: input.referenceFiles,
+    fs: input.fs,
+  });
+}
+
 export function listRelativeMediaFilenames(paths: string[], baseDir: string): string[] {
   const base = normalizeDir(baseDir);
   return paths
@@ -133,6 +192,22 @@ function assertSafeRelativeMediaPath(path: string): void {
   }
 }
 
+async function copyMediaFiles(
+  filenames: string[],
+  sourceDir: string,
+  targetDir: string,
+  fs: LibraryFileSystem,
+  copiedFiles: string[]
+): Promise<void> {
+  for (const filename of filenames) {
+    assertSafeRelativeMediaPath(filename);
+    const to = `${targetDir}${filename}`;
+    await ensureParentDirs(targetDir, filename, fs);
+    await fs.copyFile(`${sourceDir}${filename}`, to);
+    copiedFiles.push(to);
+  }
+}
+
 async function ensureParentDirs(baseDir: string, relativePath: string, fs: LibraryFileSystem): Promise<void> {
   const parts = relativePath.split("/").slice(0, -1);
   let cursor = baseDir;
@@ -140,4 +215,8 @@ async function ensureParentDirs(baseDir: string, relativePath: string, fs: Libra
     cursor = `${cursor}${part}/`;
     await fs.mkdir(cursor);
   }
+}
+
+function safeTimestamp(value: string): string {
+  return value.replace(/[:.]/g, "-");
 }

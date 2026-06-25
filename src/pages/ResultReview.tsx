@@ -6,10 +6,9 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
-import { createReference } from "@/lib/references";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
-import { saveResultImage, saveReferenceImage } from "@/lib/fileStore";
+import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -144,15 +143,17 @@ export function ResultReview() {
     if (!file || !prompt) return;
     const dataUrl = await fileToDataUrl(file);
     const refId = crypto.randomUUID().replace(/-/g, "");
-    const { filePath, thumbPath } = await saveReferenceImage(refId, dataUrl);
-    await createReference({
-      title: `${prompt.title} — result`,
-      kind: "result",
-      file_data: filePath,
-      thumbnail_data: thumbPath,
-      provider: prompt.provider,
-      category: prompt.category,
-      tags: prompt.tags,
+    await importReferenceImage({
+      referenceId: refId,
+      dataUrl,
+      originalName: file.name,
+      reference: {
+        title: `${prompt.title} — result`,
+        kind: "result",
+        provider: prompt.provider,
+        category: prompt.category,
+        tags: prompt.tags,
+      },
     });
     setSavedAsRef(true);
   };
@@ -162,33 +163,48 @@ export function ResultReview() {
     setSaving(true);
     try {
       const resultId = crypto.randomUUID().replace(/-/g, "");
-      let filePath: string | undefined;
-      let thumbPath: string | undefined;
+      let queued = false;
       if (file) {
         const dataUrl = await fileToDataUrl(file);
-        const saved = await saveResultImage(resultId, dataUrl);
-        filePath = saved.filePath;
-        thumbPath = saved.thumbPath;
+        const result = await importResultImage({
+          resultId,
+          promptId,
+          dataUrl,
+          originalName: file.name,
+          result: {
+            provider: prompt?.provider,
+            score_overall: scores.overall,
+            score_realism: scores.realism,
+            score_brand_fit: scores.brand_fit,
+            score_composition: scores.composition,
+            score_lighting: scores.lighting,
+            score_ai_risk: scores.ai_risk,
+            reuse_potential: scores.reuse,
+            is_winner: isWinner,
+            is_failed: isFailed,
+            artifacts: Array.from(checkedArtifacts),
+            notes: notes || undefined,
+          },
+        });
+        queued = result.queued;
+      } else {
+        await createResult({
+          id: resultId,
+          prompt_id: promptId,
+          provider: prompt?.provider,
+          score_overall: scores.overall,
+          score_realism: scores.realism,
+          score_brand_fit: scores.brand_fit,
+          score_composition: scores.composition,
+          score_lighting: scores.lighting,
+          score_ai_risk: scores.ai_risk,
+          reuse_potential: scores.reuse,
+          is_winner: isWinner,
+          is_failed: isFailed,
+          artifacts: Array.from(checkedArtifacts),
+          notes: notes || undefined,
+        });
       }
-
-      await createResult({
-        id: resultId,
-        prompt_id: promptId,
-        file_path: filePath,
-        thumbnail_path: thumbPath,
-        provider: prompt?.provider,
-        score_overall: scores.overall,
-        score_realism: scores.realism,
-        score_brand_fit: scores.brand_fit,
-        score_composition: scores.composition,
-        score_lighting: scores.lighting,
-        score_ai_risk: scores.ai_risk,
-        reuse_potential: scores.reuse,
-        is_winner: isWinner,
-        is_failed: isFailed,
-        artifacts: Array.from(checkedArtifacts),
-        notes: notes || undefined,
-      });
 
       // Update token quality scores (fire-and-forget — non-blocking)
       if (prompt?.prompt_text) {
@@ -196,7 +212,7 @@ export function ResultReview() {
         updateTokenQualityFromResult(prompt.prompt_text, delta).catch(() => {});
       }
 
-      await recomputePromptResultSummary(promptId);
+      if (!queued) await recomputePromptResultSummary(promptId);
 
       navigate(`/library/${promptId}`, { state: { newResultId: resultId } });
     } finally {

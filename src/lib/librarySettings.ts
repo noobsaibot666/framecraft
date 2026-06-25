@@ -306,7 +306,7 @@ async function executeMediaPathRewrite(
   );
 }
 
-async function createTauriSharedIngestFileSystem(): Promise<SharedIngestFileSystem> {
+export async function createTauriSharedIngestFileSystem(): Promise<SharedIngestFileSystem> {
   const fs = await import("@tauri-apps/plugin-fs");
   return {
     mkdir: (path) => fs.mkdir(path, { recursive: true }),

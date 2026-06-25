@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { getReferences, searchReferences, deleteReference, createReference } from "@/lib/references";
-import { saveReferenceImage } from "@/lib/fileStore";
+import { getReferences, searchReferences, deleteReference } from "@/lib/references";
 import { fileToDataUrl } from "@/lib/imageUtils";
+import { importReferenceImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type { Reference, ReferenceKind, ReferenceFilters } from "@/types";
@@ -231,16 +231,18 @@ export function ReferenceLibrary() {
       for (const file of imageFiles) {
         const refId = crypto.randomUUID().replace(/-/g, "");
         const dataUrl = await fileToDataUrl(file);
-        const { filePath, thumbPath } = await saveReferenceImage(refId, dataUrl);
         const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
-        const newId = await createReference({
-          id: refId,
-          title,
-          kind: "image",
-          file_data: filePath,
-          thumbnail_data: thumbPath,
+        const result = await importReferenceImage({
+          referenceId: refId,
+          dataUrl,
+          originalName: file.name,
+          reference: {
+            title,
+            kind: "image",
+          },
         });
-        navigate(`/references/${newId}`);
+        if (!result.queued) navigate(`/references/${result.id}`);
+        else await load();
         return; // navigate to first dropped file for confirmation
       }
     } finally {

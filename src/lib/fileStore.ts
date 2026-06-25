@@ -1,4 +1,9 @@
-import { getAppDataLibraryPaths, getReferenceDir, getResultDir as resolveResultDir } from "./libraryConfig";
+import {
+  getAppDataLibraryPaths,
+  getReferenceDir,
+  getResultDir as resolveResultDir,
+  type LibraryPaths,
+} from "./libraryConfig";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -110,7 +115,20 @@ export async function saveReferenceImage(
 export async function readImageAsDataUrl(filePath: string): Promise<string> {
   if (!isTauri || filePath.startsWith("data:")) return filePath;
   const { readFile } = await import("@tauri-apps/plugin-fs");
-  const bytes = await readFile(filePath);
+  let resolvedPath = filePath;
+  let bytes: Uint8Array;
+  try {
+    bytes = await readFile(resolvedPath);
+  } catch (error) {
+    const portablePath = resolvePortableImagePath(filePath, await getAppDataLibraryPaths());
+    if (portablePath === filePath) throw error;
+    resolvedPath = portablePath;
+    bytes = await readFile(resolvedPath);
+  }
+  return bytesToDataUrl(bytes, resolvedPath);
+}
+
+function bytesToDataUrl(bytes: Uint8Array, filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
   const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
@@ -149,6 +167,37 @@ export function isDirectImageSrc(src: string | undefined): boolean {
 
 export function isStoredImagePath(src: string | undefined): boolean {
   return Boolean(src && !isDirectImageSrc(src));
+}
+
+export function resolvePortableImagePath(src: string, paths: LibraryPaths): string {
+  if (!src || isDirectImageSrc(src)) return src;
+  const normalized = src.replace(/\\/g, "/");
+  const activeResults = paths.resultsDir;
+  const activeReferences = paths.referencesDir;
+
+  if (normalized.startsWith(activeResults) || normalized.startsWith(activeReferences)) {
+    return normalized;
+  }
+
+  const resultRelative = relativeAfterMediaDir(normalized, "results");
+  if (resultRelative) return `${activeResults}${resultRelative}`;
+
+  const referenceRelative = relativeAfterMediaDir(normalized, "references");
+  if (referenceRelative) return `${activeReferences}${referenceRelative}`;
+
+  return src;
+}
+
+function relativeAfterMediaDir(path: string, dirName: "results" | "references"): string | null {
+  const directPrefix = `${dirName}/`;
+  if (path.startsWith(directPrefix)) return path.slice(directPrefix.length);
+
+  const marker = `/${dirName}/`;
+  const index = path.lastIndexOf(marker);
+  if (index < 0) return null;
+
+  const relative = path.slice(index + marker.length);
+  return relative && !relative.startsWith("../") ? relative : null;
 }
 
 export async function deleteResultFiles(resultId: string): Promise<void> {

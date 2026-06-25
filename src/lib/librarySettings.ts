@@ -6,14 +6,17 @@ import {
   getActiveLibraryPaths,
   getActiveLibrarySelection,
   isFramecraftLibraryPath,
+  resolveLibraryPaths,
   setSelectedLibraryPath,
   type ActiveLibrarySelection,
   type LibraryPaths,
   type LibraryStorage,
 } from "./libraryConfig";
 import {
+  buildPortableMediaPathRewrites,
   listRelativeMediaFilenames,
   type LibraryValidationResult,
+  type PortableMediaPathRewrite,
 } from "./libraryPackage";
 import {
   backupLibraryPackageNative,
@@ -128,6 +131,7 @@ export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectVal
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
   });
+  await repairCopiedLibraryMediaPaths(sourceBaseDir, targetBaseDir);
 
   return selectValidatedLibrary(targetBaseDir, {
     validateLibrary: validateLibraryPackageNative,
@@ -143,6 +147,7 @@ export async function backupActiveLibrary(): Promise<string> {
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
   });
+  await repairCopiedLibraryMediaPaths(state.paths.baseDir, result.paths.baseDir);
   return result.paths.baseDir;
 }
 
@@ -163,6 +168,7 @@ export async function exportActiveLibraryFromDialog(): Promise<string | null> {
     resultFiles: media.resultFiles,
     referenceFiles: media.referenceFiles,
   });
+  await repairCopiedLibraryMediaPaths(state.paths.baseDir, result.paths.baseDir);
   return result.paths.baseDir;
 }
 
@@ -228,4 +234,36 @@ function isString(value: unknown): value is string {
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values));
+}
+
+async function repairCopiedLibraryMediaPaths(sourceBaseDir: string, targetBaseDir: string): Promise<void> {
+  if (!isTauri()) return;
+  const rewrites = buildPortableMediaPathRewrites({ sourceBaseDir, targetBaseDir });
+  const target = resolveLibraryPaths(targetBaseDir);
+  const SqlPlugin = await import("@tauri-apps/plugin-sql");
+  const db = await SqlPlugin.default.load(`sqlite:${target.dbPath}`);
+
+  try {
+    for (const rewrite of rewrites) {
+      await executeMediaPathRewrite(db, rewrite);
+    }
+  } finally {
+    await db.close?.();
+  }
+}
+
+async function executeMediaPathRewrite(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
+  rewrite: PortableMediaPathRewrite
+): Promise<void> {
+  const table = rewrite.table === "references" ? "\"references\"" : "results";
+  const column = rewrite.column;
+  await db.execute(
+    `UPDATE ${table}
+     SET ${column} = $1 || substr(${column}, length($2) + 1)
+     WHERE ${column} IS NOT NULL
+       AND substr(${column}, 1, length($2)) = $2`,
+    [rewrite.targetPrefix, rewrite.sourcePrefix]
+  );
 }

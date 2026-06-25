@@ -62,6 +62,13 @@ export interface BackupLibraryPackageInput {
   createdAt?: string;
 }
 
+export interface PortableMediaPathRewrite {
+  table: "results" | "references";
+  column: "file_path" | "thumbnail_path" | "file_data" | "thumbnail_data";
+  sourcePrefix: string;
+  targetPrefix: string;
+}
+
 export async function createLibraryPackage(
   baseDir: string,
   fs: LibraryFileSystem,
@@ -184,6 +191,40 @@ export function listRelativeMediaFilenames(paths: string[], baseDir: string): st
     .filter((path) => path.startsWith(base))
     .map((path) => path.slice(base.length))
     .filter(Boolean);
+}
+
+export function buildPortableMediaPathRewrites(input: {
+  sourceBaseDir: string;
+  targetBaseDir: string;
+}): PortableMediaPathRewrite[] {
+  const source = resolveLibraryPaths(input.sourceBaseDir);
+  const target = resolveLibraryPaths(input.targetBaseDir);
+  return [
+    {
+      table: "results",
+      column: "file_path",
+      sourcePrefix: source.resultsDir,
+      targetPrefix: target.resultsDir,
+    },
+    {
+      table: "results",
+      column: "thumbnail_path",
+      sourcePrefix: source.resultsDir,
+      targetPrefix: target.resultsDir,
+    },
+    {
+      table: "references",
+      column: "file_data",
+      sourcePrefix: source.referencesDir,
+      targetPrefix: target.referencesDir,
+    },
+    {
+      table: "references",
+      column: "thumbnail_data",
+      sourcePrefix: source.referencesDir,
+      targetPrefix: target.referencesDir,
+    },
+  ];
 }
 
 function assertSafeRelativeMediaPath(path: string): void {

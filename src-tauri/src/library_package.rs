@@ -182,8 +182,18 @@ fn create_library_package(
     let paths = resolve_library_paths(base_dir);
     create_package_dirs(&paths)?;
     write_metadata(&paths)?;
-    if create_empty_db && !Path::new(&paths.db_path).exists() {
-        fs::write(&paths.db_path, []).map_err(format_io_error)?;
+    if create_empty_db {
+        let db_missing = !Path::new(&paths.db_path).exists();
+        let db_empty = Path::new(&paths.db_path)
+            .metadata()
+            .map(|metadata| metadata.len() == 0)
+            .unwrap_or(true);
+        if db_missing {
+            fs::write(&paths.db_path, []).map_err(format_io_error)?;
+        }
+        if db_missing || db_empty {
+            initialize_portable_database(&paths.db_path)?;
+        }
     }
     Ok(paths)
 }
@@ -223,6 +233,8 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
     if !Path::new(&paths.db_path).exists() {
         errors.push("Missing framecraft.db".to_string());
+    } else if !has_core_database_schema(&paths.db_path) {
+        errors.push("Missing database schema".to_string());
     }
     if !Path::new(&paths.results_dir).exists() {
         errors.push("Missing results directory".to_string());
@@ -257,6 +269,46 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
         ok: errors.is_empty(),
         errors,
     }
+}
+
+fn initialize_portable_database(db_path: &str) -> Result<(), String> {
+    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    for sql in migration_sql() {
+        conn.execute_batch(sql).map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
+fn has_core_database_schema(db_path: &str) -> bool {
+    let Ok(conn) = rusqlite::Connection::open(db_path) else {
+        return false;
+    };
+    ["prompts", "results", "references"].iter().all(|table| {
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+            [table],
+            |_| Ok(()),
+        )
+        .is_ok()
+    })
+}
+
+fn migration_sql() -> [&'static str; 13] {
+    [
+        include_str!("../migrations/001_initial.sql"),
+        include_str!("../migrations/002_tokens.sql"),
+        include_str!("../migrations/003_meta.sql"),
+        include_str!("../migrations/004_token_seeds.sql"),
+        include_str!("../migrations/005_notion_library.sql"),
+        include_str!("../migrations/006_avoidance_seed.sql"),
+        include_str!("../migrations/007_token_patterns.sql"),
+        include_str!("../migrations/008_token_favorite.sql"),
+        include_str!("../migrations/009_references.sql"),
+        include_str!("../migrations/010_projects.sql"),
+        include_str!("../migrations/011_v4_workflow.sql"),
+        include_str!("../migrations/012_deliverable_align.sql"),
+        include_str!("../migrations/013_generation_queue.sql"),
+    ]
 }
 
 fn copy_media_files(
@@ -349,6 +401,7 @@ mod tests {
         assert!(validation.ok, "{:?}", validation.errors);
         assert!(Path::new(&result.results_dir).is_dir());
         assert!(Path::new(&result.references_dir).is_dir());
+        assert!(sqlite_table_exists(&result.db_path, "prompts"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -388,6 +441,29 @@ mod tests {
     }
 
     #[test]
+    fn validation_rejects_empty_database_without_schema() {
+        let root = test_root("empty-schema");
+        let package = root.join("Broken.framecraftlib");
+        fs::create_dir_all(package.join("results")).unwrap();
+        fs::create_dir_all(package.join("references")).unwrap();
+        fs::write(
+            package.join("library.json"),
+            r#"{"format_version":1,"db_filename":"framecraft.db","results_dir":"results","references_dir":"references"}"#,
+        )
+        .unwrap();
+        fs::write(package.join("framecraft.db"), []).unwrap();
+
+        let validation = validate_library_package(package.to_str().unwrap());
+
+        assert!(!validation.ok);
+        assert!(validation
+            .errors
+            .contains(&"Missing database schema".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn rejects_unsafe_media_paths() {
         assert!(assert_safe_relative_media_path("../escape.png").is_err());
         assert!(assert_safe_relative_media_path("/escape.png").is_err());
@@ -404,5 +480,15 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn sqlite_table_exists(db_path: &str, table: &str) -> bool {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+            [table],
+            |_| Ok(()),
+        )
+        .is_ok()
     }
 }

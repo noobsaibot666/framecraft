@@ -5,6 +5,7 @@ import {
   saveResultImage,
   saveReferenceImage,
   readImageAsDataUrl,
+  resolvePortableImagePath,
   toDisplaySrc,
   isDirectImageSrc,
   isStoredImagePath,
@@ -126,6 +127,38 @@ describe("image source classifiers", () => {
     expect(isStoredImagePath("C:\\Users\\cyrus\\Pictures\\a.jpg")).toBe(true);
     expect(isStoredImagePath("/Users/alan/Pictures/a.jpg")).toBe(true);
     expect(isStoredImagePath(JPEG_DATA_URL)).toBe(false);
+  });
+});
+
+describe("portable image path resolution", () => {
+  it("remaps stale result and reference paths into the active portable library", () => {
+    const paths = {
+      baseDir: "/Volumes/NAS/Client.framecraftlib/",
+      dbPath: "/Volumes/NAS/Client.framecraftlib/framecraft.db",
+      resultsDir: "/Volumes/NAS/Client.framecraftlib/results/",
+      referencesDir: "/Volumes/NAS/Client.framecraftlib/references/",
+      backupsDir: "/Volumes/NAS/Client.framecraftlib/backups/",
+      locksDir: "/Volumes/NAS/Client.framecraftlib/locks/",
+    };
+
+    expect(resolvePortableImagePath("C:\\Users\\cyrus\\Old.framecraftlib\\results\\campaign\\a_thumb.jpg", paths))
+      .toBe("/Volumes/NAS/Client.framecraftlib/results/campaign/a_thumb.jpg");
+    expect(resolvePortableImagePath("/Users/alan/Old.framecraftlib/references/brand/ref.jpg", paths))
+      .toBe("/Volumes/NAS/Client.framecraftlib/references/brand/ref.jpg");
+  });
+
+  it("leaves direct sources and paths without library media folders unchanged", () => {
+    const paths = {
+      baseDir: "/Volumes/NAS/Client.framecraftlib/",
+      dbPath: "/Volumes/NAS/Client.framecraftlib/framecraft.db",
+      resultsDir: "/Volumes/NAS/Client.framecraftlib/results/",
+      referencesDir: "/Volumes/NAS/Client.framecraftlib/references/",
+      backupsDir: "/Volumes/NAS/Client.framecraftlib/backups/",
+      locksDir: "/Volumes/NAS/Client.framecraftlib/locks/",
+    };
+
+    expect(resolvePortableImagePath(JPEG_DATA_URL, paths)).toBe(JPEG_DATA_URL);
+    expect(resolvePortableImagePath("/Users/alan/Desktop/image.jpg", paths)).toBe("/Users/alan/Desktop/image.jpg");
   });
 });
 

@@ -1,19 +1,13 @@
 import { getProjectById, getReferencesForProject } from "./projects";
 import { getDeliverablesForProject } from "./deliverables";
 import { buildContextPack, generateSuggestions } from "./assistant";
+import { getFramecraftDb } from "./dbConnection";
 import type { Project, Deliverable } from "@/types";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _db: any = null;
 async function getDb() {
-  if (!isTauri) throw new Error("Not in Tauri context");
-  if (!_db) {
-    const SqlPlugin = await import("@tauri-apps/plugin-sql");
-    _db = await SqlPlugin.default.load("sqlite:framecraft.db");
-  }
-  return _db;
+  return getFramecraftDb();
 }
 
 // ─── Report data types ────────────────────────────────────────

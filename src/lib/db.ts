@@ -1,20 +1,12 @@
 import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result, SREF, Profile } from "@/types";
 import { summarizePromptFromResults } from "@/lib/resultMemory";
+import { getFramecraftDb } from "./dbConnection";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-// ─── DB Connection (Tauri only) ──────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let _db: any = null;
-
 async function getDb() {
-  if (!isTauri) throw new Error("Not in Tauri context");
-  if (!_db) {
-    const SqlPlugin = await import("@tauri-apps/plugin-sql");
-    _db = await SqlPlugin.default.load("sqlite:framecraft.db");
-  }
-  return _db;
+  return getFramecraftDb();
 }
 
 // ─── In-Memory Dev Store ─────────────────────────────────────

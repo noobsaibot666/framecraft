@@ -1,3 +1,5 @@
+import { getAppDataLibraryPaths, getReferenceDir, getResultDir as resolveResultDir } from "./libraryConfig";
+
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 function tauriConvertFileSrc(): ((path: string, protocol?: string) => string) | undefined {
@@ -17,18 +19,12 @@ if (isTauri) {
 
 // ─── Path helpers ─────────────────────────────────────────────
 
-async function appDataBase(): Promise<string> {
-  const { appDataDir } = await import("@tauri-apps/api/path");
-  const dir = await appDataDir();
-  return dir.endsWith("/") ? dir : dir + "/";
-}
-
 export function getResultDir(base: string): string {
-  return `${base}results/`;
+  return resolveResultDir(base);
 }
 
 export function getRefDir(base: string): string {
-  return `${base}references/`;
+  return getReferenceDir(base);
 }
 
 // ─── Internal helpers ─────────────────────────────────────────
@@ -76,8 +72,7 @@ export async function saveResultImage(
   if (!isTauri) return { filePath: dataUrl, thumbPath: dataUrl };
 
   const { writeFile, mkdir } = await import("@tauri-apps/plugin-fs");
-  const base = await appDataBase();
-  const dir = getResultDir(base);
+  const { resultsDir: dir } = await getAppDataLibraryPaths();
   await mkdir(dir, { recursive: true });
 
   const ext = extFromDataUrl(dataUrl);
@@ -98,8 +93,7 @@ export async function saveReferenceImage(
   if (!isTauri) return { filePath: dataUrl, thumbPath: dataUrl };
 
   const { writeFile, mkdir } = await import("@tauri-apps/plugin-fs");
-  const base = await appDataBase();
-  const dir = getRefDir(base);
+  const { referencesDir: dir } = await getAppDataLibraryPaths();
   await mkdir(dir, { recursive: true });
 
   const ext = extFromDataUrl(dataUrl);
@@ -151,8 +145,7 @@ export function imageDisplaySrc(src: string | undefined): string | undefined {
 export async function deleteResultFiles(resultId: string): Promise<void> {
   if (!isTauri) return;
   const { remove } = await import("@tauri-apps/plugin-fs");
-  const base = await appDataBase();
-  const dir = getResultDir(base);
+  const { resultsDir: dir } = await getAppDataLibraryPaths();
   for (const ext of ["jpg", "png", "webp"]) {
     try { await remove(`${dir}${resultId}.${ext}`); } catch {}
   }
@@ -162,8 +155,7 @@ export async function deleteResultFiles(resultId: string): Promise<void> {
 export async function deleteReferenceFiles(refId: string): Promise<void> {
   if (!isTauri) return;
   const { remove } = await import("@tauri-apps/plugin-fs");
-  const base = await appDataBase();
-  const dir = getRefDir(base);
+  const { referencesDir: dir } = await getAppDataLibraryPaths();
   for (const ext of ["jpg", "png", "webp"]) {
     try { await remove(`${dir}${refId}.${ext}`); } catch {}
   }

@@ -1,4 +1,5 @@
 import { deleteReferenceFiles, readImageAsDataUrl, saveReferenceImage } from "./fileStore";
+import { getFramecraftDb } from "./dbConnection";
 
 const isTauriRuntime = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -44,9 +45,7 @@ export function validateRequiredTables(tables: readonly string[]): { ok: boolean
 }
 
 async function listSqliteTables(): Promise<string[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const SqlPlugin: any = await import("@tauri-apps/plugin-sql");
-  const db = await SqlPlugin.default.load("sqlite:framecraft.db");
+  const db = await getFramecraftDb();
   const rows = await db.select("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name") as { name: string }[];
   return rows.map((row) => row.name);
 }

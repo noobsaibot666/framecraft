@@ -182,6 +182,19 @@ export function useLocalAppDataLibrary(storage?: LibraryStorage): void {
   clearSelectedLibraryPath(storage);
 }
 
+export function formatLibraryActionError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Library action failed.";
+  }
+}
+
 function createTauriLibraryFs(): LibraryFileSystem {
   return {
     exists: (path) => exists(path),

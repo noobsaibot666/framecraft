@@ -24,6 +24,7 @@ import {
   backupActiveLibrary,
   createLibraryFromDialog,
   exportActiveLibraryFromDialog,
+  formatLibraryActionError,
   getLibrarySettingsState,
   migrateCurrentDataToLibraryFromDialog,
   openLibraryFromDialog,
@@ -161,7 +162,7 @@ export function Settings() {
       }
       await refreshLibraryState();
     } catch (error) {
-      setLibraryError(error instanceof Error ? error.message : "Library action failed.");
+      setLibraryError(formatLibraryActionError(error));
     } finally {
       setLibraryBusy(null);
     }

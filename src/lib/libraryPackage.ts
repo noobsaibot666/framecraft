@@ -22,6 +22,10 @@ export interface CreateLibraryPackageResult {
   paths: LibraryPaths;
 }
 
+export interface CreateLibraryPackageOptions {
+  createEmptyDb?: boolean;
+}
+
 export interface MigrateAppDataInput {
   sourceBaseDir: string;
   targetBaseDir: string;
@@ -61,7 +65,8 @@ export interface BackupLibraryPackageInput {
 export async function createLibraryPackage(
   baseDir: string,
   fs: LibraryFileSystem,
-  createdAt?: string
+  createdAt?: string,
+  options: CreateLibraryPackageOptions = {}
 ): Promise<CreateLibraryPackageResult> {
   const paths = resolveLibraryPaths(baseDir);
   await fs.mkdir(paths.baseDir);
@@ -70,7 +75,7 @@ export async function createLibraryPackage(
   await fs.mkdir(paths.backupsDir);
   await fs.mkdir(paths.locksDir);
   await fs.writeTextFile(`${paths.baseDir}library.json`, JSON.stringify(buildLibraryMetadata(createdAt), null, 2));
-  if (!(await fs.exists(paths.dbPath))) await fs.writeTextFile(paths.dbPath, "");
+  if (options.createEmptyDb !== false && !(await fs.exists(paths.dbPath))) await fs.writeTextFile(paths.dbPath, "");
   return { paths };
 }
 
@@ -109,7 +114,7 @@ export async function validateLibraryPackage(
 
 export async function migrateAppDataToLibrary(input: MigrateAppDataInput): Promise<MigrateAppDataResult> {
   const source = resolveLibraryPaths(input.sourceBaseDir);
-  const target = (await createLibraryPackage(input.targetBaseDir, input.fs, input.createdAt)).paths;
+  const target = (await createLibraryPackage(input.targetBaseDir, input.fs, input.createdAt, { createEmptyDb: false })).paths;
   const copiedFiles: string[] = [];
 
   await input.fs.copyFile(source.dbPath, target.dbPath);

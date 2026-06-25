@@ -121,6 +121,27 @@ describe("libraryPackage", () => {
     ]);
   });
 
+  it("does not precreate the target DB before migration copy", async () => {
+    const fs = createFs(["/app/framecraft.db"]);
+    fs.copyFile = vi.fn(async (from: string, to: string) => {
+      if (await fs.exists(to)) throw new Error(`Destination exists: ${to}`);
+      fs.text[to] = fs.text[from] ?? "";
+      fs.copies.push([from, to]);
+    });
+
+    await expect(
+      migrateAppDataToLibrary({
+        sourceBaseDir: "/app",
+        targetBaseDir: "/portable/Work.framecraftlib",
+        resultFiles: [],
+        referenceFiles: [],
+        fs,
+      })
+    ).resolves.toMatchObject({
+      copiedFiles: ["/portable/Work.framecraftlib/framecraft.db"],
+    });
+  });
+
   it("preserves nested media folder structure", async () => {
     const fs = createFs(["/app/framecraft.db"]);
 

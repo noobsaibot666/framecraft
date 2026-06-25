@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { LIBRARY_PATH_STORAGE_KEY, type LibraryStorage } from "./libraryConfig";
-import { collectPortableMediaFilenames, selectValidatedLibrary } from "./librarySettings";
+import { collectPortableMediaFilenames, formatLibraryActionError, selectValidatedLibrary } from "./librarySettings";
 
 function createStorage(): LibraryStorage & { data: Record<string, string> } {
   const storage = {
@@ -68,5 +68,11 @@ describe("librarySettings", () => {
       resultFiles: ["a.png", "a_thumb.jpg"],
       referenceFiles: ["ref/b.jpg", "ref/b_thumb.jpg"],
     });
+  });
+
+  it("formats non-Error Tauri failures for Settings", () => {
+    expect(formatLibraryActionError("copyFile failed")).toBe("copyFile failed");
+    expect(formatLibraryActionError({ message: "Destination exists" })).toBe("Destination exists");
+    expect(formatLibraryActionError({ reason: "permission denied" })).toBe('{"reason":"permission denied"}');
   });
 });

@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
-import { exists, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/Button";
 import { getLibrarySettingsState } from "@/lib/librarySettings";
 import {
   LibraryLockConflictError,
   LibraryLockStaleError,
-  acquireLibraryLock,
-  refreshLibraryLock,
-  releaseLibraryLock,
-  type LibraryLockFileSystem,
   type LibraryLockInfo,
 } from "@/lib/libraryLock";
+import {
+  acquireLibraryLockNative,
+  refreshLibraryLockNative,
+  releaseLibraryLockNative,
+} from "@/lib/libraryLockNative";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 const REFRESH_MS = 60 * 1000;
@@ -26,7 +26,6 @@ type LockState =
   | { status: "error"; message: string };
 
 export function LibraryLockGuard({ children }: { children: ReactNode }) {
-  const fs = useMemo(createTauriLockFs, []);
   const session = useRef<string>(crypto.randomUUID());
   const currentLock = useRef<LibraryLockInfo | null>(null);
   const baseDir = useRef<string | null>(null);
@@ -55,14 +54,14 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
     baseDir.current = settings.paths.baseDir;
     const lock = await buildLock();
     try {
-      currentLock.current = await acquireLibraryLock(settings.paths.baseDir, fs, lock, Date.now(), forceTakeover);
+      currentLock.current = await acquireLibraryLockNative(settings.paths.baseDir, lock, Date.now(), forceTakeover);
       setState({ status: "owned" });
     } catch (error) {
       if (error instanceof LibraryLockConflictError) setState({ status: "conflict", lock: error.lock });
       else if (error instanceof LibraryLockStaleError) setState({ status: "stale", lock: error.lock });
       else setState({ status: "error", message: error instanceof Error ? error.message : "Library lock failed." });
     }
-  }, [buildLock, fs]);
+  }, [buildLock]);
 
   useEffect(() => {
     acquire();
@@ -72,19 +71,19 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
     if (state.status !== "owned") return;
     const timer = window.setInterval(() => {
       if (!baseDir.current || !currentLock.current) return;
-      refreshLibraryLock(baseDir.current, fs, currentLock.current)
+      refreshLibraryLockNative(baseDir.current, currentLock.current)
         .then((lock) => { currentLock.current = lock; })
         .catch((error) => {
           setState({ status: "error", message: error instanceof Error ? error.message : "Library lock refresh failed." });
         });
     }, REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [fs, state.status]);
+  }, [state.status]);
 
   useEffect(() => {
     const release = () => {
       if (!baseDir.current) return;
-      releaseLibraryLock(baseDir.current, fs, session.current).catch(() => {});
+      releaseLibraryLockNative(baseDir.current, session.current).catch(() => {});
     };
     window.addEventListener("beforeunload", release);
     window.addEventListener("pagehide", release);
@@ -93,7 +92,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       window.removeEventListener("pagehide", release);
       release();
     };
-  }, [fs]);
+  }, []);
 
   if (state.status === "checking") return <LockScreen title="Checking Library Lock" message="Checking active library access..." />;
   if (state.status === "conflict") {
@@ -133,13 +132,4 @@ function LockScreen({ title, message, action }: { title: string; message: string
       </div>
     </div>
   );
-}
-
-function createTauriLockFs(): LibraryLockFileSystem {
-  return {
-    exists: (path) => exists(path),
-    readTextFile: (path) => readTextFile(path),
-    writeTextFile: (path, contents) => writeTextFile(path, contents),
-    remove: (path) => remove(path),
-  };
 }

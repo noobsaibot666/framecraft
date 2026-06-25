@@ -1,5 +1,7 @@
+use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod library_lock;
 mod library_package;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -86,6 +88,7 @@ pub fn run() {
     ];
 
     tauri::Builder::default()
+        .manage(library_lock::ActiveLockState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -95,12 +98,21 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            library_lock::acquire_library_lock_native,
+            library_lock::refresh_library_lock_native,
+            library_lock::release_library_lock_native,
             library_package::create_library_package_native,
             library_package::validate_library_package_native,
             library_package::migrate_app_data_to_library_native,
             library_package::copy_library_package_native,
             library_package::backup_library_package_native,
         ])
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                let state = window.state::<library_lock::ActiveLockState>();
+                library_lock::release_active_lock(&state);
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

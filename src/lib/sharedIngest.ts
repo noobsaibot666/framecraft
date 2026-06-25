@@ -61,6 +61,11 @@ export interface ResultImportPayload {
   result: Omit<CreateResultInput, "id" | "prompt_id" | "file_path" | "thumbnail_path">;
 }
 
+export interface ProjectResultLinkPayload {
+  projectId: string;
+  resultId: string;
+}
+
 export type ReferenceImportJob = SharedIngestJobBase & {
   kind: "reference.import";
   payload: ReferenceImportPayload;
@@ -71,7 +76,12 @@ export type ResultImportJob = SharedIngestJobBase & {
   payload: ResultImportPayload;
 };
 
-export type SharedIngestJob = ReferenceImportJob | ResultImportJob;
+export type ProjectResultLinkJob = SharedIngestJobBase & {
+  kind: "project_result.link";
+  payload: ProjectResultLinkPayload;
+};
+
+export type SharedIngestJob = ReferenceImportJob | ResultImportJob | ProjectResultLinkJob;
 
 export interface ValidationResult {
   ok: boolean;
@@ -140,16 +150,44 @@ export function createResultImportJob(input: {
   };
 }
 
+export function createProjectResultLinkJob(input: {
+  jobId: string;
+  projectId: string;
+  resultId: string;
+  idempotencyKey: string;
+  createdAt: string;
+  createdBy: SharedIngestIdentity;
+}): ProjectResultLinkJob {
+  return {
+    schema_version: 1,
+    kind: "project_result.link",
+    job_id: input.jobId,
+    idempotency_key: input.idempotencyKey,
+    created_at: input.createdAt,
+    created_by: input.createdBy,
+    payload: {
+      projectId: input.projectId,
+      resultId: input.resultId,
+    },
+  };
+}
+
 export function validateSharedIngestJob(job: SharedIngestJob): ValidationResult {
   const errors: string[] = [];
   if (job.schema_version !== 1) errors.push("Unsupported shared ingest schema.");
   if (!job.job_id) errors.push("Missing job id.");
   if (!job.idempotency_key) errors.push("Missing idempotency key.");
-  if (job.kind !== "reference.import" && job.kind !== "result.import") errors.push("Unsupported shared ingest kind.");
-  for (const path of [job.payload.originalStagedPath, job.payload.thumbnailStagedPath]) {
-    if (!isSafeRelativePath(path)) errors.push(`Unsafe staged media path: ${path}`);
+  if (job.kind !== "reference.import" && job.kind !== "result.import" && job.kind !== "project_result.link") {
+    errors.push("Unsupported shared ingest kind.");
+  }
+  if (job.kind === "reference.import" || job.kind === "result.import") {
+    for (const path of [job.payload.originalStagedPath, job.payload.thumbnailStagedPath]) {
+      if (!isSafeRelativePath(path)) errors.push(`Unsafe staged media path: ${path}`);
+    }
   }
   if (job.kind === "result.import" && !job.payload.promptId) errors.push("Missing prompt id.");
+  if (job.kind === "project_result.link" && !job.payload.projectId) errors.push("Missing project id.");
+  if (job.kind === "project_result.link" && !job.payload.resultId) errors.push("Missing result id.");
   return { ok: errors.length === 0, errors };
 }
 
@@ -164,10 +202,12 @@ export async function publishSharedIngestJob(input: {
   if (!validation.ok) throw new Error(validation.errors.join(", "));
 
   await input.fs.mkdir(input.paths.inboxDir);
-  await input.fs.mkdir(input.paths.stagingDir);
-  await input.fs.mkdir(`${input.paths.stagingDir}${input.job.job_id}/`);
-  await input.fs.writeFile(`${input.paths.stagingDir}${input.job.payload.originalStagedPath}`, input.originalBytes);
-  await input.fs.writeFile(`${input.paths.stagingDir}${input.job.payload.thumbnailStagedPath}`, input.thumbnailBytes);
+  if (input.job.kind === "reference.import" || input.job.kind === "result.import") {
+    await input.fs.mkdir(input.paths.stagingDir);
+    await input.fs.mkdir(`${input.paths.stagingDir}${input.job.job_id}/`);
+    await input.fs.writeFile(`${input.paths.stagingDir}${input.job.payload.originalStagedPath}`, input.originalBytes);
+    await input.fs.writeFile(`${input.paths.stagingDir}${input.job.payload.thumbnailStagedPath}`, input.thumbnailBytes);
+  }
 
   const tempPath = `${input.paths.inboxDir}${input.job.job_id}.tmp`;
   const finalPath = `${input.paths.inboxDir}${input.job.job_id}.json`;
@@ -223,6 +263,11 @@ export async function processSharedIngestInbox(input: {
 }
 
 async function applyJob(paths: LibraryPaths, fs: SharedIngestFileSystem, db: SharedIngestDb, job: SharedIngestJob): Promise<void> {
+  if (job.kind === "project_result.link") {
+    await insertProjectResultLink(db, job);
+    return;
+  }
+
   const originalPath = `${paths.stagingDir}${job.payload.originalStagedPath}`;
   const thumbnailPath = `${paths.stagingDir}${job.payload.thumbnailStagedPath}`;
   if (!(await fs.exists(originalPath))) throw new Error(`Missing staged media: ${job.payload.originalStagedPath}`);
@@ -246,6 +291,17 @@ async function applyJob(paths: LibraryPaths, fs: SharedIngestFileSystem, db: Sha
   await fs.copyFile(originalPath, filePath);
   await fs.copyFile(thumbnailPath, thumbPath);
   await insertResult(db, job, filePath, thumbPath);
+}
+
+async function insertProjectResultLink(db: SharedIngestDb, job: ProjectResultLinkJob): Promise<void> {
+  const projectRows = await db.select("SELECT id FROM projects WHERE id = $1 LIMIT 1", [job.payload.projectId]);
+  if (projectRows.length === 0) throw new Error(`Missing project: ${job.payload.projectId}`);
+  const resultRows = await db.select("SELECT id FROM results WHERE id = $1 LIMIT 1", [job.payload.resultId]);
+  if (resultRows.length === 0) throw new Error(`Missing result: ${job.payload.resultId}`);
+  await db.execute(
+    "INSERT OR IGNORE INTO project_results (project_id, result_id) VALUES ($1, $2)",
+    [job.payload.projectId, job.payload.resultId]
+  );
 }
 
 async function insertReference(db: SharedIngestDb, job: ReferenceImportJob, filePath: string, thumbPath: string): Promise<void> {

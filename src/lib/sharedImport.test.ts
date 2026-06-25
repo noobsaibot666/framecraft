@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { resolveLibraryPaths } from "./libraryConfig";
 import {
   importReferenceImage,
+  importProjectResultImage,
   importResultImage,
   type SharedImportDeps,
 } from "./sharedImport";
@@ -33,6 +34,7 @@ function deps(mode: "portable" | "appData", valid = true): SharedImportDeps {
     createReference: vi.fn(async () => "ref-a"),
     saveResultImage: vi.fn(async () => ({ filePath: "/results/result-a.png", thumbPath: "/results/result-a_thumb.jpg" })),
     createResult: vi.fn(async () => "result-a"),
+    addResultToProject: vi.fn(async () => undefined),
     thumbnailFromDataUrl: vi.fn(async () => "data:image/jpeg;base64,BAUG"),
     generateId: vi.fn(() => "job-a"),
     now: vi.fn(() => "2026-06-25T10:00:00.000Z"),
@@ -105,5 +107,42 @@ describe("sharedImport", () => {
 
     expect(d.createReference).not.toHaveBeenCalled();
     expect(d.publishSharedIngestJob).not.toHaveBeenCalled();
+  });
+
+  it("queues result and project-link jobs for portable project result imports", async () => {
+    const d = deps("portable");
+    d.generateId = vi.fn()
+      .mockReturnValueOnce("job-result")
+      .mockReturnValueOnce("job-link");
+
+    const result = await importProjectResultImage({
+      resultId: "result-a",
+      projectId: "project-1",
+      promptId: "prompt-a",
+      dataUrl: PNG_DATA_URL,
+      result: { provider: "midjourney", notes: "Imported from project workspace" },
+      originalName: "result.png",
+    }, d);
+
+    expect(result).toEqual({ id: "result-a", queued: true });
+    expect(d.publishSharedIngestJob).toHaveBeenCalledTimes(2);
+    expect(d.addResultToProject).not.toHaveBeenCalled();
+  });
+
+  it("directly saves and links project result imports for local app-data libraries", async () => {
+    const d = deps("appData");
+
+    const result = await importProjectResultImage({
+      resultId: "result-a",
+      projectId: "project-1",
+      promptId: "prompt-a",
+      dataUrl: PNG_DATA_URL,
+      result: { provider: "midjourney", notes: "Imported from project workspace" },
+      originalName: "result.png",
+    }, d);
+
+    expect(result).toEqual({ id: "result-a", queued: false });
+    expect(d.createResult).toHaveBeenCalled();
+    expect(d.addResultToProject).toHaveBeenCalledWith("project-1", "result-a");
   });
 });

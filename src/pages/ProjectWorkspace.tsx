@@ -20,10 +20,10 @@ import {
   removeReferenceFromProject,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { createResult, getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
+import { getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
-import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
+import { importProjectResultImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { cn } from "@/lib/utils";
@@ -525,19 +525,21 @@ export function ProjectWorkspace() {
     try {
       const resultId = crypto.randomUUID().replace(/-/g, "");
       const dataUrl = await fileToDataUrl(file);
-      const saved = await saveResultImage(resultId, dataUrl);
-
-      await createResult({
-        id: resultId,
-        prompt_id: prompt.id,
-        file_path: saved.filePath,
-        thumbnail_path: saved.thumbPath,
-        provider: prompt.provider,
-        notes: `Imported from project workspace: ${file.name}`,
+      const result = await importProjectResultImage({
+        resultId,
+        projectId: id,
+        promptId: prompt.id,
+        dataUrl,
+        originalName: file.name,
+        result: {
+          provider: prompt.provider,
+          notes: `Imported from project workspace: ${file.name}`,
+        },
       });
-      await addResultToProject(id, resultId);
-      await recomputePromptResultSummary(prompt.id);
-      await reloadLinks();
+      if (!result.queued) {
+        await recomputePromptResultSummary(prompt.id);
+        await reloadLinks();
+      }
       setPickerMode(null);
       setResultImportSaved(true);
       setTimeout(() => setResultImportSaved(false), 1800);

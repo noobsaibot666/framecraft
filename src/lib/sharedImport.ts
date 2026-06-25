@@ -7,8 +7,10 @@ import {
   type LibrarySettingsState,
 } from "./librarySettings";
 import { getLibraryLockIdentityNative } from "./libraryLockNative";
+import { addResultToProject } from "./projects";
 import { createReference, type CreateReferenceInput } from "./references";
 import {
+  createProjectResultLinkJob,
   createReferenceImportJob,
   createResultImportJob,
   publishSharedIngestJob,
@@ -31,6 +33,7 @@ export interface SharedImportDeps {
   createReference: typeof createReference;
   saveResultImage: typeof saveResultImage;
   createResult: typeof createResult;
+  addResultToProject: typeof addResultToProject;
   thumbnailFromDataUrl: typeof thumbnailFromDataUrl;
   generateId: () => string;
   now: () => string;
@@ -51,6 +54,10 @@ export interface ImportResultImageInput {
   result: Omit<CreateResultInput, "id" | "prompt_id" | "file_path" | "thumbnail_path">;
 }
 
+export interface ImportProjectResultImageInput extends ImportResultImageInput {
+  projectId: string;
+}
+
 const defaultDeps: SharedImportDeps = {
   getLibraryState: getLibrarySettingsState,
   getIdentity: async () => getLibraryLockIdentityNative(),
@@ -60,6 +67,7 @@ const defaultDeps: SharedImportDeps = {
   createReference,
   saveResultImage,
   createResult,
+  addResultToProject,
   thumbnailFromDataUrl,
   generateId: () => crypto.randomUUID().replace(/-/g, ""),
   now: () => new Date().toISOString(),
@@ -126,6 +134,59 @@ export async function importResultImage(
     thumbnail_path: saved.thumbPath,
     ...input.result,
   });
+  return { id, queued: false };
+}
+
+export async function importProjectResultImage(
+  input: ImportProjectResultImageInput,
+  deps: SharedImportDeps = defaultDeps
+): Promise<SharedImportResult> {
+  const state = await deps.getLibraryState();
+  assertPortableLibraryReady(state);
+  if (canQueueSharedIngest(state)) {
+    const identity = await deps.getIdentity();
+    const createdAt = deps.now();
+    const resultJobId = deps.generateId();
+    const resultJob = createResultImportJob({
+      jobId: resultJobId,
+      resultId: input.resultId,
+      promptId: input.promptId,
+      idempotencyKey: `result:${input.resultId}`,
+      createdAt,
+      createdBy: identity,
+      originalExtension: extensionFromNameOrDataUrl(input.originalName, input.dataUrl),
+      result: input.result,
+    });
+    await publishJob(input.dataUrl, resultJob, state, deps);
+
+    const linkJobId = deps.generateId();
+    const linkJob = createProjectResultLinkJob({
+      jobId: linkJobId,
+      projectId: input.projectId,
+      resultId: input.resultId,
+      idempotencyKey: `project-result:${input.projectId}:${input.resultId}`,
+      createdAt,
+      createdBy: identity,
+    });
+    await deps.publishSharedIngestJob({
+      paths: state.paths,
+      fs: await deps.createFs(),
+      job: linkJob,
+      originalBytes: new Uint8Array(),
+      thumbnailBytes: new Uint8Array(),
+    });
+    return { id: input.resultId, queued: true };
+  }
+
+  const saved = await deps.saveResultImage(input.resultId, input.dataUrl);
+  const id = await deps.createResult({
+    id: input.resultId,
+    prompt_id: input.promptId,
+    file_path: saved.filePath,
+    thumbnail_path: saved.thumbPath,
+    ...input.result,
+  });
+  await deps.addResultToProject(input.projectId, id);
   return { id, queued: false };
 }
 

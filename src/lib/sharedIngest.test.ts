@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveLibraryPaths } from "./libraryConfig";
 import {
+  createProjectResultLinkJob,
   createReferenceImportJob,
   createResultImportJob,
   processSharedIngestInbox,
@@ -56,20 +57,25 @@ function createFs(existing: Record<string, string | Uint8Array> = {}): SharedIng
   return fs;
 }
 
-function createDb(options: { promptExists?: boolean } = {}): SharedIngestDb & {
+function createDb(options: { promptExists?: boolean; projectExists?: boolean; resultExists?: boolean } = {}): SharedIngestDb & {
   references: unknown[][];
   results: unknown[][];
+  projectResults: unknown[][];
 } {
   return {
     references: [],
     results: [],
+    projectResults: [],
     select: vi.fn(async (sql: string) => {
       if (sql.includes("FROM prompts")) return options.promptExists ? [{ id: "prompt-1" }] : [];
+      if (sql.includes("FROM projects")) return options.projectExists ? [{ id: "project-1" }] : [];
+      if (sql.includes("FROM results")) return options.resultExists ? [{ id: "result-a" }] : [];
       return [];
     }),
-    execute: vi.fn(async function (this: SharedIngestDb & { references: unknown[][]; results: unknown[][] }, sql: string, values: unknown[]) {
+    execute: vi.fn(async function (this: SharedIngestDb & { references: unknown[][]; results: unknown[][]; projectResults: unknown[][] }, sql: string, values: unknown[]) {
       if (sql.includes('INTO "references"')) this.references.push(values);
       if (sql.includes("INTO results")) this.results.push(values);
+      if (sql.includes("INTO project_results")) this.projectResults.push(values);
     }),
   };
 }
@@ -220,5 +226,62 @@ describe("sharedIngest", () => {
     expect(db.results).toHaveLength(0);
     expect(fs.files["/lib/Work.framecraftlib/sync/failed/job-r.json"]).toContain("Missing prompt: prompt-1");
     expect(fs.removed).toContain("/lib/Work.framecraftlib/inbox/job-r.json");
+  });
+
+  it("creates and validates a project result link job", () => {
+    const job = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "result-a",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+
+    expect(job.kind).toBe("project_result.link");
+    expect(validateSharedIngestJob(job)).toEqual({ ok: true, errors: [] });
+  });
+
+  it("merges a project result link when project and result exist", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const job = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "result-a",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-link.json": JSON.stringify(job),
+    });
+    const db = createDb({ projectExists: true, resultExists: true });
+
+    const result = await processSharedIngestInbox({ paths, fs, db });
+
+    expect(result).toEqual({ applied: 1, failed: 0, skipped: 0 });
+    expect(db.projectResults).toEqual([["project-1", "result-a"]]);
+    expect(fs.files["/lib/Work.framecraftlib/sync/applied/project-result_project-1_result-a.json"]).toContain('"job_id": "job-link"');
+  });
+
+  it("fails a project result link when the result does not exist yet", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const job = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "result-a",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-link.json": JSON.stringify(job),
+    });
+    const db = createDb({ projectExists: true, resultExists: false });
+
+    const result = await processSharedIngestInbox({ paths, fs, db });
+
+    expect(result).toEqual({ applied: 0, failed: 1, skipped: 0 });
+    expect(fs.files["/lib/Work.framecraftlib/sync/failed/job-link.json"]).toContain("Missing result: result-a");
   });
 });

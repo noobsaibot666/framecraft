@@ -14,12 +14,12 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       <input
         ref={ref}
         className={cn(
-          "w-full h-8 px-3",
-          "bg-dark border border-white/10 rounded-[6px]",
+          "w-full h-9 px-3",
+          "bg-dark border border-white/16 rounded-[6px]",
           "text-white placeholder:text-dim",
           "text-[13px] leading-none",
           "transition-colors duration-150",
-          "focus:outline-none focus:border-red/50",
+          "focus:outline-none focus:border-cyan/55",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           mono ? "font-mono" : "font-sans",
           className
@@ -47,11 +47,11 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         ref={ref}
         className={cn(
           "w-full px-3 py-2",
-          "bg-dark border border-white/10 rounded-[6px]",
+          "bg-dark border border-white/16 rounded-[6px]",
           "text-white placeholder:text-dim",
           "text-[13px] leading-relaxed",
           "transition-colors duration-150",
-          "focus:outline-none focus:border-red/50",
+          "focus:outline-none focus:border-cyan/55",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           "resize-none",
           mono ? "font-mono" : "font-sans",

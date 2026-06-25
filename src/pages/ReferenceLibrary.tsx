@@ -45,13 +45,14 @@ function FilterSelect({ label, value, onChange, options }: {
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-[9px] text-dim/50 uppercase tracking-widest">{label}</span>
+      <span className="font-mono text-[10px] text-muted uppercase tracking-widest">{label}</span>
       <div className="relative">
         <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="appearance-none pr-5 h-7 pl-2 font-mono text-[10px] text-dim bg-transparent focus:outline-none cursor-pointer">
+          className="appearance-none pr-7 h-9 pl-3 font-mono text-[10.5px] text-readable bg-transparent focus:outline-none cursor-pointer rounded-sm"
+          style={{ border: "var(--border-default)" }}>
           {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
         </select>
-        <ChevronDown size={8} className="absolute right-0.5 top-1/2 -translate-y-1/2 text-dim/40 pointer-events-none" />
+        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
       </div>
     </div>
   );
@@ -61,7 +62,7 @@ function StarRow({ value }: { value: number }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }).map((_, i) => (
-        <Star key={i} size={8} className={cn(i < value ? "text-white/60 fill-white/40" : "text-white/10")} />
+        <Star key={i} size={10} className={cn(i < value ? "text-amber fill-amber/45" : "text-white/16")} />
       ))}
     </div>
   );
@@ -71,16 +72,16 @@ function Thumbnail({ src, title }: { src?: string; title: string }) {
   const resolved = useImageDisplaySrc(src);
   if (!resolved.src) {
     return (
-      <div className="w-full aspect-video rounded-sm flex items-center justify-center"
+      <div className="w-full aspect-[4/3] rounded-sm flex items-center justify-center"
         style={{ background: "rgba(255,255,255,0.04)" }}>
-        <Image size={18} className="text-white/10" />
+        <Image size={22} className="text-white/16" />
       </div>
     );
   }
   return (
     <img src={resolved.src} alt={title}
       onError={resolved.onError}
-      className="w-full aspect-video object-cover rounded-sm"
+      className="w-full aspect-[4/3] object-cover rounded-sm"
       style={{ background: "rgba(255,255,255,0.04)" }} />
   );
 }
@@ -100,7 +101,7 @@ function ReferenceCard({ ref: r, onDelete, onClick }: {
 
   return (
     <div
-      className="flex flex-col gap-0 rounded-card overflow-hidden group cursor-pointer transition-all duration-150 hover:ring-1 hover:ring-white/10"
+      className="flex flex-col gap-0 rounded-card overflow-hidden group cursor-pointer transition-all duration-150 hover:ring-1 hover:ring-cyan/35"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
       onClick={() => onClick(r.id)}
     >
@@ -108,8 +109,8 @@ function ReferenceCard({ ref: r, onDelete, onClick }: {
       <div className="relative">
         <Thumbnail src={r.thumbnail_data ?? r.file_data} title={r.title} />
         {/* Kind badge */}
-        <span className="absolute top-1.5 left-1.5 font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm"
-          style={{ background: "rgba(0,0,0,0.65)", color: "rgba(255,255,255,0.55)", backdropFilter: "blur(4px)" }}>
+        <span className="absolute top-2 left-2 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm"
+          style={{ background: "rgba(0,0,0,0.68)", color: "rgba(244,244,240,0.9)", backdropFilter: "blur(4px)" }}>
           {KIND_LABELS[r.kind]}
         </span>
         {/* Delete */}
@@ -117,58 +118,58 @@ function ReferenceCard({ ref: r, onDelete, onClick }: {
           onClick={handleDelete}
           onBlur={() => setConfirmDelete(false)}
           className={cn(
-            "absolute top-1.5 right-1.5 w-6 h-6 rounded-sm flex items-center justify-center",
+            "absolute top-2 right-2 w-7 h-7 rounded-sm flex items-center justify-center",
             "opacity-0 group-hover:opacity-100 transition-precise",
             confirmDelete ? "text-red bg-red/20" : "text-white/40 hover:text-red"
           )}
           style={{ background: confirmDelete ? undefined : "rgba(0,0,0,0.5)" }}>
-          <Trash2 size={9} />
+          <Trash2 size={11} />
         </button>
       </div>
 
       {/* Info */}
-      <div className="flex flex-col gap-2 p-3">
+      <div className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <span className="font-sans text-[11px] text-soft-white font-medium leading-snug flex-1 min-w-0 truncate">
+          <span className="font-sans text-[14px] text-soft-white font-semibold leading-snug flex-1 min-w-0 truncate">
             {r.title}
           </span>
-          <ExternalLink size={9} className="text-dim/20 group-hover:text-dim/50 transition-precise shrink-0 mt-0.5" />
+          <ExternalLink size={11} className="text-muted group-hover:text-cyan transition-precise shrink-0 mt-0.5" />
         </div>
 
         {/* Tags */}
         {r.tags && r.tags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {r.tags.slice(0, 4).map((tag) => (
-              <span key={tag} className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-dim/60"
+              <span key={tag} className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-muted"
                 style={{ border: "var(--border-dim)" }}>
                 {tag}
               </span>
             ))}
             {r.tags.length > 4 && (
-              <span className="font-mono text-[8px] text-dim/40">+{r.tags.length - 4}</span>
+              <span className="font-mono text-[9px] text-muted">+{r.tags.length - 4}</span>
             )}
           </div>
         )}
 
         {/* Best use */}
         {r.best_use && (
-          <p className="font-mono text-[9px] text-dim/60 leading-relaxed line-clamp-2">{r.best_use}</p>
+          <p className="font-mono text-[11px] text-readable leading-relaxed line-clamp-2">{r.best_use}</p>
         )}
 
         {/* Risk note */}
         {r.risk_notes && (
           <div className="flex items-start gap-1">
-            <AlertTriangle size={8} className="text-red/40 shrink-0 mt-0.5" />
-            <p className="font-mono text-[8px] text-red/50 leading-relaxed line-clamp-1">{r.risk_notes}</p>
+            <AlertTriangle size={10} className="text-red/70 shrink-0 mt-0.5" />
+            <p className="font-mono text-[10px] text-red/80 leading-relaxed line-clamp-1">{r.risk_notes}</p>
           </div>
         )}
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-1.5"
-          style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+          style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}>
           <StarRow value={r.rating} />
           {r.provider && (
-            <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{r.provider}</span>
+            <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{r.provider}</span>
           )}
         </div>
       </div>
@@ -255,26 +256,26 @@ export function ReferenceLibrary() {
       title="References"
       subtitle="VISUAL REFERENCE LIBRARY"
       action={
-        <Button variant="ghost" size="sm" onClick={() => navigate("/references/new")}>
+        <Button variant="primary" size="md" onClick={() => navigate("/references/new")}>
           <Plus size={11} /> Add Reference
         </Button>
       }
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-4 mb-6 flex-wrap">
+      <div className="flex items-center gap-4 mb-7 flex-wrap">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by title, tags, notes…"
-          className="h-7 px-3 font-mono text-[10px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none w-52"
-          style={{ border: "var(--border-dim)" }}
+          className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
+          style={{ border: "var(--border-default)" }}
         />
 
         <FilterSelect label="KIND" value={kindFilter} onChange={setKindFilter} options={KIND_OPTIONS} />
         <FilterSelect label="RATING" value={ratingFilter} onChange={setRatingFilter} options={RATING_OPTIONS} />
 
         <div className="flex-1" />
-        <span className="font-mono text-[9px] text-dim/40">{refs.length} references</span>
+        <span className="font-mono text-[11px] text-readable">{refs.length} references</span>
       </div>
 
       {/* Drop zone */}
@@ -284,27 +285,27 @@ export function ReferenceLibrary() {
         onDragLeave={(e) => { if (!dropRef.current?.contains(e.relatedTarget as Node)) setDropping(false); }}
         onDrop={(e) => { e.preventDefault(); setDropping(false); handleDropFiles(e.dataTransfer.files); }}
         className={cn(
-          "flex items-center justify-center gap-3 h-12 rounded-card mb-4 transition-precise cursor-default",
+          "flex items-center justify-center gap-3 h-16 rounded-card mb-6 transition-precise cursor-default",
           dropping
-            ? "border-white/30 bg-white/5"
-            : "border-white/8 hover:border-white/15"
+            ? "border-cyan/55 bg-cyan/8"
+            : "border-white/16 hover:border-cyan/45"
         )}
         style={{ border: "2px dashed" }}
       >
-        <Upload size={11} className={cn("shrink-0", dropping ? "text-white/60" : "text-dim/30")} />
-        <span className={cn("font-mono text-[9px] tracking-widest uppercase", dropping ? "text-white/60" : "text-dim/30")}>
-          {dropImporting ? "Importing…" : "Drop images to add as references"}
+        <Upload size={14} className={cn("shrink-0", dropping ? "text-cyan" : "text-muted")} />
+        <span className={cn("font-mono text-[11px] tracking-widest uppercase", dropping ? "text-cyan" : "text-readable")}>
+          {dropImporting ? "Importing..." : "Drop images to add as references"}
         </span>
       </div>
 
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[10px] text-dim/40">Loading…</span>
+          <span className="font-mono text-[11px] text-muted">Loading...</span>
         </div>
       ) : refs.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-3">
-          <span className="font-mono text-[11px] text-dim/40">
+          <span className="font-mono text-[12px] text-readable">
             {search || kindFilter !== "all" || ratingFilter !== "all"
               ? "No references match your filters."
               : "No references yet."}
@@ -316,7 +317,7 @@ export function ReferenceLibrary() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
           {refs.map((r) => (
             <ReferenceCard
               key={r.id}

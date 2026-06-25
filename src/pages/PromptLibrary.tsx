@@ -76,7 +76,7 @@ function RatingDots({ rating }: { rating: number }) {
           key={i}
           className={cn(
             "w-1.5 h-1.5 rounded-full",
-            i < rating ? "bg-white/60" : "bg-white/12"
+            i < rating ? "bg-amber/80" : "bg-white/14"
           )}
         />
       ))}
@@ -98,7 +98,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
 
   return (
     <div
-      className="group flex flex-col gap-3 p-4 rounded-card cursor-pointer transition-precise"
+      className="group flex flex-col gap-4 p-5 rounded-card cursor-pointer transition-precise hover:border-cyan/40"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
       onClick={() => navigate(`/library/${prompt.id}`)}
     >
@@ -114,22 +114,22 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
           />
         )}
         <div className="flex flex-col gap-1 min-w-0">
-          <span className="font-sans text-[12px] font-semibold text-white leading-tight truncate">
+          <span className="font-sans text-[14px] font-semibold text-white leading-tight truncate">
             {prompt.title}
           </span>
           {prompt.description && (
-            <span className="font-mono text-[10px] text-dim leading-snug line-clamp-1">
+            <span className="font-mono text-[11px] text-readable leading-snug line-clamp-1">
               {prompt.description}
             </span>
           )}
         </div>
         {prompt.is_winner && (
-          <Star size={10} className="text-white/40 shrink-0 mt-0.5" />
+          <Star size={12} className="text-amber fill-amber/40 shrink-0 mt-0.5" />
         )}
       </div>
 
       {/* Prompt preview */}
-      <p className="prompt-text text-[11px] text-muted/80 line-clamp-2 leading-relaxed">
+      <p className="prompt-text text-[12.5px] text-readable line-clamp-3 leading-relaxed">
         {prompt.prompt_text}
       </p>
 
@@ -152,7 +152,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
           <RatingDots rating={prompt.rating} />
           {prompt.ai_look_risk > 0 && <RiskBadge score={prompt.ai_look_risk} />}
           {resultSummary && resultSummary.count > 0 && (
-            <span className="font-mono text-[8px] text-dim/60">
+            <span className="font-mono text-[10px] text-muted">
               {resultSummary.count} result{resultSummary.count !== 1 ? "s" : ""}
               {resultSummary.avg_score > 0 && ` · ${resultSummary.avg_score.toFixed(1)} avg`}
             </span>
@@ -160,14 +160,14 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
         </div>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
           <button
-            className="p-1 rounded text-dim hover:text-white transition-precise"
+            className="p-1 rounded text-muted hover:text-cyan transition-precise"
             onClick={(e) => { e.stopPropagation(); onQueue(prompt); }}
             title="Add to Queue"
           >
             <ListPlus size={11} />
           </button>
           <button
-            className="p-1 rounded text-dim hover:text-white transition-precise"
+            className="p-1 rounded text-muted hover:text-cyan transition-precise"
             onClick={(e) => { e.stopPropagation(); onCopy(prompt); }}
             title="Copy prompt"
           >
@@ -183,7 +183,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
         </div>
       </div>
 
-      <div className="system-label text-[8px]">{formatDate(prompt.created_at)}</div>
+      <div className="system-label text-[10px] text-muted">{formatDate(prompt.created_at)}</div>
     </div>
   );
 }
@@ -206,9 +206,9 @@ function NativeSelect({
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "w-full appearance-none pr-7",
-          "font-mono text-[10px] tracking-[0.06em] uppercase",
-          "bg-transparent text-muted",
-          "rounded-sm px-2.5 py-1.5",
+          "font-mono text-[10.5px] tracking-[0.06em] uppercase",
+          "bg-transparent text-readable",
+          "rounded-sm px-3 py-2",
           "focus:outline-none focus:text-white transition-precise",
           "cursor-pointer"
         )}
@@ -221,8 +221,8 @@ function NativeSelect({
         ))}
       </select>
       <ChevronDown
-        size={10}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-dim pointer-events-none"
+        size={11}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
       />
     </div>
   );
@@ -330,15 +330,15 @@ export function PromptLibrary() {
       }
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex items-center gap-3 mb-7 flex-wrap">
         <div className="flex-1 relative">
           <Search
-            size={12}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-dim pointer-events-none"
+            size={13}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
           />
           <Input
             placeholder="Search prompts…"
-            className="pl-8"
+            className="pl-8 min-w-[260px]"
             value={searchVal}
             onChange={(e) => handleSearch(e.target.value)}
           />
@@ -392,7 +392,7 @@ export function PromptLibrary() {
 
       {/* Copy feedback */}
       {copied && (
-        <div className="mb-4 px-3 py-2 rounded-sm font-mono text-[10px] text-white/70 flex items-center gap-2"
+        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
           style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
           <Copy size={10} className="text-white/40" />
           Prompt copied to clipboard
@@ -400,7 +400,7 @@ export function PromptLibrary() {
       )}
 
       {queued && (
-        <div className="mb-4 px-3 py-2 rounded-sm font-mono text-[10px] text-white/70 flex items-center gap-2"
+        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
           style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
           <ListPlus size={10} className="text-white/40" />
           Added to queue: {queued}
@@ -409,7 +409,7 @@ export function PromptLibrary() {
 
       {/* Delete confirmation */}
       {confirmDelete && (
-        <div className="mb-4 px-3 py-2 rounded-sm font-mono text-[10px] text-red/80 flex items-center justify-between"
+        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-red flex items-center justify-between"
           style={{ background: "rgba(215,25,33,0.06)", border: "var(--border-active)" }}>
           <span>Click delete again to confirm: <span className="text-white/60">{confirmDelete.title}</span></span>
           <button className="text-dim hover:text-white" onClick={() => setConfirmDelete(null)}>Cancel</button>
@@ -428,7 +428,7 @@ export function PromptLibrary() {
           >
             <DotMatrix value="000" size="lg" />
             <span className="system-label">LIBRARY EMPTY</span>
-            <span className="font-mono text-[11px] text-dim text-center leading-relaxed">
+            <span className="font-mono text-[12px] text-readable text-center leading-relaxed">
               {searchVal
                 ? "No prompts match your search."
                 : "No prompts stored yet. Craft your first prompt or import one."}
@@ -454,12 +454,12 @@ export function PromptLibrary() {
       ) : (
         <>
           <div className="flex items-center justify-between mb-4">
-            <span className="system-label">
+            <span className="system-label text-soft-white">
               <DotMatrix value={prompts.length} size="sm" className="inline-block mr-2" />
               {prompts.length === 1 ? "PROMPT" : "PROMPTS"}
             </span>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
             {prompts.map((p) => (
               <PromptCard
                 key={p.id}

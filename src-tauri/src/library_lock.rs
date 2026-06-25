@@ -16,6 +16,12 @@ pub struct LibraryLockInfo {
     app_version: String,
 }
 
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct LibraryLockIdentity {
+    machine: String,
+    user: String,
+}
+
 #[derive(Clone, Debug)]
 struct ActiveLock {
     base_dir: String,
@@ -67,6 +73,14 @@ pub fn release_library_lock_native(
     Ok(())
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_library_lock_identity_native() -> LibraryLockIdentity {
+    LibraryLockIdentity {
+        machine: machine_name(),
+        user: user_name(),
+    }
+}
+
 pub fn release_active_lock(state: &ActiveLockState) {
     let active = state.active.lock().ok().and_then(|mut guard| guard.take());
     if let Some(active) = active {
@@ -94,13 +108,16 @@ fn acquire_library_lock(
     let existing = read_library_lock(&path);
 
     match evaluate_library_lock(existing.as_ref(), &current, now_ms) {
-        LockEvaluation::Conflict => {
+        LockEvaluation::Conflict if !force_takeover => {
             return Err(format_lock_error(LOCK_CONFLICT_PREFIX, existing.as_ref()));
         }
         LockEvaluation::Stale if !force_takeover => {
             return Err(format_lock_error(LOCK_STALE_PREFIX, existing.as_ref()));
         }
-        LockEvaluation::Available | LockEvaluation::Owned | LockEvaluation::Stale => {}
+        LockEvaluation::Available
+        | LockEvaluation::Owned
+        | LockEvaluation::Conflict
+        | LockEvaluation::Stale => {}
     }
 
     if let Some(parent) = Path::new(&path).parent() {
@@ -202,6 +219,18 @@ fn format_lock_error(prefix: &str, lock: Option<&LibraryLockInfo>) -> String {
 
 fn format_io_error(error: std::io::Error) -> String {
     error.to_string()
+}
+
+fn machine_name() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "unknown-machine".to_string())
+}
+
+fn user_name() -> String {
+    std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "unknown-user".to_string())
 }
 
 #[cfg(test)]
@@ -327,6 +356,37 @@ mod tests {
             ),
             LockEvaluation::Conflict
         );
+    }
+
+    #[test]
+    fn force_takeover_replaces_fresh_lock_from_another_owner() {
+        let root = test_root("force-fresh");
+        let existing = LibraryLockInfo {
+            machine: "other-machine".to_string(),
+            user: "other-user".to_string(),
+            ..lock_info("other-session", "2026-06-25T09:59:00.000Z")
+        };
+        let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
+        let state = ActiveLockState::default();
+        write_test_lock(&root, &existing);
+
+        let result = acquire_library_lock(
+            root.to_str().unwrap(),
+            current.clone(),
+            DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
+                .unwrap()
+                .timestamp_millis(),
+            true,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(result, current);
+        assert_eq!(
+            read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
+            current
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     fn lock_info(session_id: &str, updated_at: &str) -> LibraryLockInfo {

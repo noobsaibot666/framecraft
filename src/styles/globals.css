@@ -49,8 +49,9 @@
   --color-line:        #333333;
   --color-white:       #F4F4F0;
   --color-soft-white:  #E8E8E3;
-  --color-muted:       #9A9A9A;
-  --color-dim:         #5A5A5A;
+  --color-readable:    #C7C7BE;
+  --color-muted:       #B2B2AA;
+  --color-dim:         #74746D;
   --color-red:         #D71921;
   --color-red-muted:   rgba(215, 25, 33, 0.15);
   --color-red-border:  rgba(215, 25, 33, 0.65);
@@ -77,13 +78,13 @@
   /* Surfaces */
   --surface-base:   rgba(255, 255, 255, 0.03);
   --surface-card:   rgba(255, 255, 255, 0.05);
-  --surface-hover:  rgba(255, 255, 255, 0.08);
+  --surface-hover:  rgba(255, 255, 255, 0.09);
   --surface-active: rgba(215, 25, 33, 0.05);
   --surface-signal: rgba(215, 25, 33, 0.10);
 
   /* Borders */
-  --border-default: 1px solid rgba(255, 255, 255, 0.10);
-  --border-strong:  1px solid rgba(255, 255, 255, 0.18);
+  --border-default: 1px solid rgba(255, 255, 255, 0.14);
+  --border-strong:  1px solid rgba(255, 255, 255, 0.22);
   --border-active:  1px solid rgba(215, 25, 33, 0.72);
   --border-dim:     1px solid rgba(255, 255, 255, 0.05);
 
@@ -106,7 +107,7 @@
   }
 
   html {
-    font-size: 16px;
+    font-size: 16.5px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -180,10 +181,10 @@
 
 .system-label {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 10.5px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(232, 232, 227, 0.74);
+  color: rgba(232, 232, 227, 0.86);
   line-height: 1.2;
 }
 

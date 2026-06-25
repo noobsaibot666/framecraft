@@ -28,19 +28,21 @@ import {
   getLibrarySettingsState,
   migrateCurrentDataToLibraryFromDialog,
   openLibraryFromDialog,
+  repairActiveLibraryDatabaseSchema,
   revealActiveLibraryFolder,
   restoreLibraryFromDialog,
   useLocalAppDataLibrary,
   type LibrarySettingsState,
 } from "@/lib/librarySettings";
 import type { Prompt } from "@/types";
+import { cn } from "@/lib/utils";
 
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className={cn("flex flex-col gap-5", className)}>
       <div className="flex items-center gap-3">
         <span className="system-label">{label}</span>
-        <div className="flex-1 h-px bg-white/7" />
+        <div className="flex-1 h-px bg-white/12" />
       </div>
       {children}
     </div>
@@ -49,9 +51,9 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-baseline gap-4">
-      <span className="system-label w-40 shrink-0">{label}</span>
-      <span className="font-mono text-[11px] text-soft-white">{value}</span>
+    <div className="grid grid-cols-[150px_minmax(0,1fr)] items-baseline gap-5">
+      <span className="system-label">{label}</span>
+      <span className="font-mono text-[12px] leading-relaxed text-soft-white break-words">{value}</span>
     </div>
   );
 }
@@ -131,6 +133,9 @@ export function Settings() {
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
 
+  const canRepairLibrarySchema =
+    libraryState?.selection.mode === "portable" &&
+    libraryState.validation?.errors.includes("Missing database schema");
 
   useEffect(() => {
     fetchStats();
@@ -216,6 +221,17 @@ export function Settings() {
 
   const handleRestoreLibrary = () => {
     runLibraryAction("restore", restoreLibraryFromDialog, () => "Backup/library selected. Restart Framecraft to use it.");
+  };
+
+  const handleRepairLibrarySchema = () => {
+    runLibraryAction(
+      "repair-schema",
+      async () => {
+        await repairActiveLibraryDatabaseSchema();
+        return "repaired";
+      },
+      () => "Library database schema repaired. Restart Framecraft, then run diagnostics again."
+    );
   };
 
   const handleRevealLibrary = () => {
@@ -307,17 +323,17 @@ export function Settings() {
 
   return (
     <PageContainer title="Settings" subtitle="APP CONFIGURATION">
-      <div className="flex flex-col gap-8 max-w-xl">
+      <div className="flex flex-col gap-10 max-w-3xl">
 
         {/* App Info */}
-        <Section label="APPLICATION">
+        <Section label="APPLICATION" className="order-50">
           <div
-            className="flex flex-col gap-3 p-4 rounded-card"
+            className="flex flex-col gap-4 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <Info size={12} className="text-dim" />
-              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
+            <div className="flex items-center gap-2 mb-2">
+              <Info size={13} className="text-readable" />
+              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
             <InfoRow label="BUILD" value="V1 · All Phases Complete" />
@@ -327,14 +343,14 @@ export function Settings() {
         </Section>
 
         {/* Database Stats */}
-        <Section label="DATABASE">
+        <Section label="DATABASE" className="order-60">
           <div
-            className="flex flex-col gap-3 p-4 rounded-card"
+            className="flex flex-col gap-4 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <div className="flex items-center gap-2 mb-1">
-              <Database size={12} className="text-dim" />
-              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">STORAGE</span>
+            <div className="flex items-center gap-2 mb-2">
+              <Database size={13} className="text-readable" />
+              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">STORAGE</span>
             </div>
             <InfoRow label="LOCATION" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "~/.local/share/framecraft/framecraft.db" : "localStorage (dev)"} />
             <InfoRow label="TOTAL PROMPTS" value={stats.total_prompts} />
@@ -344,30 +360,30 @@ export function Settings() {
           </div>
         </Section>
 
-        <Section label="LIBRARY">
+        <Section label="LIBRARY" className="order-10">
           <div
-            className="flex flex-col gap-4 p-4 rounded-card"
+            className="flex flex-col gap-6 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2 min-w-0">
-                <HardDrive size={12} className="text-dim mt-0.5 shrink-0" />
-                <div className="flex flex-col gap-1 min-w-0">
-                  <span className="font-sans text-[11px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
-                  <span className="font-mono text-[10px] text-muted leading-relaxed">
+                <HardDrive size={13} className="text-readable mt-0.5 shrink-0" />
+                <div className="flex flex-col gap-1.5 min-w-0">
+                  <span className="font-sans text-[12px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
+                  <span className="font-mono text-[11px] text-readable leading-relaxed">
                     Use a `.framecraftlib` folder to move work between machines or store it on shared storage.
                   </span>
                 </div>
               </div>
               {libraryState?.selection.mode === "portable" && (
-                <span className="font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-white/50"
-                  style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+                <span className="font-mono text-[8.5px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable"
+                  style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
                   Restart required
                 </span>
               )}
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <InfoRow label="MODE" value={libraryState?.selection.mode === "portable" ? "Portable library" : "Local app data"} />
               <InfoRow label="PATH" value={libraryState?.paths.baseDir ?? "Checking..."} />
               <InfoRow
@@ -384,7 +400,34 @@ export function Settings() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            {canRepairLibrarySchema && (
+              <div
+                className="flex flex-col gap-3 p-3 rounded-sm"
+                style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={12} className="text-red/75 mt-0.5 shrink-0" />
+                  <div className="flex flex-col gap-1 min-w-0">
+                    <span className="font-sans text-[12px] font-semibold text-white tracking-wide">DATABASE SCHEMA MISSING</span>
+                    <span className="font-mono text-[10.5px] text-readable leading-relaxed">
+                      Initialize the empty portable database for this library. Existing partial databases are refused to protect data.
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRepairLibrarySchema}
+                  disabled={!!libraryBusy || !libraryState?.nativeAvailable}
+                  className="self-start"
+                >
+                  <Database size={11} />
+                  {libraryBusy === "repair-schema" ? "Repairing..." : "Repair Database Schema"}
+                </Button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button variant="ghost" size="sm" onClick={handleMigrateLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <Upload size={11} />
                 {libraryBusy === "migrate" ? "Migrating..." : "Migrate Current Data"}
@@ -437,14 +480,14 @@ export function Settings() {
         </Section>
 
         {/* AI Integration */}
-        <Section label="AI INTEGRATION">
-          <div className="flex flex-col gap-5 p-4 rounded-card"
+        <Section label="AI INTEGRATION" className="order-30">
+          <div className="flex flex-col gap-5 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <div className="flex items-center gap-2">
-              <Cpu size={12} className="text-dim" />
-              <span className="font-sans text-[11px] font-semibold text-white tracking-wide">API KEYS</span>
+              <Cpu size={13} className="text-readable" />
+              <span className="font-sans text-[12px] font-semibold text-white tracking-wide">API KEYS</span>
             </div>
-            <p className="font-mono text-[10px] text-muted leading-relaxed -mt-2">
+            <p className="font-mono text-[11px] text-readable leading-relaxed -mt-2">
               Keys are stored locally and never leave your device.
             </p>
             <ApiKeyField
@@ -465,17 +508,17 @@ export function Settings() {
           </div>
         </Section>
 
-        <Section label="RELEASE DIAGNOSTICS">
-          <div className="flex flex-col gap-4 p-4 rounded-card"
+        <Section label="RELEASE DIAGNOSTICS" className="order-20">
+          <div className="flex flex-col gap-5 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-col gap-1">
-                <span className="font-sans text-[11px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
-                <span className="font-mono text-[10px] text-muted leading-relaxed">
+              <div className="flex flex-col gap-1.5 min-w-0">
+                <span className="font-sans text-[12px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
+                <span className="font-mono text-[11px] text-readable leading-relaxed">
                   Checks Tauri runtime, required SQLite tables, file storage, and native dialog plugin availability.
                 </span>
               </div>
-              <Button variant="ghost" size="sm" onClick={handleRunDiagnostics} disabled={diagnosticsRunning}>
+              <Button variant="primary" size="sm" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-[126px]">
                 {diagnosticsRunning ? "Running..." : "Run Checks"}
               </Button>
             </div>
@@ -492,16 +535,16 @@ export function Settings() {
                 </div>
                 <div className="flex flex-col gap-1">
                   {diagnostics.checks.map((check) => (
-                    <div key={check.id} className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 px-2 py-2 rounded-sm"
-                      style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+                    <div key={check.id} className="grid grid-cols-[100px_minmax(0,1fr)] gap-3 px-3 py-2.5 rounded-sm"
+                      style={{ border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.025)" }}>
                       <span className={`font-mono text-[8px] tracking-widest uppercase ${
                         check.status === "pass" ? "text-white/60" : check.status === "fail" ? "text-red/70" : "text-dim/50"
                       }`}>
                         {check.status}
                       </span>
                       <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="font-mono text-[10px] text-soft-white">{check.label}</span>
-                        <span className="font-mono text-[9px] text-muted leading-relaxed">{check.message}</span>
+                        <span className="font-mono text-[11px] text-soft-white">{check.label}</span>
+                        <span className="font-mono text-[10px] text-readable leading-relaxed">{check.message}</span>
                       </div>
                     </div>
                   ))}
@@ -512,15 +555,15 @@ export function Settings() {
         </Section>
 
         {/* Export / Import */}
-        <Section label="BACKUP">
+        <Section label="BACKUP" className="order-40">
           <div
-            className="flex flex-col gap-4 p-4 rounded-card"
+            className="flex flex-col gap-5 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <p className="font-mono text-[10px] text-muted leading-relaxed">
+            <p className="font-mono text-[11px] text-readable leading-relaxed">
               Export your prompt library as JSON to back it up or transfer to another device.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="ghost"
                 size="sm"
@@ -547,16 +590,16 @@ export function Settings() {
         </Section>
 
         {/* Danger Zone */}
-        <Section label="DANGER ZONE">
+        <Section label="DANGER ZONE" className="order-70">
           <div
-            className="flex flex-col gap-4 p-4 rounded-card"
+            className="flex flex-col gap-5 p-5 rounded-card"
             style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}
           >
             <div className="flex items-start gap-2">
               <AlertTriangle size={12} className="text-red/60 mt-0.5 shrink-0" />
-              <div className="flex flex-col gap-1">
-                <span className="font-sans text-[11px] font-semibold text-red/80">CLEAR ALL DATA</span>
-                <p className="font-mono text-[10px] text-muted leading-relaxed">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-sans text-[12px] font-semibold text-red/80">CLEAR ALL DATA</span>
+                <p className="font-mono text-[11px] text-readable leading-relaxed">
                   This will permanently delete all prompts, results, recipes, and SREFs. This action cannot be undone.
                 </p>
               </div>

@@ -84,8 +84,17 @@ async function check(label: string, id: string, fn: () => Promise<string>): Prom
   try {
     return { id, label, status: "pass", message: await fn() };
   } catch (error) {
-    return { id, label, status: "fail", message: error instanceof Error ? error.message : "Diagnostic failed." };
+    return { id, label, status: "fail", message: formatDiagnosticError(error) };
   }
+}
+
+function formatDiagnosticError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return "Diagnostic failed.";
 }
 
 export async function runReleaseDiagnostics(deps: ReleaseDiagnosticDeps = defaultDeps): Promise<DiagnosticResult> {

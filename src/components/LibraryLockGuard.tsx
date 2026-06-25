@@ -10,6 +10,7 @@ import {
 } from "@/lib/libraryLock";
 import {
   acquireLibraryLockNative,
+  getLibraryLockIdentityNative,
   refreshLibraryLockNative,
   releaseLibraryLockNative,
 } from "@/lib/libraryLockNative";
@@ -31,13 +32,25 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
   const baseDir = useRef<string | null>(null);
   const [state, setState] = useState<LockState>({ status: "checking" });
 
-  const buildLock = useCallback(async (): Promise<LibraryLockInfo> => ({
-    session_id: session.current,
-    machine: navigator.platform || "unknown-machine",
-    user: "local-user",
-    updated_at: new Date().toISOString(),
-    app_version: isTauri() ? await getVersion() : "dev",
-  }), []);
+  const buildLock = useCallback(async (): Promise<LibraryLockInfo> => {
+    const identity = isTauri()
+      ? await getLibraryLockIdentityNative().catch(() => ({
+          machine: navigator.platform || "unknown-machine",
+          user: "unknown-user",
+        }))
+      : {
+          machine: navigator.platform || "unknown-machine",
+          user: "dev-user",
+        };
+
+    return {
+      session_id: session.current,
+      machine: identity.machine,
+      user: identity.user,
+      updated_at: new Date().toISOString(),
+      app_version: isTauri() ? await getVersion() : "dev",
+    };
+  }, []);
 
   const acquire = useCallback(async (forceTakeover = false) => {
     if (!isTauri()) {
@@ -100,6 +113,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Library In Use"
         message={`This library is locked by ${state.lock.user} on ${state.lock.machine}. Close it there before continuing.`}
+        action={<Button variant="danger" size="sm" onClick={() => acquire(true)}><RefreshCw size={10} /> Take Over Anyway</Button>}
       />
     );
   }

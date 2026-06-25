@@ -23,6 +23,7 @@ import {
   copyLibraryPackageNative,
   createLibraryPackageNative,
   migrateAppDataToLibraryNative,
+  repairLibraryDatabaseSchemaNative,
   validateLibraryPackageNative,
 } from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
@@ -174,6 +175,15 @@ export async function exportActiveLibraryFromDialog(): Promise<string | null> {
 
 export async function restoreLibraryFromDialog(): Promise<SelectValidatedLibraryResult | null> {
   return openLibraryFromDialog();
+}
+
+export async function repairActiveLibraryDatabaseSchema(): Promise<LibraryValidationResult> {
+  if (!isTauri()) throw new Error("Library repair can only run in the native app.");
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") throw new Error("Select a portable library before repairing its database schema.");
+  const validation = await repairLibraryDatabaseSchemaNative(state.paths.baseDir);
+  if (!validation.ok) throw new Error(validation.errors.join(", "));
+  return validation;
 }
 
 export async function revealActiveLibraryFolder(): Promise<void> {

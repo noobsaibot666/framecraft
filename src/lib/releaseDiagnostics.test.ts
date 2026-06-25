@@ -58,4 +58,18 @@ describe("release diagnostics", () => {
     expect(result.checks.find((check) => check.id === "active-library")?.message).toContain("Missing framecraft.db");
     expect(formatDiagnosticSummary(result)).toBe("2 passed, 3 failed");
   });
+
+  it("reports non-Error native diagnostic failures", async () => {
+    const result = await runReleaseDiagnostics({
+      isTauri: () => true,
+      listTables: vi.fn(async () => {
+        throw "database is locked";
+      }),
+      testFileStore: vi.fn(async () => undefined),
+      testDialogPlugin: vi.fn(async () => undefined),
+      validateActiveLibrary: vi.fn(async () => "Using local app-data library."),
+    });
+
+    expect(result.checks.find((check) => check.id === "sqlite-schema")?.message).toBe("database is locked");
+  });
 });

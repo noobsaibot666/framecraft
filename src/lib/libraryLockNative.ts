@@ -48,6 +48,11 @@ export async function releaseLibraryLockNative(baseDir: string, sessionId: strin
   await invoke("release_library_lock_native", { baseDir, sessionId });
 }
 
+export async function getLibraryLockIdentityNative(): Promise<Pick<LibraryLockInfo, "machine" | "user">> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<Pick<LibraryLockInfo, "machine" | "user">>("get_library_lock_identity_native");
+}
+
 function parseNativeLockError(error: unknown): Error {
   const message = typeof error === "string" ? error : error instanceof Error ? error.message : "Library lock failed.";
 

@@ -61,7 +61,7 @@ function NavItem({
           "group transition-all duration-150",
           isActive
             ? "text-white bg-red/8"
-            : "text-dim hover:text-muted"
+            : "text-readable hover:text-red"
         )
       }
     >
@@ -79,7 +79,7 @@ function NavItem({
           <span
             className={cn(
               "font-mono text-[10px] tabular-nums shrink-0 transition-colors",
-              isActive ? "text-red" : "text-dim/60"
+              isActive ? "text-red" : "text-dim group-hover:text-red/80"
             )}
           >
             {num}
@@ -117,7 +117,7 @@ export function Sidebar() {
       <nav className="flex-1 pt-3 pb-2 flex flex-col gap-2 overflow-y-auto">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="flex flex-col gap-0.5">
-            <span className="px-4 pt-2 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/45">
+            <span className="px-4 pt-2 pb-1 font-mono text-[9px] tracking-widest uppercase text-muted/75">
               {group.label}
             </span>
             {group.items.map((item) => (
@@ -138,7 +138,7 @@ export function Sidebar() {
             cn(
               "relative flex items-center gap-3 px-4 py-2.5",
               "transition-all duration-150",
-              isActive ? "text-white" : "text-dim hover:text-muted"
+              isActive ? "text-white" : "text-readable hover:text-red"
             )
           }
         >
@@ -162,7 +162,7 @@ export function Sidebar() {
 
       {/* Bottom identifier */}
       <div className="px-4 pb-3 pt-1">
-        <span className="system-label text-[8px] text-dim/50">
+        <span className="system-label text-[8.5px] text-muted/70">
           FRAMECRAFT / LOCAL
         </span>
       </div>

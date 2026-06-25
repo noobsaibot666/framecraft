@@ -68,6 +68,13 @@ pub fn validate_library_package_native(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub fn repair_library_database_schema_native(
+    base_dir: String,
+) -> Result<LibraryValidationResult, String> {
+    repair_library_database_schema(&base_dir)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub fn migrate_app_data_to_library_native(
     source_base_dir: String,
     target_base_dir: String,
@@ -271,12 +278,64 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
 }
 
+fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationResult, String> {
+    let paths = resolve_library_paths(base_dir);
+    create_package_dirs(&paths)?;
+    let metadata_path = format!("{}library.json", paths.base_dir);
+    if !Path::new(&metadata_path).exists() {
+        write_metadata(&paths)?;
+    }
+
+    let db_exists = Path::new(&paths.db_path).exists();
+    if !db_exists {
+        fs::write(&paths.db_path, []).map_err(format_io_error)?;
+        initialize_portable_database(&paths.db_path)?;
+        return Ok(validate_library_package(&paths.base_dir));
+    }
+
+    if has_core_database_schema(&paths.db_path) {
+        return Ok(validate_library_package(&paths.base_dir));
+    }
+
+    let user_tables = database_user_tables(&paths.db_path)?;
+    if !user_tables.is_empty() {
+        return Err(format!(
+            "Database schema is incomplete and contains existing tables ({}). Use Backup/Open Backup or migrate from a known-good library.",
+            user_tables.join(", ")
+        ));
+    }
+
+    initialize_portable_database(&paths.db_path)?;
+    Ok(validate_library_package(&paths.base_dir))
+}
+
 fn initialize_portable_database(db_path: &str) -> Result<(), String> {
     let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
     for sql in migration_sql() {
         conn.execute_batch(sql).map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
+    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    let mut statement = conn
+        .prepare(
+            "SELECT name FROM sqlite_master
+             WHERE type = 'table'
+               AND name NOT LIKE 'sqlite_%'
+             ORDER BY name",
+        )
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| error.to_string())?;
+
+    let mut tables = Vec::new();
+    for row in rows {
+        tables.push(row.map_err(|error| error.to_string())?);
+    }
+    Ok(tables)
 }
 
 fn has_core_database_schema(db_path: &str) -> bool {
@@ -459,6 +518,62 @@ mod tests {
         assert!(validation
             .errors
             .contains(&"Missing database schema".to_string()));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn repair_initializes_empty_database_schema() {
+        let root = test_root("repair-empty-schema");
+        let package = root.join("Repair.framecraftlib");
+        fs::create_dir_all(package.join("results")).unwrap();
+        fs::create_dir_all(package.join("references")).unwrap();
+        fs::write(
+            package.join("library.json"),
+            r#"{"format_version":1,"db_filename":"framecraft.db","results_dir":"results","references_dir":"references"}"#,
+        )
+        .unwrap();
+        fs::write(package.join("framecraft.db"), []).unwrap();
+
+        let validation = repair_library_database_schema(package.to_str().unwrap()).unwrap();
+
+        assert!(validation.ok, "{:?}", validation.errors);
+        assert!(sqlite_table_exists(
+            package.join("framecraft.db").to_str().unwrap(),
+            "prompts"
+        ));
+        assert!(sqlite_table_exists(
+            package.join("framecraft.db").to_str().unwrap(),
+            "generation_queue"
+        ));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn repair_refuses_partial_database_schema() {
+        let root = test_root("repair-partial-schema");
+        let package = root.join("Partial.framecraftlib");
+        fs::create_dir_all(package.join("results")).unwrap();
+        fs::create_dir_all(package.join("references")).unwrap();
+        fs::write(
+            package.join("library.json"),
+            r#"{"format_version":1,"db_filename":"framecraft.db","results_dir":"results","references_dir":"references"}"#,
+        )
+        .unwrap();
+        let db_path = package.join("framecraft.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch("CREATE TABLE prompts (id TEXT PRIMARY KEY);")
+            .unwrap();
+        drop(conn);
+
+        let error = match repair_library_database_schema(package.to_str().unwrap()) {
+            Ok(validation) => panic!("repair unexpectedly succeeded: {:?}", validation.errors),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("Database schema is incomplete"));
+        assert!(error.contains("prompts"));
 
         let _ = fs::remove_dir_all(root);
     }

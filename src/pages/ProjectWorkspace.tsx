@@ -39,9 +39,9 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
 ];
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
-  draft:    "bg-white/20",
-  active:   "bg-white/70",
-  review:   "bg-white/40",
+  draft:    "bg-readable",
+  active:   "bg-cyan",
+  review:   "bg-amber",
   archived: "bg-white/10",
 };
 
@@ -53,7 +53,7 @@ const CATEGORY_OPTIONS: Category[] = [
 // ─── Shared field atoms ───────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="system-label">{children}</label>;
+  return <label className="system-label text-[11px] text-muted">{children}</label>;
 }
 
 function FieldInput({ value, onChange, placeholder, mono = false }: {
@@ -62,10 +62,10 @@ function FieldInput({ value, onChange, placeholder, mono = false }: {
   return (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
       className={cn(
-        "h-8 px-3 text-[11px] text-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none w-full",
+        "h-10 px-3 text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full",
         mono ? "font-mono" : "font-sans"
       )}
-      style={{ border: "1px solid rgba(255,255,255,0.12)" }} />
+      style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
   );
 }
 
@@ -75,8 +75,8 @@ function FieldTextarea({ value, onChange, placeholder, rows = 3 }: {
   return (
     <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
       rows={rows}
-      className="px-3 py-2 font-mono text-[10px] text-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none w-full resize-none"
-      style={{ border: "1px solid rgba(255,255,255,0.12)" }} />
+      className="px-3 py-2.5 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full resize-none"
+      style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
   );
 }
 
@@ -86,12 +86,12 @@ function FieldSelect<T extends string>({ value, onChange, options, empty }: {
   return (
     <div className="relative">
       <select value={value} onChange={(e) => onChange(e.target.value as T)}
-        className="appearance-none h-8 pl-3 pr-7 font-mono text-[10px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
-        style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
+        className="appearance-none h-10 pl-3 pr-7 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
+        style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
         {empty && <option value="" className="bg-panel text-dim/50">{empty}</option>}
         {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
       </select>
-      <ChevronDown size={9} className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 pointer-events-none" />
+      <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
     </div>
   );
 }
@@ -102,11 +102,11 @@ function Panel({ title, count, children, action }: {
   title: string; count?: number; children: React.ReactNode; action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-3 p-4 rounded-card" style={{ border: "var(--border-default)" }}>
+    <div className="flex flex-col gap-4 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="system-label">{title}</span>
-          {count != null && <span className="font-mono text-[8px] text-dim/30">({count})</span>}
+          <span className="system-label text-soft-white">{title}</span>
+          {count != null && <span className="font-mono text-[10px] text-readable">({count})</span>}
         </div>
         {action}
       </div>
@@ -136,25 +136,25 @@ function PromptRow({ prompt, onRemove, onOpen }: {
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-sm group"
-      style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
+    <div className="flex items-center gap-3 px-3 py-3 rounded-sm group"
+      style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
-        <span className="font-sans text-[10px] text-soft-white truncate block">{prompt.title}</span>
+        <span className="font-sans text-[13px] text-soft-white truncate block">{prompt.title}</span>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{prompt.provider}</span>
-          {prompt.is_winner && <span className="font-mono text-[7px] text-white/40">WINNER</span>}
-          {prompt.is_failed && <span className="font-mono text-[7px] text-red/40">FAILED</span>}
+          <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{prompt.provider}</span>
+          {prompt.is_winner && <span className="font-mono text-[9px] text-amber">WINNER</span>}
+          {prompt.is_failed && <span className="font-mono text-[9px] text-red">FAILED</span>}
         </div>
       </div>
       {/* Stars */}
       <div className="flex items-center gap-0.5 shrink-0">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Star key={i} size={7} className={cn(i < prompt.rating ? "text-white/50 fill-white/30" : "text-white/10")} />
+          <Star key={i} size={9} className={cn(i < prompt.rating ? "text-amber fill-amber/40" : "text-white/14")} />
         ))}
       </div>
       <button type="button" onClick={onRemove}
-        className="text-dim/20 hover:text-red/60 transition-precise opacity-0 group-hover:opacity-100 shrink-0">
-        <X size={9} />
+        className="text-muted hover:text-red transition-precise opacity-0 group-hover:opacity-100 shrink-0">
+        <X size={11} />
       </button>
     </div>
   );
@@ -168,16 +168,16 @@ function RefRow({ ref: r, onRemove, onOpen }: {
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded-sm group"
-      style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
-      <SafeThumb src={r.thumbnail_data} className="w-8 h-8 object-cover rounded-sm shrink-0" />
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-sm group"
+      style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
+      <SafeThumb src={r.thumbnail_data} className="w-11 h-11 object-cover rounded-sm shrink-0" />
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
-        <span className="font-sans text-[10px] text-soft-white truncate block">{r.title}</span>
-        <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{r.kind}</span>
+        <span className="font-sans text-[13px] text-soft-white truncate block">{r.title}</span>
+        <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{r.kind}</span>
       </div>
       <button type="button" onClick={onRemove}
-        className="text-dim/20 hover:text-red/60 transition-precise opacity-0 group-hover:opacity-100 shrink-0">
-        <X size={9} />
+        className="text-muted hover:text-red transition-precise opacity-0 group-hover:opacity-100 shrink-0">
+        <X size={11} />
       </button>
     </div>
   );
@@ -215,8 +215,8 @@ function PromptPicker({ projectId, onAdd, onClose }: {
     <div className="flex flex-col gap-2">
       <input value={search} onChange={(e) => setSearch(e.target.value)}
         placeholder="Search prompts…" autoFocus
-        className="h-7 px-3 font-mono text-[10px] text-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
-        style={{ border: "1px solid rgba(255,255,255,0.15)" }} />
+        className="h-10 px-3 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
         {items.map((p) => (
           <div key={p.id} className="flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm hover:bg-white/3 transition-precise">
@@ -365,12 +365,12 @@ function ResultPicker({ projectId, onAdd, onClose }: {
 
 function StatChip({ label, value, alert = false }: { label: string; value: number; alert?: boolean }) {
   return (
-    <div className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-sm"
-      style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
-      <span className={cn("font-mono text-[18px] tabular-nums font-medium", alert && value > 0 ? "text-red/70" : "text-soft-white")}>
+    <div className="flex flex-col items-center gap-1 px-4 py-3 rounded-sm"
+      style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
+      <span className={cn("font-mono text-[22px] tabular-nums font-medium", alert && value > 0 ? "text-red" : "text-soft-white")}>
         {value}
       </span>
-      <span className="font-mono text-[8px] text-dim/40 tracking-widest uppercase">{label}</span>
+      <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{label}</span>
     </div>
   );
 }
@@ -590,10 +590,10 @@ export function ProjectWorkspace() {
             <Trash2 size={9} className="inline mr-1" />
             {confirmDelete ? "Confirm" : "Delete"}
           </button>
-          <Button variant="ghost" size="sm" onClick={() => navigate("/projects")}>
+          <Button variant="ghost" size="md" onClick={() => navigate("/projects")}>
             <ArrowLeft size={11} /> Projects
           </Button>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={!title.trim() || saving}>
+          <Button variant="primary" size="md" onClick={handleSave} disabled={!title.trim() || saving}>
             <Save size={11} /> {saving ? "Saving…" : saved ? "Saved" : "Save"}
           </Button>
         </div>
@@ -606,13 +606,13 @@ export function ProjectWorkspace() {
         className="hidden"
         onChange={(event) => handleImportProjectResult(event.target.files)}
       />
-      <div className="grid grid-cols-[1fr_300px] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-8">
 
         {/* Left column — brief + details */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
 
           {/* Stats row */}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatChip label="Prompts" value={linkedPrompts.length} />
             <StatChip label="Results" value={linkedResults.length} />
             <StatChip label="Winners" value={winnerCount} />
@@ -620,7 +620,7 @@ export function ProjectWorkspace() {
           </div>
 
           {/* Title + Client + Campaign */}
-          <div className="grid grid-cols-[1fr_160px_200px] gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_180px_220px] gap-4">
             <div className="flex flex-col gap-1.5">
               <FieldLabel>TITLE</FieldLabel>
               <FieldInput value={title} onChange={setTitle} placeholder="Project name…" />
@@ -663,14 +663,14 @@ export function ProjectWorkspace() {
             action={
               <button type="button"
                 onClick={() => setPickerMode(pickerMode === "prompts" ? null : "prompts")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                <Plus size={8} /> Add
+                <Plus size={10} /> Add
               </button>
             }
           >
             {pickerMode === "prompts" && (
-              <div className="mb-2 p-3 rounded-sm" style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
+              <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
                 <PromptPicker
                   projectId={id!}
                   onAdd={reloadLinks}
@@ -679,7 +679,7 @@ export function ProjectWorkspace() {
               </div>
             )}
             {linkedPrompts.length === 0 && pickerMode !== "prompts" ? (
-              <span className="font-mono text-[9px] text-dim/30">No prompts linked yet.</span>
+              <span className="font-mono text-[11px] text-muted">No prompts linked yet.</span>
             ) : (
               <div className="flex flex-col gap-1">
                 {linkedPrompts.map((p) => (
@@ -701,16 +701,16 @@ export function ProjectWorkspace() {
               <div className="flex items-center gap-1.5">
                 <button type="button"
                   onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
-                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
                   style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                  <Plus size={8} /> Add Existing
+                  <Plus size={10} /> Add Existing
                 </button>
                 <button type="button"
                   onClick={() => resultInputRef.current?.click()}
                   disabled={resultImporting || linkedPrompts.length === 0}
-                  className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white disabled:opacity-35 disabled:hover:text-red/70 transition-precise px-2 py-1 rounded-sm"
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white disabled:opacity-35 disabled:hover:text-red/70 transition-precise px-2.5 py-1.5 rounded-sm"
                   style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                  <Upload size={8} /> {resultImporting ? "Importing" : "Import Image"}
+                  <Upload size={10} /> {resultImporting ? "Importing" : "Import Image"}
                 </button>
               </div>
             }
@@ -718,7 +718,7 @@ export function ProjectWorkspace() {
             {(resultImportError || resultImportSaved) && (
               <div
                 className={cn(
-                  "mb-2 px-2 py-1.5 rounded-sm font-mono text-[9px]",
+                  "mb-3 px-3 py-2 rounded-sm font-mono text-[11px]",
                   resultImportError ? "text-red/70" : "text-white/50"
                 )}
                 style={{ border: resultImportError ? "1px solid rgba(215,25,33,0.30)" : "var(--border-dim)", background: resultImportError ? "rgba(215,25,33,0.08)" : "rgba(255,255,255,0.04)" }}
@@ -727,7 +727,7 @@ export function ProjectWorkspace() {
               </div>
             )}
             {pickerMode === "results" && (
-              <div className="mb-2 p-3 rounded-sm" style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
+              <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
                 <ResultPicker
                   projectId={id!}
                   onAdd={reloadLinks}
@@ -737,7 +737,7 @@ export function ProjectWorkspace() {
             )}
             {linkedResults.length === 0 && pickerMode !== "results" ? (
               <div className="flex flex-col gap-2">
-                <span className="font-mono text-[9px] text-dim/30">
+                <span className="font-mono text-[11px] text-muted">
                   {linkedPrompts.length === 0
                     ? "No results linked yet. Link a prompt first, then import an image result."
                     : "No results linked yet. Import an image result or add an existing result."}
@@ -747,15 +747,15 @@ export function ProjectWorkspace() {
                     type="button"
                     onClick={() => resultInputRef.current?.click()}
                     disabled={resultImporting}
-                    className="self-start flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm font-mono text-[9px] text-white/60 hover:text-white disabled:opacity-50 transition-precise"
-                    style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}
+                    className="self-start flex items-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-white hover:text-cyan disabled:opacity-50 transition-precise"
+                    style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}
                   >
                     <Upload size={9} /> {resultImporting ? "Importing..." : "Import Image Result"}
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-6 gap-2">
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-2.5">
                 {linkedResults.map((r) => (
                     <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
                       <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
@@ -777,11 +777,11 @@ export function ProjectWorkspace() {
         </div>
 
         {/* Right column — metadata + references */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
 
           {/* Metadata */}
-          <div className="flex flex-col gap-4 p-4 rounded-card" style={{ border: "var(--border-default)" }}>
-            <span className="system-label">METADATA</span>
+          <div className="flex flex-col gap-5 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <span className="system-label text-soft-white">METADATA</span>
             <div className="flex flex-col gap-1.5">
               <FieldLabel>CATEGORY</FieldLabel>
               <FieldSelect<Category>
@@ -794,7 +794,7 @@ export function ProjectWorkspace() {
             <div className="flex flex-col gap-1.5">
               <FieldLabel>TAGS</FieldLabel>
               <FieldInput value={tags} onChange={setTags} placeholder="tag1, tag2, tag3" mono />
-              <span className="font-mono text-[8px] text-dim/30">Comma-separated</span>
+              <span className="font-mono text-[10px] text-muted">Comma-separated</span>
             </div>
           </div>
 
@@ -805,14 +805,14 @@ export function ProjectWorkspace() {
             action={
               <button type="button"
                 onClick={() => setPickerMode(pickerMode === "references" ? null : "references")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-white transition-precise px-2 py-1 rounded-sm"
+                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                <Plus size={8} /> Add
+                <Plus size={10} /> Add
               </button>
             }
           >
             {pickerMode === "references" && (
-              <div className="mb-2 p-3 rounded-sm" style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}>
+              <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
                 <ReferencePicker
                   projectId={id!}
                   onAdd={reloadLinks}
@@ -821,7 +821,7 @@ export function ProjectWorkspace() {
               </div>
             )}
             {linkedRefs.length === 0 && pickerMode !== "references" ? (
-              <span className="font-mono text-[9px] text-dim/30">No references linked yet.</span>
+              <span className="font-mono text-[11px] text-muted">No references linked yet.</span>
             ) : (
               <div className="flex flex-col gap-1">
                 {linkedRefs.map((r) => (
@@ -837,7 +837,7 @@ export function ProjectWorkspace() {
           </Panel>
 
           {/* Recommendations */}
-          <div className="flex flex-col gap-3 p-4 rounded-card" style={{ border: "var(--border-default)" }}>
+          <div className="flex flex-col gap-4 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <RecommendationPanel
               context={{ category: category || undefined, projectId: id }}
             />
@@ -846,32 +846,32 @@ export function ProjectWorkspace() {
           {/* Quick actions */}
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/projects/${id}/export`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             Export Report
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/projects/${id}/assistant`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             Assistant
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/projects/${id}/board`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             Pipeline Board
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/compare/${id}`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             Compare Results
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/queue?project=${id}`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             Generation Queue
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/craft?project=${id}`)}
-            className="w-full justify-center text-dim">
+            className="w-full justify-center">
             <Plus size={10} /> Craft New Prompt for Project
           </Button>
         </div>

@@ -78,8 +78,8 @@ function CreateForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 w-full px-3 py-2 rounded-sm font-mono text-[9px] text-dim/40 hover:text-white/60 transition-precise"
-        style={{ border: "1px dashed rgba(255,255,255,0.08)" }}
+        className="flex items-center gap-2 w-full px-3 py-3 rounded-sm font-mono text-[10px] text-readable hover:text-cyan transition-precise"
+        style={{ border: "1px dashed rgba(255,255,255,0.18)" }}
       >
         <Plus size={9} /> New deliverable
       </button>
@@ -87,7 +87,7 @@ function CreateForm({
   }
 
   return (
-    <div className="flex flex-col gap-2 p-3 rounded-sm" style={{
+    <div className="flex flex-col gap-3 p-4 rounded-sm" style={{
       border: "1px solid rgba(215,25,33,0.28)",
       background: compact ? "rgba(215,25,33,0.035)" : "var(--surface-card)",
     }}>
@@ -97,15 +97,15 @@ function CreateForm({
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") setOpen(false); }}
         placeholder="Deliverable title…"
-        className="w-full h-7 px-2 font-sans text-[12px] text-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
-        style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+        className="w-full h-10 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
       />
       <div className="grid grid-cols-2 gap-1.5">
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value)}
-          className="h-6 px-1.5 font-mono text-[9px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
-          style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+          className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+          style={{ border: "1px solid rgba(255,255,255,0.14)" }}
         >
           <option value="">Format…</option>
           {FORMAT_OPTIONS.slice(1).map((f) => <option key={f} value={f}>{f}</option>)}
@@ -113,8 +113,8 @@ function CreateForm({
         <select
           value={aspect}
           onChange={(e) => setAspect(e.target.value)}
-          className="h-6 px-1.5 font-mono text-[9px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
-          style={{ border: "1px solid rgba(255,255,255,0.08)" }}
+          className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+          style={{ border: "1px solid rgba(255,255,255,0.14)" }}
         >
           <option value="">Ratio…</option>
           {ASPECT_OPTIONS.slice(1).map((a) => <option key={a} value={a}>{a}</option>)}
@@ -176,14 +176,14 @@ function DeliverableCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 p-3 rounded-sm",
+        "flex flex-col gap-3 p-4 rounded-sm",
         deliverable.status === "final" && "opacity-70"
       )}
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
     >
       {/* Title + delete */}
       <div className="flex items-start gap-1.5">
-        <span className="font-sans text-[11px] text-soft-white flex-1 leading-snug">{deliverable.title}</span>
+        <span className="font-sans text-[13px] font-semibold text-soft-white flex-1 leading-snug">{deliverable.title}</span>
         <button
           type="button"
           onClick={() => {
@@ -192,10 +192,10 @@ function DeliverableCard({
           }}
           className={cn(
             "shrink-0 transition-precise",
-            confirmDelete ? "text-red/70" : "text-dim/20 hover:text-red/50"
+            confirmDelete ? "text-red" : "text-muted hover:text-red"
           )}
         >
-          <Trash2 size={9} />
+          <Trash2 size={11} />
         </button>
       </div>
 
@@ -203,14 +203,14 @@ function DeliverableCard({
       {(deliverable.target_format || deliverable.aspect_ratio) && (
         <div className="flex flex-wrap gap-1">
           {deliverable.target_format && (
-            <span className="font-mono text-[7px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm"
-              style={{ border: "var(--border-dim)", color: "rgba(255,255,255,0.35)" }}>
+            <span className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm"
+              style={{ border: "var(--border-dim)", color: "rgba(232,232,227,0.78)" }}>
               {deliverable.target_format}
             </span>
           )}
           {deliverable.aspect_ratio && (
-            <span className="font-mono text-[7px] tracking-widest px-1.5 py-0.5 rounded-sm"
-              style={{ border: "var(--border-dim)", color: "rgba(255,255,255,0.25)" }}>
+            <span className="font-mono text-[9px] tracking-widest px-2 py-1 rounded-sm"
+              style={{ border: "var(--border-dim)", color: "rgba(232,232,227,0.72)" }}>
               {deliverable.aspect_ratio}
             </span>
           )}
@@ -224,8 +224,8 @@ function DeliverableCard({
           onClick={() => navigate(`/library/${deliverable.linked_prompt_id}`)}
           className="flex items-center gap-1.5 text-left hover:text-white transition-precise"
         >
-          <Star size={8} className="text-white/30 shrink-0" />
-          <span className="font-mono text-[9px] text-dim/60 truncate">Prompt linked</span>
+          <Star size={10} className="text-amber shrink-0" />
+          <span className="font-mono text-[10px] text-readable truncate">Prompt linked</span>
         </button>
       ) : (
         <button
@@ -233,16 +233,16 @@ function DeliverableCard({
           onClick={onCraftPrompt}
           className="flex items-center gap-1.5 text-left hover:text-white/60 transition-precise"
         >
-          <Plus size={8} className="text-dim/30 shrink-0" />
-          <span className="font-mono text-[9px] text-dim/30">Craft prompt</span>
+          <Plus size={10} className="text-cyan shrink-0" />
+          <span className="font-mono text-[10px] text-readable">Craft prompt</span>
         </button>
       )}
 
       {/* Linked result */}
       {deliverable.linked_result_id ? (
         <div className="flex items-center gap-1.5">
-          <ImageOff size={8} className="text-white/20 shrink-0" />
-          <span className="font-mono text-[9px] text-dim/40 truncate">Result linked</span>
+          <ImageOff size={10} className="text-readable shrink-0" />
+          <span className="font-mono text-[10px] text-readable truncate">Result linked</span>
         </div>
       ) : null}
 
@@ -250,40 +250,40 @@ function DeliverableCard({
       {missing && (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-sm"
           style={{ background: "rgba(215,25,33,0.06)", border: "1px solid rgba(215,25,33,0.2)" }}>
-          <AlertTriangle size={8} className="text-red/50 shrink-0" />
-          <span className="font-mono text-[8px] text-red/50">No result yet</span>
+          <AlertTriangle size={10} className="text-red shrink-0" />
+          <span className="font-mono text-[10px] text-red">No result yet</span>
         </div>
       )}
 
       {/* Notes (collapsed) */}
       {deliverable.notes && !editing && (
-        <p className="font-mono text-[8px] text-dim/40 leading-relaxed line-clamp-2">{deliverable.notes}</p>
+        <p className="font-mono text-[10px] text-readable leading-relaxed line-clamp-2">{deliverable.notes}</p>
       )}
 
       {/* Inline edit form */}
       {editing && (
         <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "var(--border-dim)" }}>
           <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-            className="w-full h-6 px-2 font-mono text-[10px] text-white bg-dark rounded-sm focus:outline-none"
-            style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+            className="w-full h-9 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
           <div className="grid grid-cols-2 gap-1">
             <select value={editFormat} onChange={(e) => setEditFormat(e.target.value)}
-              className="h-6 px-1 font-mono text-[9px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
-              style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+              className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+              style={{ border: "1px solid rgba(255,255,255,0.14)" }}>
               <option value="">Format…</option>
               {FORMAT_OPTIONS.slice(1).map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
             <select value={editAspect} onChange={(e) => setEditAspect(e.target.value)}
-              className="h-6 px-1 font-mono text-[9px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
-              style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+              className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+              style={{ border: "1px solid rgba(255,255,255,0.14)" }}>
               <option value="">Ratio…</option>
               {ASPECT_OPTIONS.slice(1).map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)}
             placeholder="Notes…" rows={2}
-            className="w-full px-2 py-1 font-mono text-[9px] text-soft-white placeholder:text-dim/30 bg-dark rounded-sm focus:outline-none resize-none"
-            style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+            className="w-full px-3 py-2 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.14)" }} />
           <div className="flex gap-1">
             <Button variant="primary" size="sm" onClick={handleSaveEdit} className="flex-1 justify-center">
               <Check size={9} /> Save
@@ -313,7 +313,7 @@ function DeliverableCard({
           </button>
           <span className="flex-1" />
           <button type="button" onClick={() => setEditing(true)}
-            className="font-mono text-[8px] text-dim/30 hover:text-white transition-precise px-1.5 py-0.5 rounded-sm hover:bg-white/5">
+            className="font-mono text-[10px] text-readable hover:text-cyan transition-precise px-2 py-1 rounded-sm hover:bg-white/5">
             Edit
           </button>
         </div>
@@ -346,17 +346,17 @@ function BoardColumn({
   onCraftPrompt: (d: Deliverable) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 min-w-0">
+    <div className="flex flex-col gap-3 min-w-0">
       {/* Column header */}
       <div className="flex items-center justify-between px-1 mb-1">
         <span className="system-label">{STATUS_LABEL[status]}</span>
         {deliverables.length > 0 && (
-          <span className="font-mono text-[8px] text-dim/30">{deliverables.length}</span>
+          <span className="font-mono text-[10px] text-readable">{deliverables.length}</span>
         )}
       </div>
 
       {/* Cards */}
-      <div className="flex flex-col gap-2 flex-1">
+      <div className="flex flex-col gap-3 flex-1">
         {deliverables.map((d) => (
           <DeliverableCard
             key={d.id}
@@ -387,18 +387,18 @@ function WorkflowGuide({ activeStep }: { activeStep: number }) {
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-2 mb-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
       {steps.map((step, index) => {
         const active = index === activeStep;
         return (
           <div key={step.label}
-            className="flex flex-col gap-1 px-3 py-2 rounded-sm"
+            className="flex flex-col gap-1.5 px-4 py-3 rounded-sm"
             style={{
-              border: active ? "1px solid rgba(215,25,33,0.38)" : "var(--border-dim)",
-              background: active ? "rgba(215,25,33,0.055)" : "rgba(255,255,255,0.025)",
+              border: active ? "1px solid rgba(56,183,200,0.45)" : "var(--border-default)",
+              background: active ? "rgba(56,183,200,0.07)" : "rgba(255,255,255,0.035)",
             }}>
-            <span className={cn("font-mono text-[8px] tracking-widest uppercase", active ? "text-red/70" : "text-dim/45")}>{step.label}</span>
-            <span className="font-sans text-[11px] text-soft-white/75 truncate">{step.body}</span>
+            <span className={cn("font-mono text-[10px] tracking-widest uppercase", active ? "text-cyan" : "text-muted")}>{step.label}</span>
+            <span className="font-sans text-[13px] text-soft-white truncate">{step.body}</span>
           </div>
         );
       })}
@@ -514,10 +514,10 @@ export function ProjectBoard() {
               <span className="font-mono text-[9px] text-red/50">{missingCount} missing result{missingCount !== 1 ? "s" : ""}</span>
             </div>
           )}
-          <Button variant="primary" size="sm" onClick={() => setShowTopCreate((open) => !open)}>
+          <Button variant="primary" size="md" onClick={() => setShowTopCreate((open) => !open)}>
             <Plus size={11} /> New Deliverable
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}`)}>
+          <Button variant="ghost" size="md" onClick={() => navigate(`/projects/${id}`)}>
             <ArrowLeft size={11} /> Project
           </Button>
         </div>
@@ -545,15 +545,15 @@ export function ProjectBoard() {
         <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
           <div className="flex flex-col items-center justify-center py-16 gap-3"
             style={{ border: "2px dashed rgba(215,25,33,0.18)", borderRadius: "8px", background: "rgba(215,25,33,0.025)" }}>
-            <span className="font-mono text-[10px] text-red/60">Start with one planned deliverable.</span>
-            <span className="font-mono text-[9px] text-dim/40">Name the output you need, then add format or ratio if useful.</span>
+          <span className="font-mono text-[12px] text-red">Start with one planned deliverable.</span>
+          <span className="font-mono text-[11px] text-readable">Name the output you need, then add format or ratio if useful.</span>
           </div>
           <div>
             <CreateForm initialOpen projectId={id!} onCreated={handleCreated} compact />
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4 min-w-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-5 min-w-0">
           {STATUS_ORDER.map((status) => (
             <BoardColumn
               key={status}

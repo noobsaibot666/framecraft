@@ -40,7 +40,7 @@ function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: str
   if (!displaySrc) {
     return (
       <div className={cn(className, "flex items-center justify-center bg-black/30")}>
-        <ImageOff size={20} className="text-dim/25" />
+        <ImageOff size={22} className="text-muted" />
       </div>
     );
   }
@@ -50,14 +50,14 @@ function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: str
 function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-[8px] text-dim/50 w-16 shrink-0 truncate">{label}</span>
-      <div className="flex-1 h-px relative" style={{ background: "rgba(255,255,255,0.07)" }}>
+      <span className="font-mono text-[10px] text-readable w-20 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-px relative" style={{ background: "rgba(255,255,255,0.14)" }}>
         <div
           className="absolute left-0 top-0 h-full transition-all"
-          style={{ width: `${(value / 5) * 100}%`, background: "rgba(255,255,255,0.35)" }}
+          style={{ width: `${(value / 5) * 100}%`, background: "rgba(223,168,58,0.78)" }}
         />
       </div>
-      <span className="font-mono text-[8px] text-dim/40 w-4 text-right shrink-0">{value}</span>
+      <span className="font-mono text-[10px] text-readable w-5 text-right shrink-0">{value}</span>
     </div>
   );
 }
@@ -98,10 +98,10 @@ function ComparisonSlot({
     <div
       className={cn(
         "flex flex-col rounded-card overflow-hidden transition-precise relative",
-        slot.isWinner && "ring-1 ring-white/30",
+        slot.isWinner && "ring-1 ring-amber/55",
         slot.isRejected && "opacity-50"
       )}
-      style={{ border: slot.isWinner ? "1px solid rgba(255,255,255,0.25)" : "var(--border-default)", background: "var(--surface-card)" }}
+      style={{ border: slot.isWinner ? "1px solid rgba(223,168,58,0.70)" : "var(--border-default)", background: "var(--surface-card)" }}
     >
       {/* Image */}
       <div className="relative w-full aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
@@ -111,8 +111,8 @@ function ComparisonSlot({
         {slot.isWinner && (
           <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-sm"
             style={{ background: "rgba(0,0,0,0.75)" }}>
-            <Star size={9} className="text-white/70 fill-white/50" />
-            <span className="font-mono text-[8px] text-white/70">WINNER</span>
+            <Star size={10} className="text-amber fill-amber/45" />
+            <span className="font-mono text-[9px] text-white">WINNER</span>
           </div>
         )}
         {slot.isRejected && (
@@ -127,10 +127,10 @@ function ComparisonSlot({
         <button
           type="button"
           onClick={onRemove}
-          className="absolute top-2 right-2 p-1 rounded-sm text-dim/50 hover:text-red/70 transition-precise"
+          className="absolute top-2 right-2 p-1.5 rounded-sm text-readable hover:text-red transition-precise"
           style={{ background: "rgba(0,0,0,0.6)" }}
         >
-          <X size={10} />
+          <X size={12} />
         </button>
 
         {/* AI risk overlay */}
@@ -144,27 +144,27 @@ function ComparisonSlot({
       </div>
 
       {/* Metadata */}
-      <div className="flex flex-col gap-3 p-3 flex-1">
+      <div className="flex flex-col gap-4 p-4 flex-1">
 
         {/* Prompt info */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <span className="font-sans text-[11px] text-soft-white block truncate">{r.prompt_title}</span>
+            <span className="font-sans text-[14px] font-semibold text-soft-white block truncate">{r.prompt_title}</span>
             <div className="flex items-center gap-2 mt-0.5">
               <ProviderBadge provider={r.prompt_provider} />
-              <span className="font-mono text-[8px] text-dim/40">v{r.prompt_version}</span>
+              <span className="font-mono text-[10px] text-readable">v{r.prompt_version}</span>
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < r.score_overall ? "bg-white/50" : "bg-white/10")} />
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < r.score_overall ? "bg-amber/80" : "bg-white/14")} />
             ))}
           </div>
         </div>
 
         {/* Score bars */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[8px] text-dim/35 tracking-widest uppercase">Review scores</span>
+          <span className="font-mono text-[10px] text-muted tracking-widest uppercase">Review scores</span>
           <ScoreBar label="REALISM" value={r.score_realism} />
           <ScoreBar label="BRAND FIT" value={r.score_brand_fit} />
           <ScoreBar label="COMPOSIT." value={r.score_composition} />
@@ -175,7 +175,7 @@ function ComparisonSlot({
         {r.artifacts && r.artifacts.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {r.artifacts.slice(0, 3).map((a, i) => (
-              <span key={i} className="font-mono text-[8px] text-red/50 px-1.5 py-0.5 rounded-sm"
+              <span key={i} className="font-mono text-[9px] text-red px-2 py-1 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.2)" }}>
                 {a}
               </span>
@@ -191,14 +191,14 @@ function ComparisonSlot({
           <div className="flex gap-3">
             {best && (
               <div className="flex items-center gap-1">
-                <Zap size={8} className="text-white/30" />
-                <span className="font-mono text-[8px] text-white/40">Best: {best}</span>
+                <Zap size={10} className="text-cyan" />
+                <span className="font-mono text-[10px] text-readable">Best: {best}</span>
               </div>
             )}
             {weak && (
               <div className="flex items-center gap-1">
-                <ChevronDown size={8} className="text-dim/30" />
-                <span className="font-mono text-[8px] text-dim/40">Weak: {weak}</span>
+                <ChevronDown size={10} className="text-muted" />
+                <span className="font-mono text-[10px] text-muted">Weak: {weak}</span>
               </div>
             )}
           </div>
@@ -210,8 +210,8 @@ function ComparisonSlot({
           onChange={(e) => onNotesChange(e.target.value)}
           placeholder="Comparison notes…"
           rows={2}
-          className="w-full px-2 py-1.5 font-mono text-[9px] text-soft-white/80 placeholder:text-dim/30 bg-black/20 rounded-sm resize-none focus:outline-none"
-          style={{ border: "var(--border-dim)" }}
+          className="w-full px-3 py-2 font-mono text-[11px] text-soft-white placeholder:text-dim bg-black/20 rounded-sm resize-none focus:outline-none"
+          style={{ border: "var(--border-default)" }}
         />
 
         {/* Decision buttons */}
@@ -220,12 +220,12 @@ function ComparisonSlot({
             type="button"
             onClick={slot.isWinner ? () => { /* toggle off handled by clearWinner */ } : onWinner}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-sm font-mono text-[9px] transition-precise",
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] transition-precise",
               slot.isWinner
-                ? "bg-white/15 text-white border-white/30"
-                : "text-dim/60 hover:text-white hover:bg-white/5"
+                ? "bg-amber/12 text-white border-amber/45"
+                : "text-readable hover:text-white hover:bg-white/5"
             )}
-            style={{ border: slot.isWinner ? "1px solid rgba(255,255,255,0.3)" : "var(--border-dim)" }}
+            style={{ border: slot.isWinner ? "1px solid rgba(223,168,58,0.55)" : "var(--border-default)" }}
           >
             <Star size={9} className={slot.isWinner ? "fill-white/50" : ""} />
             {slot.isWinner ? "Winner" : "Mark Winner"}
@@ -235,12 +235,12 @@ function ComparisonSlot({
             type="button"
             onClick={onRejected}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-sm font-mono text-[9px] transition-precise",
+              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] transition-precise",
               slot.isRejected
                 ? "bg-red/10 text-red/70 border-red/30"
-                : "text-dim/60 hover:text-red/60 hover:bg-red/5"
+                : "text-readable hover:text-red hover:bg-red/5"
             )}
-            style={{ border: slot.isRejected ? "1px solid rgba(215,25,33,0.3)" : "var(--border-dim)" }}
+            style={{ border: slot.isRejected ? "1px solid rgba(215,25,33,0.3)" : "var(--border-default)" }}
           >
             <X size={9} />
             {slot.isRejected ? "Rejected" : "Reject"}
@@ -252,8 +252,8 @@ function ComparisonSlot({
           <button
             type="button"
             onClick={onApplyDecision}
-            className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-sm font-mono text-[9px] text-white/50 hover:text-white hover:bg-white/5 transition-precise"
-            style={{ border: "var(--border-dim)" }}
+            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-readable hover:text-white hover:bg-white/5 transition-precise"
+            style={{ border: "var(--border-default)" }}
           >
             <Check size={9} />
             Apply to Library
@@ -275,9 +275,9 @@ function EmptySlot({ onClick, onDrop, disabled = false }: {
     <div
       className={cn(
         "flex flex-col items-center justify-center rounded-card transition-precise aspect-[4/3]",
-        disabled ? "cursor-wait opacity-60" : "cursor-pointer hover:bg-white/3"
+        disabled ? "cursor-wait opacity-60" : "cursor-pointer hover:bg-cyan/6"
       )}
-      style={{ border: "2px dashed rgba(215,25,33,0.22)", background: "rgba(215,25,33,0.025)" }}
+      style={{ border: "2px dashed rgba(56,183,200,0.35)", background: "rgba(56,183,200,0.035)" }}
       onClick={onClick}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -285,9 +285,9 @@ function EmptySlot({ onClick, onDrop, disabled = false }: {
         if (!disabled && e.dataTransfer.files.length) onDrop?.(e.dataTransfer.files);
       }}
     >
-      <Upload size={16} className="text-red/45 mb-2" />
-      <span className="font-mono text-[9px] text-red/60">{disabled ? "Importing image..." : "Drop image or click"}</span>
-      <span className="font-mono text-[8px] text-dim/35 mt-1">Import into next slot</span>
+      <Upload size={18} className="text-cyan mb-2" />
+      <span className="font-mono text-[11px] text-readable">{disabled ? "Importing image..." : "Drop image or click"}</span>
+      <span className="font-mono text-[10px] text-muted mt-1">Import into next slot</span>
     </div>
   );
 }
@@ -309,28 +309,28 @@ function PickerRow({
       disabled={selected}
       onClick={onAdd}
       className={cn(
-        "flex items-center gap-2.5 w-full px-2 py-2 rounded-sm text-left transition-precise",
-        selected ? "opacity-40 cursor-default" : "hover:bg-white/5 cursor-pointer"
+        "flex items-center gap-3 w-full px-3 py-3 rounded-sm text-left transition-precise",
+        selected ? "opacity-50 cursor-default" : "hover:bg-white/6 cursor-pointer"
       )}
-      style={{ border: "var(--border-dim)" }}
+      style={{ border: "var(--border-default)" }}
     >
-      <div className="w-10 h-10 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
+      <div className="w-14 h-14 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center">
         <SafeResultImage src={result.thumbnail_path ?? result.file_path} alt="" className="w-full h-full object-cover" />
       </div>
       <div className="flex-1 min-w-0">
-        <span className="font-sans text-[10px] text-soft-white block truncate">{result.prompt_title}</span>
+        <span className="font-sans text-[13px] text-soft-white block truncate">{result.prompt_title}</span>
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="font-mono text-[8px] text-dim/40">v{result.prompt_version}</span>
+          <span className="font-mono text-[10px] text-readable">v{result.prompt_version}</span>
           <div className="flex items-center gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className={cn("w-1 h-1 rounded-full", i < result.score_overall ? "bg-white/40" : "bg-white/10")} />
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < result.score_overall ? "bg-amber/80" : "bg-white/14")} />
             ))}
           </div>
-          {result.is_winner && <Star size={7} className="text-white/40 fill-white/25" />}
+          {result.is_winner && <Star size={9} className="text-amber fill-amber/40" />}
         </div>
       </div>
-      {!selected && <span className="font-mono text-[8px] text-dim/30 shrink-0">+ Add</span>}
-      {selected && <Check size={8} className="text-dim/30 shrink-0" />}
+      {!selected && <span className="font-mono text-[10px] text-cyan shrink-0">+ Add</span>}
+      {selected && <Check size={10} className="text-readable shrink-0" />}
     </button>
   );
 }
@@ -345,12 +345,12 @@ function SessionCard({ session, onOpen, onDelete }: {
   const [confirmDelete, setConfirmDelete] = useState(false);
   return (
     <div
-      className="flex flex-col gap-2 p-4 rounded-card cursor-pointer hover:bg-white/3 transition-precise"
+      className="flex flex-col gap-3 p-5 rounded-card cursor-pointer hover:bg-white/6 transition-precise"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
       onClick={onOpen}
     >
       <div className="flex items-start justify-between">
-        <span className="font-sans text-[12px] text-soft-white">{session.title}</span>
+        <span className="font-sans text-[14px] font-semibold text-soft-white">{session.title}</span>
         <button
           type="button"
           onClick={(e) => {
@@ -359,18 +359,18 @@ function SessionCard({ session, onOpen, onDelete }: {
             onDelete();
           }}
           className={cn("font-mono text-[8px] transition-precise px-1.5 py-0.5 rounded-sm",
-            confirmDelete ? "text-red/70 bg-red/10" : "text-dim/30 hover:text-red/50"
+            confirmDelete ? "text-red bg-red/10" : "text-muted hover:text-red"
           )}
         >
           {confirmDelete ? "Confirm" : "Delete"}
         </button>
       </div>
       <div className="flex items-center gap-3">
-        <span className="font-mono text-[9px] text-dim/40">{session.item_count} items</span>
+        <span className="font-mono text-[11px] text-readable">{session.item_count} items</span>
         {session.winner_count > 0 && (
           <div className="flex items-center gap-1">
-            <Star size={8} className="text-white/40 fill-white/25" />
-            <span className="font-mono text-[9px] text-white/40">{session.winner_count} winner{session.winner_count !== 1 ? "s" : ""}</span>
+            <Star size={10} className="text-amber fill-amber/40" />
+            <span className="font-mono text-[11px] text-readable">{session.winner_count} winner{session.winner_count !== 1 ? "s" : ""}</span>
           </div>
         )}
       </div>
@@ -632,11 +632,11 @@ export function ComparisonLab() {
           </Button>
         }
       >
-        <div className="flex flex-col gap-6 max-w-2xl">
+        <div className="flex flex-col gap-8 max-w-4xl">
 
           {/* Create new */}
           <div
-            className="flex flex-col gap-3 p-5 rounded-card"
+            className="flex flex-col gap-4 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <span className="system-label">NEW COMPARISON</span>
@@ -645,8 +645,8 @@ export function ComparisonLab() {
               onChange={(e) => setSessionTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleNewSession()}
               placeholder="Session name… (optional)"
-              className="w-full h-8 px-3 font-sans text-[13px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise"
-              style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+              className="w-full h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+              style={{ border: "1px solid rgba(255,255,255,0.16)" }}
             />
             <Button variant="primary" size="md" onClick={handleNewSession} className="self-start">
               <GitCompare size={11} />
@@ -658,7 +658,7 @@ export function ComparisonLab() {
           {sessions.length > 0 && (
             <div className="flex flex-col gap-3">
               <span className="system-label">SAVED SESSIONS</span>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {sessions.map((s) => (
                   <SessionCard
                     key={s.id}
@@ -673,7 +673,7 @@ export function ComparisonLab() {
 
           {sessions.length === 0 && (
             <div className="flex flex-col items-center py-12 gap-2">
-              <span className="font-mono text-[9px] text-dim/30">No saved comparison sessions yet.</span>
+              <span className="font-mono text-[11px] text-muted">No saved comparison sessions yet.</span>
             </div>
           )}
         </div>
@@ -724,20 +724,20 @@ export function ComparisonLab() {
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-3 gap-2 max-w-3xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 max-w-4xl">
           {[
             ["1", "Import or select results"],
             ["2", "Compare review scores"],
             ["3", "Mark winner or reject"],
           ].map(([n, label]) => (
-            <div key={n} className="flex items-center gap-2 px-3 py-2 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.025)" }}>
-              <span className="w-5 h-5 rounded-sm flex items-center justify-center font-mono text-[9px] text-red/70" style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(215,25,33,0.06)" }}>{n}</span>
-              <span className="font-mono text-[9px] text-dim/65">{label}</span>
+            <div key={n} className="flex items-center gap-3 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.035)" }}>
+              <span className="w-6 h-6 rounded-sm flex items-center justify-center font-mono text-[10px] text-cyan" style={{ border: "1px solid rgba(56,183,200,0.45)", background: "rgba(56,183,200,0.08)" }}>{n}</span>
+              <span className="font-mono text-[11px] text-readable">{label}</span>
             </div>
           ))}
         </div>
 
-      <div className="grid grid-cols-[280px_minmax(0,1fr)] gap-5 min-w-0">
+      <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6 min-w-0">
 
         {/* Left: result picker */}
         {(availableResults.length > 0 || projectId) && (
@@ -751,22 +751,22 @@ export function ComparisonLab() {
                 if (e.dataTransfer.files.length) handleUploadFiles(e.dataTransfer.files);
               }}
               disabled={uploading}
-              className="flex flex-col items-center justify-center gap-1.5 rounded-card py-5 transition-precise disabled:opacity-60"
-              style={{ border: "2px dashed rgba(215,25,33,0.30)", background: "rgba(215,25,33,0.045)" }}
+              className="flex flex-col items-center justify-center gap-2 rounded-card py-7 transition-precise disabled:opacity-60"
+              style={{ border: "2px dashed rgba(56,183,200,0.35)", background: "rgba(56,183,200,0.035)" }}
             >
-              <Upload size={15} className="text-red/55" />
-              <span className="font-mono text-[9px] text-red/70">{uploading ? "Importing..." : "Import image"}</span>
-              <span className="font-mono text-[8px] text-dim/45">Creates a project result and fills a slot</span>
+              <Upload size={18} className="text-cyan" />
+              <span className="font-mono text-[11px] text-readable">{uploading ? "Importing..." : "Import image"}</span>
+              <span className="font-mono text-[10px] text-muted">Creates a project result and fills a slot</span>
             </button>
             {uploadError && (
-              <span className="font-mono text-[9px] text-red/65 leading-snug">{uploadError}</span>
+              <span className="font-mono text-[11px] text-red leading-snug">{uploadError}</span>
             )}
             <div className="flex flex-col gap-1">
               <span className="system-label">PROJECT RESULTS</span>
-              <span className="font-mono text-[8px] text-dim/35">Scores are defined in Result Review.</span>
+              <span className="font-mono text-[10px] text-muted">Scores are defined in Result Review.</span>
             </div>
             {loadingResults ? (
-              <span className="font-mono text-[9px] text-dim/30">Loading…</span>
+              <span className="font-mono text-[11px] text-muted">Loading...</span>
             ) : (
               <div className="flex flex-col gap-1.5">
                 {availableResults.map((r) => (
@@ -778,7 +778,7 @@ export function ComparisonLab() {
                   />
                 ))}
                 {availableResults.length === 0 && (
-                  <span className="font-mono text-[9px] text-dim/30">No results yet. Import an image above.</span>
+                  <span className="font-mono text-[11px] text-muted">No results yet. Import an image above.</span>
                 )}
               </div>
             )}
@@ -788,8 +788,8 @@ export function ComparisonLab() {
         {/* Main: comparison grid */}
         <div className="flex-1 min-w-0">
           <div className={cn(
-            "grid gap-4",
-            layout === "2up" ? "grid-cols-2" : "grid-cols-2 xl:grid-cols-4"
+            "grid gap-5",
+            layout === "2up" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4"
           )}>
             {displaySlots.map((slot, i) =>
               slot ? (
@@ -817,7 +817,7 @@ export function ComparisonLab() {
           {/* No results hint */}
           {availableResults.length === 0 && filledSlots === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-2">
-              <span className="font-mono text-[9px] text-dim/30">
+              <span className="font-mono text-[11px] text-muted">
                 {projectId
                   ? "This project has no results yet. Import an image to create the first result."
                   : "Navigate to a project comparison to load results automatically."}

@@ -41,11 +41,11 @@ function providerUrl(prompt: Prompt | undefined): string {
 }
 
 function statusClass(status: QueueStatus): string {
-  if (status === "pending") return "text-white/70 border-white/20";
-  if (status === "sent") return "text-muted border-white/15";
-  if (status === "done") return "text-white border-white/30";
+  if (status === "pending") return "text-amber border-amber/45";
+  if (status === "sent") return "text-cyan border-cyan/40";
+  if (status === "done") return "text-white border-white/35";
   if (status === "failed") return "text-red border-red/50";
-  return "text-dim border-white/10";
+  return "text-muted border-white/18";
 }
 
 function QueueCard({
@@ -68,11 +68,11 @@ function QueueCard({
     <div
       ref={setNodeRef}
       style={{ ...style, border: "var(--border-default)", background: "var(--surface-card)" }}
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 p-4 rounded-card"
+      className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card"
     >
       <button
         type="button"
-        className="text-dim hover:text-white transition-precise cursor-grab active:cursor-grabbing pt-1"
+        className="text-muted hover:text-cyan transition-precise cursor-grab active:cursor-grabbing pt-1"
         {...attributes}
         {...listeners}
         aria-label="Drag queue item"
@@ -82,36 +82,36 @@ function QueueCard({
 
       <div className="flex flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="font-sans text-[13px] text-white font-medium truncate">
+          <span className="font-sans text-[15px] text-white font-semibold truncate">
             {prompt?.title ?? item.prompt_title ?? item.prompt_id}
           </span>
           {prompt?.provider && <ProviderBadge provider={prompt.provider} />}
           <span
-            className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-0.5 rounded-sm border", statusClass(item.status))}
+            className={cn("font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm border", statusClass(item.status))}
           >
             {STATUS_LABELS[item.status]}
           </span>
         </div>
-        <p className="font-mono text-[10px] text-dim/70 leading-relaxed line-clamp-2">
+        <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-2">
           {prompt?.prompt_text ?? item.prompt_text ?? "Prompt not loaded in dev store."}
         </p>
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        <button type="button" onClick={onCopy} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Copy prompt">
+        <button type="button" onClick={onCopy} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Copy prompt">
           <Copy size={12} />
         </button>
         <button type="button" onClick={() => { window.open(providerUrl(prompt), "_blank"); onStatus("sent"); }}
-          className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title={`Open in ${prompt?.provider ?? "provider"}`}>
+          className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title={`Open in ${prompt?.provider ?? "provider"}`}>
           <ExternalLink size={12} />
         </button>
-        <button type="button" onClick={onImport} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Import result">
+        <button type="button" onClick={onImport} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Import result">
           <Upload size={12} />
         </button>
-        <button type="button" onClick={() => onStatus("done")} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Mark done">
+        <button type="button" onClick={() => onStatus("done")} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Mark done">
           <Check size={12} />
         </button>
-        <button type="button" onClick={() => onStatus("skipped")} className="p-1.5 rounded-sm text-dim hover:text-white transition-precise" title="Skip">
+        <button type="button" onClick={() => onStatus("skipped")} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Skip">
           <SkipForward size={12} />
         </button>
       </div>
@@ -238,16 +238,16 @@ export function GenerationQueue() {
             className="hidden"
             onChange={(event) => handleSingleImport(event.target.files)}
           />
-          <Button variant="ghost" size="sm" onClick={() => bulkFileRef.current?.click()}>
+          <Button variant="ghost" size="md" onClick={() => bulkFileRef.current?.click()}>
             <Upload size={11} /> Bulk Import
           </Button>
-          <Button variant="ghost" size="sm" onClick={copyAllPending} disabled={pending.length === 0}>
+          <Button variant="ghost" size="md" onClick={copyAllPending} disabled={pending.length === 0}>
             <Copy size={11} /> {copied ? "Copied" : "Copy Pending"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={async () => { await clearDone(); await refresh(); }}>
+          <Button variant="ghost" size="md" onClick={async () => { await clearDone(); await refresh(); }}>
             Clear Done
           </Button>
-          <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
+          <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>
             <Plus size={11} /> Add Prompts
           </Button>
         </div>
@@ -255,14 +255,14 @@ export function GenerationQueue() {
     >
       {showAdd && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-          <div className="w-[560px] max-h-[70vh] flex flex-col gap-3 p-4 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+          <div className="w-[640px] max-h-[72vh] flex flex-col gap-4 p-6 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <div className="flex items-center justify-between">
               <span className="system-label">ADD PROMPTS</span>
-              <button type="button" className="text-dim hover:text-white" onClick={() => setShowAdd(false)}><X size={14} /></button>
+              <button type="button" className="text-muted hover:text-white" onClick={() => setShowAdd(false)}><X size={14} /></button>
             </div>
             <div className="overflow-auto flex flex-col gap-1 pr-1">
               {prompts.map((prompt) => (
-                <label key={prompt.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 items-center p-2 rounded-sm cursor-pointer hover:bg-white/5">
+                <label key={prompt.id} className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-3 items-center p-3 rounded-sm cursor-pointer hover:bg-white/5">
                   <input
                     type="checkbox"
                     checked={selected.has(prompt.id)}
@@ -273,14 +273,14 @@ export function GenerationQueue() {
                     }}
                     className="accent-white/70"
                   />
-                  <span className="font-mono text-[10px] text-muted truncate">{prompt.title}</span>
+                  <span className="font-mono text-[12px] text-readable truncate">{prompt.title}</span>
                   <ProviderBadge provider={prompt.provider} />
                 </label>
               ))}
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowAdd(false)}>Cancel</Button>
-              <Button variant="primary" size="sm" disabled={selected.size === 0} onClick={handleAddSelected}>
+              <Button variant="ghost" size="md" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <Button variant="primary" size="md" disabled={selected.size === 0} onClick={handleAddSelected}>
                 Add {selected.size}
               </Button>
             </div>
@@ -288,24 +288,24 @@ export function GenerationQueue() {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-5">
         <Badge variant="default">{items.length} total</Badge>
         <Badge variant="default">{pending.length} pending</Badge>
       </div>
       {importError && (
-        <div className="mb-4 px-3 py-2 rounded-sm border border-red/30 bg-red/10 font-mono text-[10px] text-red">
+        <div className="mb-5 px-4 py-3 rounded-sm border border-red/30 bg-red/10 font-mono text-[11px] text-red">
           {importError}
         </div>
       )}
 
       {items.length === 0 ? (
         <div className="flex items-center justify-center h-48 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
-          <span className="font-mono text-[10px] text-dim/50">No queued prompts.</span>
+          <span className="font-mono text-[12px] text-readable">No queued prompts.</span>
         </div>
       ) : (
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               {items.map((item) => (
                 <QueueCard
                   key={item.id}

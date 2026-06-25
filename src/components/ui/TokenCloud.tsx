@@ -106,15 +106,15 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
   return (
     <div className="flex flex-col gap-3">
       {/* Category tabs */}
-      <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-none">
+      <div className="flex flex-wrap gap-1.5 pb-0.5">
         {categories.map((cat) => (
           <button
             key={cat.id}
             type="button"
             onClick={() => handleCategoryChange(cat)}
             className={cn(
-              "shrink-0 font-mono text-[8px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise whitespace-nowrap",
-              activeCategoryId === cat.id ? "text-white" : "text-dim hover:text-muted"
+              "font-mono text-[9px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise whitespace-nowrap",
+              activeCategoryId === cat.id ? "text-white" : "text-readable hover:text-cyan"
             )}
             style={{
               border: activeCategoryId === cat.id ? "var(--border-strong)" : "var(--border-dim)",
@@ -127,15 +127,15 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
       </div>
 
       {/* Search + favorites toggle + add custom */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1">
-          <Search size={9} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
+          <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter tokens…"
-            className="w-full h-6 pl-6 pr-2 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none transition-precise"
-            style={{ border: "var(--border-dim)" }}
+            className="w-full h-8 pl-6 pr-2 font-mono text-[10px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none transition-precise"
+            style={{ border: "var(--border-default)" }}
           />
         </div>
         {/* Favorites filter */}
@@ -143,8 +143,8 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
           type="button"
           onClick={() => setFavoritesOnly((v) => !v)}
           className={cn(
-            "h-6 px-2 rounded-sm font-mono text-[8px] tracking-widest uppercase transition-precise flex items-center gap-1",
-            favoritesOnly ? "text-white" : "text-dim hover:text-muted"
+            "h-8 px-2.5 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise flex items-center gap-1",
+            favoritesOnly ? "text-white" : "text-readable hover:text-cyan"
           )}
           style={{ border: favoritesOnly ? "var(--border-strong)" : "var(--border-dim)" }}
           title="Show favorites only"
@@ -156,8 +156,8 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
           type="button"
           onClick={() => setAddingNew((v) => !v)}
           className={cn(
-            "h-6 px-2 rounded-sm font-mono text-[8px] tracking-widest uppercase transition-precise flex items-center gap-1",
-            addingNew ? "text-white" : "text-dim hover:text-muted"
+            "h-8 px-2.5 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise flex items-center gap-1",
+            addingNew ? "text-white" : "text-readable hover:text-cyan"
           )}
           style={{ border: addingNew ? "var(--border-strong)" : "var(--border-dim)" }}
           title="Add custom token"
@@ -179,14 +179,14 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
               if (e.key === "Escape") { setAddingNew(false); setNewTokenText(""); }
             }}
             placeholder={`Custom ${activeCategoryName} token…`}
-            className="flex-1 h-7 px-2.5 font-mono text-[10px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none transition-precise"
+            className="flex-1 h-8 px-2.5 font-mono text-[11px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none transition-precise"
             style={{ border: "var(--border-strong)" }}
           />
           <button
             type="button"
             onClick={handleAddCustomToken}
             disabled={savingNew || !newTokenText.trim()}
-            className="h-7 px-3 font-mono text-[9px] tracking-widest uppercase text-white rounded-sm transition-precise disabled:opacity-40"
+            className="h-8 px-3 font-mono text-[10px] tracking-widest uppercase text-white rounded-sm transition-precise disabled:opacity-40"
             style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.08)" }}
           >
             {savingNew ? "…" : "Add"}
@@ -197,18 +197,18 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
       {/* Favorites-only empty state */}
       {favoritesOnly && favoriteCount === 0 && (
         <div className="flex items-center justify-center py-4">
-          <span className="font-mono text-[9px] text-dim/40">No favorites yet. Hold star on any token to save it.</span>
+          <span className="font-mono text-[10px] text-muted">No favorites yet. Hold star on any token to save it.</span>
         </div>
       )}
 
       {/* Token pills grid */}
       {loadingTokens ? (
         <div className="flex items-center justify-center py-4">
-          <span className="font-mono text-[9px] text-dim/40">Loading…</span>
+          <span className="font-mono text-[10px] text-muted">Loading...</span>
         </div>
       ) : !favoritesOnly && visibleTokens.length === 0 ? (
         <div className="flex items-center justify-center py-4">
-          <span className="font-mono text-[9px] text-dim/40">
+          <span className="font-mono text-[10px] text-muted">
             {search ? "No matches." : "No tokens. Run in Tauri to load library."}
           </span>
         </div>
@@ -223,8 +223,8 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
                   type="button"
                   onClick={() => onToggle(token)}
                   className={cn(
-                    "inline-flex items-center font-mono text-[9px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
-                    active ? "text-white" : "text-dim/70 hover:text-muted"
+                    "inline-flex items-center font-mono text-[10px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
+                    active ? "text-white" : "text-readable hover:text-cyan"
                   )}
                   style={{
                     border: active

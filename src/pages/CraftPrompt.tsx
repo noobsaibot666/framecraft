@@ -30,13 +30,13 @@ function FieldSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label">{label}</label>
+      <label className="system-label text-[11px] text-muted">{label}</label>
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none pr-7 h-8 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise cursor-pointer"
-          style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+          className="w-full appearance-none pr-7 h-10 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
+          style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         >
           {options.map((o) => (
             <option key={o.value} value={o.value} className="bg-panel text-white">
@@ -44,7 +44,7 @@ function FieldSelect({
             </option>
           ))}
         </select>
-        <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim pointer-events-none" />
+        <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
       </div>
     </div>
   );
@@ -66,15 +66,15 @@ function FieldInput({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
-        <label className="system-label">{label}</label>
-        {hint && <span className="font-mono text-[8px] text-dim/60">{hint}</span>}
+        <label className="system-label text-[11px] text-muted">{label}</label>
+        {hint && <span className="font-mono text-[10px] text-readable">{hint}</span>}
       </div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-        style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+        className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
       />
     </div>
   );
@@ -83,7 +83,7 @@ function FieldInput({
 function RatingPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label">RATING</label>
+      <label className="system-label text-[11px] text-muted">RATING</label>
       <div className="flex items-center gap-1.5">
         {Array.from({ length: 5 }).map((_, i) => (
           <button
@@ -92,28 +92,28 @@ function RatingPicker({ value, onChange }: { value: number; onChange: (n: number
             onClick={() => onChange(i + 1 === value ? 0 : i + 1)}
             className={cn(
               "w-4 h-4 rounded-full border transition-precise",
-              i < value ? "bg-white/50 border-white/40" : "bg-transparent border-white/15 hover:border-white/30"
+              i < value ? "bg-amber/70 border-amber/60" : "bg-transparent border-white/18 hover:border-amber/55"
             )}
           />
         ))}
-        <span className="font-mono text-[10px] text-dim ml-1">{value}/5</span>
+        <span className="font-mono text-[11px] text-readable ml-1">{value}/5</span>
       </div>
     </div>
   );
 }
 
 function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const colorClass = value >= 8 ? "text-red" : value >= 6 ? "text-red/70" : value >= 4 ? "text-muted" : "text-dim";
+  const colorClass = value >= 8 ? "text-red" : value >= 6 ? "text-red/80" : value >= 4 ? "text-amber" : "text-readable";
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <label className="system-label">AI-LOOK RISK</label>
-        <span className={cn("font-mono text-[10px]", colorClass)}>{value}/10</span>
+        <label className="system-label text-[11px] text-muted">AI-LOOK RISK</label>
+        <span className={cn("font-mono text-[11px]", colorClass)}>{value}/10</span>
       </div>
       <input
         type="range" min={0} max={10} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-px cursor-pointer accent-white/60"
+        className="w-full h-px cursor-pointer accent-amber"
         style={{ background: `linear-gradient(to right, rgba(255,255,255,0.4) ${value * 10}%, rgba(255,255,255,0.08) ${value * 10}%)` }}
       />
     </div>
@@ -129,13 +129,13 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   };
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label">TAGS</label>
+      <label className="system-label text-[11px] text-muted">TAGS</label>
       <div
-        className="flex flex-wrap gap-1.5 p-2 rounded-sm min-h-9"
-        style={{ border: "1px solid rgba(255,255,255,0.10)", background: "var(--color-dark)" }}
+        className="flex flex-wrap gap-1.5 p-2.5 rounded-sm min-h-10"
+        style={{ border: "1px solid rgba(255,255,255,0.16)", background: "var(--color-dark)" }}
       >
         {tags.map((tag) => (
-          <span key={tag} className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-1.5 py-0.5 rounded border border-white/10 text-dim">
+          <span key={tag} className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded border border-white/16 text-readable">
             {tag}
             <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="text-dim/50 hover:text-red transition-precise leading-none">×</button>
           </span>
@@ -149,7 +149,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
           }}
           onBlur={() => { if (input.trim()) commit(input); }}
           placeholder={tags.length ? "" : "Type tag + Enter…"}
-          className="flex-1 min-w-16 bg-transparent font-mono text-[10px] text-soft-white placeholder:text-dim/40 outline-none"
+          className="flex-1 min-w-16 bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim outline-none"
         />
       </div>
     </div>
@@ -267,8 +267,8 @@ function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v:
       <FieldInput label="NEGATIVE --no" value={p.no_prompt} onChange={(v) => set("no_prompt", v)} placeholder="text in frame, blur" />
       {/* Flags */}
       <div className="flex flex-col gap-1 pt-1">
-        <span className="system-label text-[8px] text-dim/40">FLAGS</span>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+        <span className="system-label text-[10px] text-muted">FLAGS</span>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
           {flag("raw",   "--raw")}
           {flag("hd",    "--hd")}
           {flag("tile",  "--tile")}
@@ -299,14 +299,14 @@ function SDParamsPanel({ p, set }: { p: SDParams; set: (k: keyof SDParams, v: st
       <FieldSelect label="SAMPLER" value={p.sampler} onChange={(v) => set("sampler", v)} options={SD_SAMPLERS} />
       <FieldInput label="SEED" value={p.seed} onChange={(v) => set("seed", v)} placeholder="-1 (random)" />
       <div className="flex flex-col gap-1.5">
-        <label className="system-label">NEGATIVE PROMPT</label>
+        <label className="system-label text-[11px] text-muted">NEGATIVE PROMPT</label>
         <textarea
           value={p.negative_prompt}
           onChange={(e) => set("negative_prompt", e.target.value)}
           placeholder="ugly, bad anatomy, blurry…"
           rows={3}
-          className="w-full px-3 py-2 font-mono text-[10px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise resize-none"
-          style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+          className="w-full px-3 py-2.5 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise resize-none"
+          style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
       </div>
     </>
@@ -687,8 +687,8 @@ export function CraftPrompt() {
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
-      <span className="system-label">{label}</span>
-      <div className="flex-1 h-px bg-white/7" />
+      <span className="system-label text-[12px] text-soft-white">{label}</span>
+      <div className="flex-1 h-px bg-white/16" />
     </div>
   );
 
@@ -740,9 +740,9 @@ export function CraftPrompt() {
         </div>
       }
     >
-      <div className="flex gap-6 min-w-0">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-8 min-w-0">
         {/* ── Left: Main form ─────────────────────────────── */}
-        <div className="flex flex-col gap-6 flex-1 min-w-0">
+        <div className="flex flex-col gap-8 min-w-0">
 
           {/* Duplicate warning */}
           {duplicates.length > 0 && !duplicatesDismissed && (
@@ -784,15 +784,15 @@ export function CraftPrompt() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
-                  <label className="system-label">TITLE</label>
+                  <label className="system-label text-[11px] text-muted">TITLE</label>
                   {errors.title && <span className="font-mono text-[9px] text-red/80 flex items-center gap-1"><AlertCircle size={8} />{errors.title}</span>}
                 </div>
                 <input
                   value={fields.title}
                   onChange={(e) => setF("title", e.target.value)}
                   placeholder="Give this prompt a unique name…"
-                  className="w-full h-8 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
-                  style={{ border: errors.title ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.10)" }}
+                  className="w-full h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+                  style={{ border: errors.title ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.16)" }}
                 />
               </div>
               <Input
@@ -800,7 +800,7 @@ export function CraftPrompt() {
                 onChange={(e) => setF("description", e.target.value)}
                 placeholder="Brief description of what this produces…"
               />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <FieldSelect
                   label="PROVIDER"
                   value={fields.provider}
@@ -827,8 +827,8 @@ export function CraftPrompt() {
                   type="button"
                   onClick={() => { setMode(m); setOutputOverride(null); }}
                   className={cn(
-                    "font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded transition-precise",
-                    mode === m ? "text-white" : "text-dim hover:text-muted"
+                    "font-mono text-[10px] tracking-widest uppercase px-3 py-2 rounded transition-precise",
+                    mode === m ? "text-white" : "text-readable hover:text-cyan"
                   )}
                   style={{
                     border: mode === m ? "var(--border-strong)" : "var(--border-dim)",
@@ -841,34 +841,34 @@ export function CraftPrompt() {
             </div>
 
             {mode === "builder" ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {builderFields.map(({ key, label, placeholder }) => (
                   <div key={key} className="flex flex-col gap-1.5">
-                    <label className="system-label">{label}</label>
+                    <label className="system-label text-[11px] text-muted">{label}</label>
                     <input
                       value={fields[key] as string}
                       onChange={(e) => setF(key, e.target.value)}
                       placeholder={placeholder}
-                      className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-                      style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+                      className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                      style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                     />
                   </div>
                 ))}
                 <div className="col-span-2 flex flex-col gap-1.5">
-                  <label className="system-label">REALISM NOTES</label>
+                  <label className="system-label text-[11px] text-muted">REALISM NOTES</label>
                   <input
                     value={fields.realism}
                     onChange={(e) => setF("realism", e.target.value)}
                     placeholder="authentic skin texture, real terrain imperfections…"
-                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none focus:border-red/50 transition-precise"
-                    style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+                    className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                    style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                   />
                 </div>
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
-                  <label className="system-label">PROMPT TEXT</label>
+                  <label className="system-label text-[11px] text-muted">PROMPT TEXT</label>
                   {errors.prompt_text && <span className="font-mono text-[9px] text-red/80">{errors.prompt_text}</span>}
                 </div>
                 <Textarea
@@ -887,18 +887,18 @@ export function CraftPrompt() {
             <div>
               <SectionHeader label="TOKEN LIBRARY" />
               <div
-                className="flex flex-col gap-4 p-4 rounded-card"
+                className="flex flex-col gap-5 p-5 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
               >
                 {/* Sequence builder */}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <span className="system-label text-[8px]">SEQUENCE</span>
+                    <span className="system-label text-[10px] text-muted">SEQUENCE</span>
                     {tokenSequence.length > 0 && (
                       <button
                         type="button"
                         onClick={() => { setTokenSequence([]); setTokenOverrides({}); setOutputOverride(null); }}
-                        className="font-mono text-[8px] text-dim/50 hover:text-red transition-precise"
+                        className="font-mono text-[10px] text-muted hover:text-red transition-precise"
                       >
                         Clear all
                       </button>
@@ -914,7 +914,7 @@ export function CraftPrompt() {
                 </div>
 
                 {/* Divider */}
-                <div className="h-px bg-white/7" />
+                <div className="h-px bg-white/16" />
 
                 {/* Token cloud */}
                 <TokenCloud
@@ -965,34 +965,34 @@ export function CraftPrompt() {
         </div>
 
         {/* ── Right: Parameters + Preview ─────────────────── */}
-        <div className="flex flex-col gap-4 w-64 shrink-0">
+        <div className="flex flex-col gap-5 min-w-0">
 
           {/* Provider Parameters */}
           <div
-            className="flex flex-col gap-3 p-4 rounded-card"
+            className="flex flex-col gap-4 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex items-center justify-between">
-              <span className="system-label">PARAMETERS</span>
-              <span className="font-mono text-[9px] text-dim/60 uppercase tracking-widest">{fields.provider}</span>
+              <span className="system-label text-soft-white">PARAMETERS</span>
+              <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{fields.provider}</span>
             </div>
             {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} />}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
             {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
             {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (
-              <p className="font-mono text-[10px] text-dim leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
+              <p className="font-mono text-[11px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
           </div>
 
           {/* Related Prompts */}
           {relatedPrompts.length > 0 && (
             <div
-              className="flex flex-col gap-2 p-4 rounded-card"
+              className="flex flex-col gap-3 p-5 rounded-card"
               style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
             >
               <div className="flex items-center gap-2">
-                <Zap size={9} className="text-dim/50" />
-                <span className="system-label">RELATED</span>
+                <Zap size={11} className="text-cyan" />
+                <span className="system-label text-soft-white">RELATED</span>
               </div>
               {relatedPrompts.map((p) => (
                 <button
@@ -1002,10 +1002,10 @@ export function CraftPrompt() {
                   className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
                   style={{ border: "var(--border-dim)" }}
                 >
-                  <span className="font-mono text-[10px] text-muted truncate">{p.title}</span>
+                  <span className="font-mono text-[11px] text-readable truncate">{p.title}</span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className={cn("w-1 h-1 rounded-full", i < p.rating ? "bg-white/50" : "bg-white/10")} />
+                      <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
                     ))}
                   </div>
                 </button>
@@ -1015,7 +1015,7 @@ export function CraftPrompt() {
 
           {/* Recommendations */}
           <div
-            className="flex flex-col gap-3 p-4 rounded-card"
+            className="flex flex-col gap-4 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <RecommendationPanel
@@ -1025,10 +1025,10 @@ export function CraftPrompt() {
 
           {/* Scoring */}
           <div
-            className="flex flex-col gap-4 p-4 rounded-card"
+            className="flex flex-col gap-5 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <span className="system-label">SCORING</span>
+            <span className="system-label text-soft-white">SCORING</span>
             <RatingPicker value={fields.rating} onChange={(n) => setF("rating", n)} />
             <RiskSlider value={fields.ai_look_risk} onChange={(n) => setF("ai_look_risk", n)} />
             <div className="flex items-center gap-4 pt-1">

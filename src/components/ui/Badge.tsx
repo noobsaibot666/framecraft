@@ -46,6 +46,12 @@ const PROVIDER_LABELS: Record<Provider, string> = {
   firefly: "FF",
   ideogram: "IDG",
   flux: "FLUX",
+  nano_banana: "NANO",
+  gpt_image: "GPT",
+  seedance: "SEED",
+  kling: "KLING",
+  runway: "RUN",
+  higgsfield: "HIGGS",
   other: "OTHER",
 };
 

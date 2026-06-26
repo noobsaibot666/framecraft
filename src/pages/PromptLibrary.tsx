@@ -20,6 +20,13 @@ const PROVIDER_OPTIONS: { value: Provider | ""; label: string }[] = [
   { value: "firefly", label: "Firefly" },
   { value: "ideogram", label: "Ideogram" },
   { value: "flux", label: "Flux" },
+  { value: "nano_banana", label: "Nano Banana" },
+  { value: "gpt_image", label: "GPT Image" },
+  { value: "seedance", label: "Seedance" },
+  { value: "kling", label: "Kling" },
+  { value: "runway", label: "Runway" },
+  { value: "higgsfield", label: "Higgsfield" },
+  { value: "other", label: "Other" },
 ];
 
 const CATEGORY_OPTIONS: { value: Category | ""; label: string }[] = [

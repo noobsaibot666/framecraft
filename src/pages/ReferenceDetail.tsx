@@ -35,7 +35,8 @@ const CATEGORY_OPTIONS = [
 ];
 
 const PROVIDER_OPTIONS = [
-  "midjourney", "dalle", "stable_diffusion", "firefly", "ideogram", "flux", "other",
+  "midjourney", "dalle", "stable_diffusion", "firefly", "ideogram", "flux",
+  "nano_banana", "gpt_image", "seedance", "kling", "runway", "higgsfield", "other",
 ];
 
 const ROLE_LABELS: Record<ReferenceRole, string> = {

@@ -231,7 +231,7 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [context.provider, context.category, context.excludePromptId]);
+  }, [context.provider, context.category, context.excludePromptId, context.projectId, context.promptText]);
 
   useEffect(() => { load(); }, [load]);
 

@@ -8,9 +8,10 @@ interface TokenCloudProps {
   selectedTexts: string[];
   onToggle: (token: Token) => void;
   providerFilter?: string;
+  suppressedText?: string;
 }
 
-export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenCloudProps) {
+export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressedText }: TokenCloudProps) {
   const [categories, setCategories] = useState<TokenCategory[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string>("");
@@ -88,6 +89,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
 
   const selectedSet = new Set(selectedTexts);
   const favoriteCount = tokens.filter((t) => t.is_favorite).length;
+  const suppressedLower = suppressedText?.toLowerCase() ?? "";
 
   const visibleTokens = tokens.filter((t) => {
     if (favoritesOnly && !t.is_favorite) return false;
@@ -217,6 +219,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
           {visibleTokens.map((token) => {
             const active = selectedSet.has(token.text);
             const isHighQuality = token.quality_score > 0;
+            const isSuppressed = Boolean(suppressedLower && suppressedLower.includes(token.text.toLowerCase()));
             return (
               <div key={token.id} className="relative group/pill">
                 <button
@@ -224,23 +227,28 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter }: TokenClo
                   onClick={() => onToggle(token)}
                   className={cn(
                     "inline-flex items-center font-mono text-[10px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
-                    active ? "text-white" : "text-readable hover:text-cyan"
+                    active ? "text-white" : isSuppressed ? "text-muted/45 hover:text-muted/70" : "text-readable hover:text-cyan"
                   )}
                   style={{
                     border: active
                       ? "var(--border-strong)"
+                      : isSuppressed
+                      ? "1px solid rgba(255,255,255,0.06)"
                       : isHighQuality
                       ? "1px solid rgba(255,255,255,0.14)"
                       : "var(--border-dim)",
                     background: active
                       ? "rgba(255,255,255,0.08)"
+                      : isSuppressed
+                      ? "rgba(255,255,255,0.015)"
                       : isHighQuality
                       ? "rgba(255,255,255,0.03)"
                       : "transparent",
                   }}
-                  title={token.text}
+                  title={isSuppressed ? `${token.text} is reduced by project constraints or avoidance text.` : token.text}
                 >
                   {active && <span className="mr-1 text-white/40 text-[8px]">✓</span>}
+                  {isSuppressed && !active && <span className="mr-1 text-white/18 text-[8px]">-</span>}
                   {token.text}
                 </button>
                 {/* Favorite star — always visible if favorited, hover-visible otherwise */}

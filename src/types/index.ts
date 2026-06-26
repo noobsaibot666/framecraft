@@ -5,6 +5,12 @@ export type Provider =
   | "firefly"
   | "ideogram"
   | "flux"
+  | "nano_banana"
+  | "gpt_image"
+  | "seedance"
+  | "kling"
+  | "runway"
+  | "higgsfield"
   | "other";
 
 export type Category =

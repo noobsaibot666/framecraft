@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -12,6 +12,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { addPromptToProject, getProjectById } from "@/lib/projects";
+import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -375,6 +376,12 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "firefly", label: "Firefly" },
   { value: "ideogram", label: "Ideogram" },
   { value: "flux", label: "Flux" },
+  { value: "nano_banana", label: "Nano Banana" },
+  { value: "gpt_image", label: "GPT Image" },
+  { value: "seedance", label: "Seedance" },
+  { value: "kling", label: "Kling" },
+  { value: "runway", label: "Runway" },
+  { value: "higgsfield", label: "Higgsfield" },
   { value: "other", label: "Other" },
 ];
 
@@ -435,6 +442,12 @@ function projectProviderToPromptProvider(provider?: string): Provider | null {
     normalized === "firefly" ||
     normalized === "ideogram" ||
     normalized === "flux" ||
+    normalized === "nano_banana" ||
+    normalized === "gpt_image" ||
+    normalized === "seedance" ||
+    normalized === "kling" ||
+    normalized === "runway" ||
+    normalized === "higgsfield" ||
     normalized === "other"
   ) {
     return normalized;
@@ -620,6 +633,11 @@ export function CraftPrompt() {
   })();
 
   const assembled = outputOverride ?? builtAssembled;
+  const projectTokenSuggestions = buildProjectTokenSuggestions(projectContext, {
+    selectedTexts: tokenTexts,
+    promptText: assembled,
+  });
+  const suppressedTokenText = buildSuppressionText(projectContext, fields.avoidance_text);
 
   // Debounced duplicate + related prompts detection (Phase 06)
   useEffect(() => {
@@ -1007,6 +1025,26 @@ export function CraftPrompt() {
                   />
                 </div>
 
+                {projectTokenSuggestions.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="system-label text-[10px] text-muted">PROJECT TOKENS</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {projectTokenSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion.token.id}
+                          type="button"
+                          onClick={() => handleTokenToggle(suggestion.token)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-sm font-mono text-[10px] text-cyan hover:text-white transition-precise"
+                          style={{ border: "1px solid rgba(72,229,232,0.28)", background: "rgba(72,229,232,0.055)" }}
+                          title={suggestion.reason}
+                        >
+                          <Plus size={8} /> {suggestion.text}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Divider */}
                 <div className="h-px bg-white/16" />
 
@@ -1015,6 +1053,7 @@ export function CraftPrompt() {
                   selectedTexts={tokenTexts}
                   onToggle={handleTokenToggle}
                   providerFilter={fields.provider}
+                  suppressedText={suppressedTokenText}
                 />
               </div>
             </div>
@@ -1113,7 +1152,13 @@ export function CraftPrompt() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <RecommendationPanel
-              context={{ provider: fields.provider, category: fields.category || undefined, excludePromptId: id }}
+              context={{
+                provider: fields.provider,
+                category: fields.category || undefined,
+                excludePromptId: id,
+                projectId: projectId ?? undefined,
+                promptText: assembled,
+              }}
             />
           </div>
 

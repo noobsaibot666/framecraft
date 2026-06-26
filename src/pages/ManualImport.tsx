@@ -293,6 +293,12 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "firefly", label: "Firefly" },
   { value: "ideogram", label: "Ideogram" },
   { value: "flux", label: "Flux" },
+  { value: "nano_banana", label: "Nano Banana" },
+  { value: "gpt_image", label: "GPT Image" },
+  { value: "seedance", label: "Seedance" },
+  { value: "kling", label: "Kling" },
+  { value: "runway", label: "Runway" },
+  { value: "higgsfield", label: "Higgsfield" },
   { value: "other", label: "Other" },
 ];
 
@@ -701,7 +707,7 @@ export function ManualImport() {
               <span className="system-label">BATCH FORMAT</span>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Required: <span className="text-soft-white">prompt_text</span></p>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Optional: <span className="text-soft-white">title, provider, tags, notes</span></p>
-              <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Provider values: midjourney, dalle, stable_diffusion, firefly, ideogram, flux, other</p>
+              <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Provider values: midjourney, dalle, stable_diffusion, firefly, ideogram, flux, nano_banana, gpt_image, seedance, kling, runway, higgsfield, other</p>
             </div>
 
             {batchSaving && (

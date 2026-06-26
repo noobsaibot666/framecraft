@@ -36,6 +36,12 @@ function providerUrl(prompt: Prompt | undefined): string {
     case "firefly": return "https://firefly.adobe.com/";
     case "ideogram": return "https://ideogram.ai/";
     case "flux": return "https://fal.ai/models/flux";
+    case "nano_banana": return "https://chatgpt.com/";
+    case "gpt_image": return "https://chatgpt.com/";
+    case "seedance": return "https://www.volcengine.com/product/seedance";
+    case "kling": return "https://klingai.com/";
+    case "runway": return "https://runwayml.com/";
+    case "higgsfield": return "https://higgsfield.ai/";
     default: return "https://www.google.com/search?q=AI+image+generator";
   }
 }

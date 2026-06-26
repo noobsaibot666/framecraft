@@ -8,6 +8,11 @@ import { Badge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getSREFByCode, createSREF } from "@/lib/db";
 import { findSimilarPrompts } from "@/lib/memoryEngine";
+import {
+  analyzeImportedPromptLearning,
+  buildImportLearningNotes,
+  type ImportLearningSignal,
+} from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
 
@@ -104,30 +109,15 @@ function stripParams(text: string): string {
     .trim();
 }
 
+function uniqueTags(values: string[]): string[] | undefined {
+  const tags = [...new Set(values.map((tag) => tag.trim().toLowerCase()).filter(Boolean))];
+  return tags.length ? tags : undefined;
+}
+
 function detectProvider(text: string): Provider {
   if (text.includes("--v ") || text.includes("--sref") || text.includes("--ar")) return "midjourney";
   if (text.toLowerCase().includes("dall-e") || text.toLowerCase().includes("dalle")) return "dalle";
   return "midjourney";
-}
-
-// ─── Tag Suggestion ───────────────────────────────────────────
-
-const TAG_KEYWORD_MAP: Record<string, string[]> = {
-  portrait:     ["woman", "man", "person", "face", "portrait", "model", "skin", "eyes"],
-  product:      ["product", "packshot", "still life", "bottle", "cosmetics", "object"],
-  fashion:      ["fashion", "clothing", "outfit", "style", "garment", "luxury", "wear"],
-  advertising:  ["ad", "campaign", "brand", "commercial", "hero", "banner"],
-  automotive:   ["car", "vehicle", "automobile", "road", "speed", "driving"],
-  architecture: ["building", "interior", "architecture", "facade", "room", "space"],
-  editorial:    ["editorial", "magazine", "lifestyle", "story", "narrative"],
-  cinematic:    ["cinematic", "film", "dramatic", "scene", "shot", "movie"],
-};
-
-function suggestTags(text: string): string[] {
-  const lower = text.toLowerCase();
-  return Object.entries(TAG_KEYWORD_MAP)
-    .filter(([, words]) => words.some((w) => lower.includes(w)))
-    .map(([tag]) => tag);
 }
 
 // ─── Batch Import ─────────────────────────────────────────────
@@ -318,6 +308,7 @@ export function ManualImport() {
   const [provider, setProvider] = useState<Provider>("midjourney");
   const [tags, setTags] = useState<string[]>([]);
   const [detected, setDetected] = useState<DetectedParams>({});
+  const [learning, setLearning] = useState<ImportLearningSignal | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
   const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [duplicates, setDuplicates] = useState<ReturnType<typeof findSimilarPrompts>>([]);
@@ -343,9 +334,11 @@ export function ManualImport() {
     const params = detectMidjourneyParams(raw);
     const autoProvider = detectProvider(raw);
     setDetected(params);
+    const nextLearning = analyzeImportedPromptLearning(raw);
+    setLearning(nextLearning);
     setProvider(autoProvider);
     setAnalyzed(true);
-    const suggestions = suggestTags(raw).filter((t) => !tags.includes(t));
+    const suggestions = nextLearning.tags.filter((t) => !tags.includes(t));
     setSuggestedTags(suggestions);
     const dups = findSimilarPrompts(raw, allPrompts, 0.55);
     setDuplicates(dups);
@@ -359,6 +352,7 @@ export function ManualImport() {
     setSaving(true);
     const clean = stripParams(raw);
     const params = detectMidjourneyParams(raw);
+    const learned = learning ?? analyzeImportedPromptLearning(raw);
     try {
       const extraParams: Record<string, string | boolean> = {};
       if (params.stylize) extraParams.stylize = params.stylize;
@@ -387,7 +381,7 @@ export function ManualImport() {
           if (!existing) createSREF({ code: params.sref! }).catch(() => {});
         }).catch(() => {});
       }
-      const notes = source ? `Source: ${source}` : undefined;
+      const notes = buildImportLearningNotes(source, learned);
       const id = await create({
         title: title.trim(),
         provider,
@@ -395,8 +389,9 @@ export function ManualImport() {
         aspect_ratio: params.aspect_ratio,
         model_version: params.model_version,
         style_ref: params.sref,
+        avoidance_text: learned.avoidanceText,
         parameters: Object.keys(extraParams).length ? extraParams : undefined,
-        tags: tags.length ? tags : undefined,
+        tags: uniqueTags([...tags, ...learned.tags]),
         notes,
         is_recipe: asRecipe,
       });
@@ -418,12 +413,14 @@ export function ManualImport() {
     setBatchDone(0);
     let count = 0;
     for (const item of batchParsed) {
+      const learned = analyzeImportedPromptLearning(item.prompt_text);
       await create({
         title: item.title,
         provider: item.provider ?? "midjourney",
         prompt_text: item.prompt_text,
-        tags: item.tags?.length ? item.tags : undefined,
-        notes: item.notes,
+        avoidance_text: learned.avoidanceText,
+        tags: uniqueTags([...(item.tags ?? []), ...learned.tags]),
+        notes: [item.notes, buildImportLearningNotes(undefined, learned)].filter(Boolean).join("\n") || undefined,
       });
       count++;
       setBatchDone(count);
@@ -492,7 +489,7 @@ export function ManualImport() {
                   </Button>
                 )}
               </div>
-              <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setSuggestedTags([]); setDuplicates([]); }}
+              <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setLearning(null); setSuggestedTags([]); setDuplicates([]); }}
                 placeholder="Paste your full prompt here, including any --parameters flags…"
                 rows={8} mono />
             </div>
@@ -537,6 +534,46 @@ export function ManualImport() {
                   </div>
                 )}
                 <p className="font-mono text-[9px] text-dim/60">Parameters stored separately. Clean prompt text saved to library.</p>
+              </div>
+            )}
+
+            {/* Learning preview */}
+            {analyzed && learning && (
+              <div className="flex flex-col gap-3 p-4 rounded-card"
+                style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="system-label">LEARNING PREVIEW</span>
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-cyan">
+                    {learning.reusableTokens.length} reusable cues
+                  </span>
+                </div>
+                {learning.tags.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-readable">Tags learned</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {learning.tags.map((tag) => <Badge key={tag} variant="tag">{tag}</Badge>)}
+                    </div>
+                  </div>
+                )}
+                {learning.reusableTokens.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-readable">Reusable cues</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {learning.reusableTokens.map((token) => (
+                        <span key={token} className="font-mono text-[10.5px] text-soft-white px-2 py-1 rounded-sm"
+                          style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.04)" }}>
+                          {token}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {learning.avoidanceText && (
+                  <div className="flex flex-col gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-red">Avoidance captured</span>
+                    <span className="font-mono text-[11px] leading-relaxed text-readable">{learning.avoidanceText}</span>
+                  </div>
+                )}
               </div>
             )}
 
@@ -647,12 +684,12 @@ export function ManualImport() {
 
             <div className="flex flex-col gap-2 p-3 rounded-card"
               style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
-              <span className="system-label text-[8px]">IMPORT TIPS</span>
+              <span className="system-label text-[10px]">IMPORT LEARNING</span>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">
-                Paste the full prompt with --flags. Parameters are detected and stored separately.
+                Analyze before import to capture tags, reusable cues, avoidance text, and parameters.
               </p>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">
-                For multiple prompts at once, use Batch mode.
+                Batch imports use the same learning pass and save the learned signals into notes.
               </p>
             </div>
           </div>
@@ -708,6 +745,7 @@ export function ManualImport() {
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Required: <span className="text-soft-white">prompt_text</span></p>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Optional: <span className="text-soft-white">title, provider, tags, notes</span></p>
               <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Provider values: midjourney, dalle, stable_diffusion, firefly, ideogram, flux, nano_banana, gpt_image, seedance, kling, runway, higgsfield, other</p>
+              <p className="font-mono text-[9px] text-dim/60 leading-relaxed">Learning pass: tags, avoidance text, parameters, and reusable cues are added to each imported prompt.</p>
             </div>
 
             {batchSaving && (

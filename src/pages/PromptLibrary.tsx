@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,6 +8,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultSummaryMap } from "@/lib/db";
+import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
 import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
 import type { Prompt, Provider, Category, SortOption } from "@/types";
@@ -91,6 +92,18 @@ function RatingDots({ rating }: { rating: number }) {
   );
 }
 
+function LibraryStat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+  return (
+    <div
+      className="flex min-w-[120px] flex-col gap-1 rounded-[6px] px-4 py-3"
+      style={{ border: accent ? "1px solid rgba(56,183,200,0.38)" : "var(--border-default)", background: accent ? "rgba(56,183,200,0.08)" : "rgba(255,255,255,0.045)" }}
+    >
+      <span className="font-mono text-[18px] font-medium leading-none text-white tabular-nums">{value}</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-readable">{label}</span>
+    </div>
+  );
+}
+
 function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMode, selected, onSelect }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
@@ -104,39 +117,39 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
   const navigate = useNavigate();
 
   return (
-    <div
-      className="group flex flex-col gap-4 p-5 rounded-card cursor-pointer transition-precise hover:border-cyan/40"
-      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+    <article
+      className="group flex min-h-[280px] flex-col gap-5 rounded-card p-5 cursor-pointer transition-precise hover:-translate-y-0.5 hover:border-cyan/45"
+      style={{ border: selected ? "1px solid rgba(56,183,200,0.70)" : "var(--border-default)", background: selected ? "rgba(56,183,200,0.08)" : "var(--surface-card)" }}
       onClick={() => navigate(`/library/${prompt.id}`)}
     >
       {/* Header */}
-      <div className="flex items-start justify-between gap-2 min-w-0">
+      <div className="flex items-start justify-between gap-3 min-w-0">
         {batchMode && (
           <input
             type="checkbox"
             checked={selected}
             onChange={(e) => { e.stopPropagation(); onSelect(prompt.id, e.target.checked); }}
             onClick={(e) => e.stopPropagation()}
-            className="mt-0.5 accent-white/70"
+            className="mt-1 h-4 w-4 accent-cyan"
           />
         )}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className="font-sans text-[14px] font-semibold text-white leading-tight truncate">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="font-sans text-[16px] font-semibold text-white leading-tight truncate">
             {prompt.title}
           </span>
           {prompt.description && (
-            <span className="font-mono text-[11px] text-readable leading-snug line-clamp-1">
+            <span className="font-mono text-[12px] text-readable leading-snug line-clamp-2">
               {prompt.description}
             </span>
           )}
         </div>
         {prompt.is_winner && (
-          <Star size={12} className="text-amber fill-amber/40 shrink-0 mt-0.5" />
+          <Star size={15} className="text-amber fill-amber/45 shrink-0 mt-0.5" />
         )}
       </div>
 
       {/* Prompt preview */}
-      <p className="prompt-text text-[12.5px] text-readable line-clamp-3 leading-relaxed">
+      <p className="prompt-text text-[13.5px] text-soft-white line-clamp-5 leading-relaxed">
         {prompt.prompt_text}
       </p>
 
@@ -149,49 +162,49 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
           <Badge key={tag} variant="tag">{tag}</Badge>
         ))}
         {(prompt.tags?.length ?? 0) > 2 && (
-          <span className="font-mono text-[9px] text-dim">+{(prompt.tags?.length ?? 0) - 2}</span>
+          <span className="font-mono text-[10px] text-readable">+{(prompt.tags?.length ?? 0) - 2}</span>
         )}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between pt-1" style={{ borderTop: "var(--border-dim)" }}>
-        <div className="flex items-center gap-3">
+      <div className="mt-auto flex items-center justify-between gap-4 pt-3" style={{ borderTop: "var(--border-default)" }}>
+        <div className="flex flex-wrap items-center gap-3">
           <RatingDots rating={prompt.rating} />
           {prompt.ai_look_risk > 0 && <RiskBadge score={prompt.ai_look_risk} />}
           {resultSummary && resultSummary.count > 0 && (
-            <span className="font-mono text-[10px] text-muted">
+            <span className="font-mono text-[10.5px] text-readable">
               {resultSummary.count} result{resultSummary.count !== 1 ? "s" : ""}
               {resultSummary.avg_score > 0 && ` · ${resultSummary.avg_score.toFixed(1)} avg`}
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
+        <div className="flex items-center gap-1.5 opacity-100 transition-precise md:opacity-0 md:group-hover:opacity-100">
           <button
-            className="p-1 rounded text-muted hover:text-cyan transition-precise"
+            className="rounded-[5px] border border-white/14 p-2 text-readable hover:border-cyan/45 hover:text-cyan transition-precise"
             onClick={(e) => { e.stopPropagation(); onQueue(prompt); }}
             title="Add to Queue"
           >
-            <ListPlus size={11} />
+            <ListPlus size={13} />
           </button>
           <button
-            className="p-1 rounded text-muted hover:text-cyan transition-precise"
+            className="rounded-[5px] border border-white/14 p-2 text-readable hover:border-cyan/45 hover:text-cyan transition-precise"
             onClick={(e) => { e.stopPropagation(); onCopy(prompt); }}
             title="Copy prompt"
           >
-            <Copy size={11} />
+            <Copy size={13} />
           </button>
           <button
-            className="p-1 rounded text-dim hover:text-red transition-precise"
+            className="rounded-[5px] border border-white/14 p-2 text-readable hover:border-red/45 hover:text-red transition-precise"
             onClick={(e) => { e.stopPropagation(); onDelete(prompt); }}
             title="Delete prompt"
           >
-            <Trash2 size={11} />
+            <Trash2 size={13} />
           </button>
         </div>
       </div>
 
-      <div className="system-label text-[10px] text-muted">{formatDate(prompt.created_at)}</div>
-    </div>
+      <div className="system-label text-[10.5px] text-readable">{formatDate(prompt.created_at)}</div>
+    </article>
   );
 }
 
@@ -213,9 +226,9 @@ function NativeSelect({
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "w-full appearance-none pr-7",
-          "font-mono text-[10.5px] tracking-[0.06em] uppercase",
+          "font-mono text-[11px] tracking-[0.06em] uppercase",
           "bg-transparent text-readable",
-          "rounded-sm px-3 py-2",
+          "rounded-sm px-3 py-2.5",
           "focus:outline-none focus:text-white transition-precise",
           "cursor-pointer"
         )}
@@ -313,6 +326,7 @@ export function PromptLibrary() {
   }, []);
 
   const prompts = filteredAndSorted(resultMap);
+  const metrics = getPromptLibraryMetrics(prompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
   return (
@@ -336,72 +350,63 @@ export function PromptLibrary() {
         </div>
       }
     >
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-7 flex-wrap">
-        <div className="flex-1 relative">
-          <Search
-            size={13}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
-          />
-          <Input
-            placeholder="Search prompts…"
-            className="pl-8 min-w-[260px]"
-            value={searchVal}
-            onChange={(e) => handleSearch(e.target.value)}
-          />
+      <div className="mb-8 flex flex-col gap-5 rounded-card p-5" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[7px] border border-cyan/35 bg-cyan/8 text-cyan">
+              <Sparkles size={18} />
+            </div>
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="font-sans text-[18px] font-semibold text-white">Library overview</span>
+              <span className="font-mono text-[12px] leading-relaxed text-readable">
+                Scan saved prompts by quality, provider, result coverage, and reuse potential.
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+            <LibraryStat label="Prompts" value={metrics.total} accent />
+            <LibraryStat label="Winners" value={metrics.winners} />
+            <LibraryStat label="Recipes" value={metrics.recipes} />
+            <LibraryStat label="Results" value={metrics.resultCount} />
+            <LibraryStat label="Top provider" value={metrics.topProvider?.toUpperCase() ?? "-"} />
+          </div>
         </div>
 
-        <NativeSelect
-          value={filters.provider ?? ""}
-          onChange={(v) => setFilters({ provider: (v as Provider) || undefined })}
-          options={PROVIDER_OPTIONS}
-          className="w-36"
-        />
+        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_repeat(6,minmax(128px,1fr))]">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-readable pointer-events-none"
+            />
+            <Input
+              placeholder="Search prompts..."
+              className="pl-9 min-w-[260px]"
+              value={searchVal}
+              onChange={(e) => handleSearch(e.target.value)}
+            />
+          </div>
 
-        <NativeSelect
-          value={filters.category ?? ""}
-          onChange={(v) => setFilters({ category: (v as Category) || undefined })}
-          options={CATEGORY_OPTIONS}
-          className="w-36"
-        />
-
-        <NativeSelect
-          value={sortBy}
-          onChange={(v) => setSortBy(v as SortOption)}
-          options={SORT_OPTIONS}
-          className="w-36"
-        />
-
-        <NativeSelect
-          value={filters.minRating != null ? String(filters.minRating) : ""}
-          onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })}
-          options={RATING_FILTER_OPTIONS}
-          className="w-32"
-        />
-
-        <NativeSelect
-          value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""}
-          onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })}
-          options={AI_RISK_FILTER_OPTIONS}
-          className="w-32"
-        />
-
-        <NativeSelect
-          value={statusFilter}
-          onChange={(v) => setFilters({
-            isWinner: v === "winner" || undefined,
-            isFailed: v === "failed" || undefined,
-          })}
-          options={STATUS_FILTER_OPTIONS}
-          className="w-32"
-        />
+          <NativeSelect value={filters.provider ?? ""} onChange={(v) => setFilters({ provider: (v as Provider) || undefined })} options={PROVIDER_OPTIONS} />
+          <NativeSelect value={filters.category ?? ""} onChange={(v) => setFilters({ category: (v as Category) || undefined })} options={CATEGORY_OPTIONS} />
+          <NativeSelect value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
+          <NativeSelect value={filters.minRating != null ? String(filters.minRating) : ""} onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })} options={RATING_FILTER_OPTIONS} />
+          <NativeSelect value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""} onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })} options={AI_RISK_FILTER_OPTIONS} />
+          <NativeSelect
+            value={statusFilter}
+            onChange={(v) => setFilters({
+              isWinner: v === "winner" || undefined,
+              isFailed: v === "failed" || undefined,
+            })}
+            options={STATUS_FILTER_OPTIONS}
+          />
+        </div>
       </div>
 
       {/* Copy feedback */}
       {copied && (
         <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
           style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
-          <Copy size={10} className="text-white/40" />
+          <Copy size={12} className="text-cyan" />
           Prompt copied to clipboard
         </div>
       )}
@@ -409,7 +414,7 @@ export function PromptLibrary() {
       {queued && (
         <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
           style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
-          <ListPlus size={10} className="text-white/40" />
+          <ListPlus size={12} className="text-cyan" />
           Added to queue: {queued}
         </div>
       )}
@@ -431,9 +436,9 @@ export function PromptLibrary() {
         <div className="flex flex-col items-center justify-center py-16 gap-4">
           <div
             className="flex flex-col items-center gap-3 p-8 rounded-card max-w-sm w-full"
-            style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <DotMatrix value="000" size="lg" />
+            <ImageOff size={28} className="text-cyan" />
             <span className="system-label">LIBRARY EMPTY</span>
             <span className="font-mono text-[12px] text-readable text-center leading-relaxed">
               {searchVal
@@ -460,13 +465,16 @@ export function PromptLibrary() {
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <span className="system-label text-soft-white">
               <DotMatrix value={prompts.length} size="sm" className="inline-block mr-2" />
               {prompts.length === 1 ? "PROMPT" : "PROMPTS"}
             </span>
+            <span className="font-mono text-[11px] text-readable">
+              {metrics.withResults} with results · {metrics.failed} failed marked
+            </span>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
             {prompts.map((p) => (
               <PromptCard
                 key={p.id}

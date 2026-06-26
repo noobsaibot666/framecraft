@@ -11,8 +11,9 @@ import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
+import { addPromptToProject, getProjectById } from "@/lib/projects";
 import { cn } from "@/lib/utils";
-import type { Provider, Category, Token, Prompt } from "@/types";
+import type { Provider, Category, Token, Prompt, Project } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
 // ─── Shared sub-components ────────────────────────────────────
@@ -425,6 +426,22 @@ const EMPTY_MJ: MJParams = {
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
+function projectProviderToPromptProvider(provider?: string): Provider | null {
+  const normalized = provider?.toLowerCase().replace(/\s+/g, "_");
+  if (
+    normalized === "midjourney" ||
+    normalized === "dalle" ||
+    normalized === "stable_diffusion" ||
+    normalized === "firefly" ||
+    normalized === "ideogram" ||
+    normalized === "flux" ||
+    normalized === "other"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
 interface CraftPromptLocationState {
   prefillPromptText?: string;
   prefillTitle?: string;
@@ -439,6 +456,8 @@ export function CraftPrompt() {
   const location = useLocation();
   const { create, update, getById, prompts: allPrompts } = usePromptStore();
   const prefillState = location.state as CraftPromptLocationState | null;
+  const searchParams = new URLSearchParams(location.search);
+  const projectId = searchParams.get("projectId") ?? searchParams.get("project");
 
   const isEdit = Boolean(id);
 
@@ -452,6 +471,7 @@ export function CraftPrompt() {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
   const [originalVersion, setOriginalVersion] = useState(1);
+  const [projectContext, setProjectContext] = useState<Project | null>(null);
 
   // Production Memory (Phase 06)
   const [duplicates, setDuplicates] = useState<SimilarPrompt[]>([]);
@@ -509,6 +529,37 @@ export function CraftPrompt() {
       setMode("manual");
     });
   }, [id, getById]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setProjectContext(null);
+      return;
+    }
+    getProjectById(projectId).then((project) => setProjectContext(project));
+  }, [projectId]);
+
+  useEffect(() => {
+    if (id || !projectContext) return;
+    setFields((current) => {
+      const provider = projectProviderToPromptProvider(projectContext.provider_targets?.[0]);
+      return {
+        ...current,
+        provider: current.provider === EMPTY.provider && provider ? provider : current.provider,
+        category: current.category || projectContext.category || "",
+        use_case: current.use_case || projectContext.intended_output || projectContext.production_goal || "",
+        mood: current.mood || projectContext.visual_direction || "",
+        notes: current.notes || [
+          projectContext.creative_goals,
+          projectContext.constraints ? `Constraints: ${projectContext.constraints}` : "",
+        ].filter(Boolean).join("\n"),
+        tags: current.tags.length ? current.tags : projectContext.tags ?? [],
+      };
+    });
+    setMjParams((current) => ({
+      ...current,
+      aspect_ratio: current.aspect_ratio || projectContext.aspect_ratios?.[0] || "",
+    }));
+  }, [id, projectContext]);
 
   useEffect(() => {
     if (id || !prefillState?.prefillPromptText) return;
@@ -656,7 +707,12 @@ export function CraftPrompt() {
         navigate(`/library/${id}`);
       } else {
         const newId = await create(buildData(asRecipe));
-        navigate(`/library/${newId}`);
+        if (projectId) {
+          await addPromptToProject(projectId, newId);
+          navigate(`/projects/${projectId}`);
+        } else {
+          navigate(`/library/${newId}`);
+        }
       }
     } finally {
       setSaving(false);
@@ -672,7 +728,12 @@ export function CraftPrompt() {
         parent_id: id,
         version: originalVersion + 1,
       });
-      navigate(`/library/${newId}`);
+      if (projectId) {
+        await addPromptToProject(projectId, newId);
+        navigate(`/projects/${projectId}`);
+      } else {
+        navigate(`/library/${newId}`);
+      }
     } finally {
       setSavingNewVersion(false);
     }
@@ -704,11 +765,11 @@ export function CraftPrompt() {
   return (
     <PageContainer
       title={isEdit ? "Edit Prompt" : "Craft Prompt"}
-      subtitle={isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
+      subtitle={projectContext ? `PROJECT CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => navigate(isEdit && id ? `/library/${id}` : "/library")}>
-            <ArrowLeft size={11} /> {isEdit ? "Cancel" : "Library"}
+          <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
+            <ArrowLeft size={11} /> {projectId ? "Project" : isEdit ? "Cancel" : "Library"}
           </Button>
           <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled}>
             {copied ? <Check size={10} /> : <Copy size={10} />}
@@ -743,6 +804,39 @@ export function CraftPrompt() {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-8 min-w-0">
         {/* ── Left: Main form ─────────────────────────────── */}
         <div className="flex flex-col gap-8 min-w-0">
+          {projectContext && (
+            <div className="flex flex-col gap-3 p-4 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-col gap-1 min-w-0">
+                  <span className="system-label text-soft-white">PROJECT CONTEXT</span>
+                  <span className="font-sans text-[15px] text-white font-semibold truncate">{projectContext.title}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectContext.id}`)}>
+                  <ArrowLeft size={10} /> Back to Project
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {projectContext.provider_targets?.map((provider) => (
+                  <span key={provider} className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm"
+                    style={{ border: "1px solid rgba(72, 229, 232, 0.28)", background: "rgba(72, 229, 232, 0.06)" }}>
+                    {provider}
+                  </span>
+                ))}
+                {projectContext.aspect_ratios?.map((ratio) => (
+                  <span key={ratio} className="font-mono text-[10px] tracking-widest uppercase text-readable px-2 py-1 rounded-sm"
+                    style={{ border: "var(--border-dim)" }}>
+                    {ratio}
+                  </span>
+                ))}
+              </div>
+              {(projectContext.visual_direction || projectContext.creative_goals) && (
+                <p className="font-mono text-[12px] text-readable leading-relaxed">
+                  {projectContext.visual_direction || projectContext.creative_goals}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Duplicate warning */}
           {duplicates.length > 0 && !duplicatesDismissed && (

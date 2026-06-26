@@ -87,6 +87,12 @@ pub fn run() {
             sql: include_str!("../migrations/013_generation_queue.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 14,
+            description: "project_setup_metadata",
+            sql: include_str!("../migrations/014_project_setup_metadata.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

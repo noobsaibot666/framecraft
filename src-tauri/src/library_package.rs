@@ -1030,7 +1030,7 @@ fn has_required_database_schema(db_path: &str) -> Result<bool, String> {
     }))
 }
 
-fn migration_sql() -> [&'static str; 13] {
+fn migration_sql() -> [&'static str; 14] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1045,6 +1045,7 @@ fn migration_sql() -> [&'static str; 13] {
         include_str!("../migrations/011_v4_workflow.sql"),
         include_str!("../migrations/012_deliverable_align.sql"),
         include_str!("../migrations/013_generation_queue.sql"),
+        include_str!("../migrations/014_project_setup_metadata.sql"),
     ]
 }
 
@@ -1148,6 +1149,33 @@ mod tests {
         assert!(package.join("sync/applied").is_dir());
         assert!(package.join("sync/failed").is_dir());
         assert!(sqlite_table_exists(&result.db_path, "prompts"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn created_package_includes_project_setup_metadata_columns() {
+        let root = test_root("create-project-setup-metadata");
+        let package = root.join("ProjectSetup.framecraftlib");
+
+        let result = create_library_package(package.to_str().unwrap(), true).unwrap();
+
+        for column in [
+            "project_type",
+            "intended_output",
+            "image_needs",
+            "video_needs",
+            "aspect_ratios",
+            "provider_targets",
+            "visual_direction",
+            "constraints",
+            "creative_goals",
+        ] {
+            assert!(
+                sqlite_column_exists(&result.db_path, "projects", column),
+                "missing projects.{column}"
+            );
+        }
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1793,6 +1821,21 @@ mod tests {
             |_| Ok(()),
         )
         .is_ok()
+    }
+
+    fn sqlite_column_exists(db_path: &str, table: &str, column: &str) -> bool {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        let mut statement = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap();
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap();
+
+        let exists = rows
+            .into_iter()
+            .any(|row| row.map(|name| name == column).unwrap_or(false));
+        exists
     }
 
     fn insert_prompt(db_path: &str, id: &str, title: &str) {

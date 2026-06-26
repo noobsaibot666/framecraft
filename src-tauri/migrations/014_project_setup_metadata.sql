@@ -1,0 +1,9 @@
+ALTER TABLE projects ADD COLUMN project_type TEXT;
+ALTER TABLE projects ADD COLUMN intended_output TEXT;
+ALTER TABLE projects ADD COLUMN image_needs TEXT;
+ALTER TABLE projects ADD COLUMN video_needs TEXT;
+ALTER TABLE projects ADD COLUMN aspect_ratios TEXT;
+ALTER TABLE projects ADD COLUMN provider_targets TEXT;
+ALTER TABLE projects ADD COLUMN visual_direction TEXT;
+ALTER TABLE projects ADD COLUMN constraints TEXT;
+ALTER TABLE projects ADD COLUMN creative_goals TEXT;

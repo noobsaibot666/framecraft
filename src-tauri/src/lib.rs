@@ -4,6 +4,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 mod library_lock;
 mod library_package;
 mod native_sqlite;
+mod portable_sqlite;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

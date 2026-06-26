@@ -1,3 +1,4 @@
+use crate::portable_sqlite::open_portable_database;
 use rusqlite::{
     params_from_iter,
     types::{ToSqlOutput, Value, ValueRef},
@@ -5,11 +6,6 @@ use rusqlite::{
 };
 use serde::Serialize;
 use serde_json::{Map, Value as JsonValue};
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::Duration,
-};
 
 #[derive(Serialize)]
 pub struct NativeSqliteQueryResult {
@@ -101,46 +97,7 @@ pub fn native_sqlite_execute(
 }
 
 fn open_connection(db_path: &str) -> Result<Connection, String> {
-    let path = Path::new(db_path);
-    if !path.exists() {
-        return Err(format!("Missing database file: {db_path}"));
-    }
-    assert_parent_writable(path)?;
-    let conn = Connection::open(db_path).map_err(|error| format_open_error(db_path, error))?;
-    conn.busy_timeout(Duration::from_secs(10))
-        .map_err(format_sqlite_error)?;
-    conn.pragma_update(None, "journal_mode", "DELETE")
-        .map_err(format_sqlite_error)?;
-    conn.pragma_update(None, "foreign_keys", "ON")
-        .map_err(format_sqlite_error)?;
-    Ok(conn)
-}
-
-fn assert_parent_writable(path: &Path) -> Result<(), String> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("Database path has no parent directory: {}", path.display()))?;
-    if !parent.exists() {
-        return Err(format!(
-            "Database parent directory is missing: {}",
-            parent.display()
-        ));
-    }
-
-    let probe = parent.join(format!(".framecraft-db-write-probe-{}", std::process::id()));
-    fs::write(&probe, b"probe").map_err(|error| {
-        format!(
-            "Database directory is not writable: {} ({error})",
-            parent.display()
-        )
-    })?;
-    fs::remove_file(&probe).map_err(|error| {
-        format!(
-            "Database directory write probe could not be cleaned up: {} ({error})",
-            probe.display()
-        )
-    })?;
-    Ok(())
+    open_portable_database(db_path)
 }
 
 fn sqlite_value_to_json(value: ValueRef<'_>) -> JsonValue {
@@ -159,18 +116,10 @@ fn format_sqlite_error(error: rusqlite::Error) -> String {
     error.to_string()
 }
 
-fn format_open_error(db_path: &str, error: rusqlite::Error) -> String {
-    let path = PathBuf::from(db_path);
-    let parent = path
-        .parent()
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| "<none>".to_string());
-    format!("Unable to open database file: {db_path}. Parent: {parent}. SQLite: {error}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
 
     #[test]
     fn opens_absolute_database_paths_for_select_and_execute() {

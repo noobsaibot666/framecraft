@@ -1,3 +1,4 @@
+use crate::portable_sqlite::open_portable_database;
 use serde::Serialize;
 use std::{
     fs,
@@ -250,8 +251,12 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
     if !Path::new(&paths.db_path).exists() {
         errors.push("Missing framecraft.db".to_string());
-    } else if !has_core_database_schema(&paths.db_path) {
-        errors.push("Missing database schema".to_string());
+    } else {
+        match has_core_database_schema(&paths.db_path) {
+            Ok(true) => {}
+            Ok(false) => errors.push("Missing database schema".to_string()),
+            Err(error) => errors.push(error),
+        }
     }
     if !Path::new(&paths.results_dir).exists() {
         errors.push("Missing results directory".to_string());
@@ -318,7 +323,7 @@ fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationRes
         return Ok(validate_library_package(&paths.base_dir));
     }
 
-    if has_core_database_schema(&paths.db_path) {
+    if has_core_database_schema(&paths.db_path)? {
         return Ok(validate_library_package(&paths.base_dir));
     }
 
@@ -335,7 +340,7 @@ fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationRes
 }
 
 fn initialize_portable_database(db_path: &str) -> Result<(), String> {
-    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    let conn = open_portable_database(db_path)?;
     for sql in migration_sql() {
         conn.execute_batch(sql).map_err(|error| error.to_string())?;
     }
@@ -343,7 +348,7 @@ fn initialize_portable_database(db_path: &str) -> Result<(), String> {
 }
 
 fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
-    let conn = rusqlite::Connection::open(db_path).map_err(|error| error.to_string())?;
+    let conn = open_portable_database(db_path)?;
     let mut statement = conn
         .prepare(
             "SELECT name FROM sqlite_master
@@ -363,18 +368,16 @@ fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
     Ok(tables)
 }
 
-fn has_core_database_schema(db_path: &str) -> bool {
-    let Ok(conn) = rusqlite::Connection::open(db_path) else {
-        return false;
-    };
-    ["prompts", "results", "references"].iter().all(|table| {
+fn has_core_database_schema(db_path: &str) -> Result<bool, String> {
+    let conn = open_portable_database(db_path)?;
+    Ok(["prompts", "results", "references"].iter().all(|table| {
         conn.query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
             [table],
             |_| Ok(()),
         )
         .is_ok()
-    })
+    }))
 }
 
 fn migration_sql() -> [&'static str; 13] {

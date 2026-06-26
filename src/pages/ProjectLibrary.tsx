@@ -30,6 +30,18 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "review",   label: "Review" },
 ];
 
+const PROJECT_TYPE_OPTIONS = [
+  { value: "", label: "Select type" },
+  { value: "campaign", label: "Campaign" },
+  { value: "image-series", label: "Image series" },
+  { value: "video-sequence", label: "Video sequence" },
+  { value: "brand-system", label: "Brand system" },
+  { value: "research", label: "Research" },
+];
+
+const ASPECT_RATIO_OPTIONS = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
+const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
+
 // ─── Sub-components ───────────────────────────────────────────
 
 function FilterSelect({ label, value, onChange, options }: {
@@ -147,13 +159,26 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   );
 }
 
-// ─── Inline create form ───────────────────────────────────────
+// ─── Guided create form ───────────────────────────────────────
 
 function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose: () => void }) {
   const [title, setTitle] = useState("");
   const [client, setClient] = useState("");
   const [campaign, setCampaign] = useState("");
+  const [projectType, setProjectType] = useState("");
+  const [intendedOutput, setIntendedOutput] = useState("");
+  const [briefText, setBriefText] = useState("");
+  const [creativeGoals, setCreativeGoals] = useState("");
+  const [visualDirection, setVisualDirection] = useState("");
+  const [imageNeeds, setImageNeeds] = useState("");
+  const [videoNeeds, setVideoNeeds] = useState("");
+  const [aspectRatios, setAspectRatios] = useState<string[]>(["16:9"]);
+  const [providerTargets, setProviderTargets] = useState<string[]>(["midjourney"]);
   const [saving, setSaving] = useState(false);
+
+  const toggleValue = (value: string, values: string[], setValues: (next: string[]) => void) => {
+    setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
 
   const handleSave = async () => {
     if (!title.trim()) return;
@@ -164,6 +189,15 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
         client: client.trim() || undefined,
         campaign: campaign.trim() || undefined,
         status: "draft",
+        project_type: projectType || undefined,
+        intended_output: intendedOutput.trim() || undefined,
+        image_needs: imageNeeds.trim() || undefined,
+        video_needs: videoNeeds.trim() || undefined,
+        aspect_ratios: aspectRatios,
+        provider_targets: providerTargets,
+        brief_text: briefText.trim() || undefined,
+        visual_direction: visualDirection.trim() || undefined,
+        creative_goals: creativeGoals.trim() || undefined,
       });
       onSave(id);
     } finally {
@@ -172,16 +206,20 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
   };
 
   return (
-    <div className="flex flex-col gap-5 p-7 rounded-card mb-6"
+    <div className="flex flex-col gap-7 p-7 rounded-card mb-7"
       style={{ border: "var(--border-strong)", background: "var(--surface-card)" }}>
       <div className="flex items-center justify-between">
-        <span className="system-label">NEW PROJECT</span>
+        <div className="flex flex-col gap-1">
+          <span className="system-label">NEW PROJECT SETUP</span>
+          <span className="font-mono text-[11px] text-readable">Setup, craft direction, and output targets for this workspace.</span>
+        </div>
         <button type="button" onClick={onClose} className="text-dim/40 hover:text-white transition-precise">
           <X size={12} />
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="flex flex-col gap-1.5 col-span-3">
+
+      <div className="grid grid-cols-1 xl:grid-cols-6 gap-5">
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">TITLE</label>
           <input
             value={title}
@@ -193,7 +231,20 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }}
           />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
+          <label className="system-label">PROJECT TYPE</label>
+          <select
+            value={projectType}
+            onChange={(e) => setProjectType(e.target.value)}
+            className="h-10 px-3 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          >
+            {PROJECT_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} className="bg-panel text-white">{option.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">CLIENT</label>
           <input
             value={client}
@@ -203,7 +254,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
-        <div className="flex flex-col gap-1.5 col-span-2">
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">CAMPAIGN</label>
           <input
             value={campaign}
@@ -213,7 +264,116 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
+
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
+          <label className="system-label">INTENDED OUTPUT</label>
+          <textarea
+            value={intendedOutput}
+            onChange={(e) => setIntendedOutput(e.target.value)}
+            placeholder="Final assets, prompt systems, boards, videos..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 xl:col-span-3">
+          <label className="system-label">BRIEF / CONTEXT</label>
+          <textarea
+            value={briefText}
+            onChange={(e) => setBriefText(e.target.value)}
+            placeholder="What this project needs to solve..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2 xl:col-span-3">
+          <label className="system-label">ASPECT RATIOS</label>
+          <div className="flex flex-wrap gap-2">
+            {ASPECT_RATIO_OPTIONS.map((ratio) => (
+              <button
+                key={ratio}
+                type="button"
+                onClick={() => toggleValue(ratio, aspectRatios, setAspectRatios)}
+                className={cn(
+                  "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
+                  aspectRatios.includes(ratio) ? "text-black bg-cyan" : "text-readable hover:text-white"
+                )}
+                style={aspectRatios.includes(ratio) ? undefined : { border: "var(--border-default)" }}
+              >
+                {ratio}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 xl:col-span-3">
+          <label className="system-label">PROVIDER TARGETS</label>
+          <div className="flex flex-wrap gap-2">
+            {PROVIDER_TARGET_OPTIONS.map((provider) => (
+              <button
+                key={provider}
+                type="button"
+                onClick={() => toggleValue(provider, providerTargets, setProviderTargets)}
+                className={cn(
+                  "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
+                  providerTargets.includes(provider) ? "text-black bg-cyan" : "text-readable hover:text-white"
+                )}
+                style={providerTargets.includes(provider) ? undefined : { border: "var(--border-default)" }}
+              >
+                {provider}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5 xl:col-span-2">
+          <label className="system-label">IMAGE NEEDS</label>
+          <textarea
+            value={imageNeeds}
+            onChange={(e) => setImageNeeds(e.target.value)}
+            placeholder="Hero, product, background, variations..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 xl:col-span-2">
+          <label className="system-label">VIDEO NEEDS</label>
+          <textarea
+            value={videoNeeds}
+            onChange={(e) => setVideoNeeds(e.target.value)}
+            placeholder="Motion tests, frames, transitions..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5 xl:col-span-2">
+          <label className="system-label">VISUAL DIRECTION</label>
+          <textarea
+            value={visualDirection}
+            onChange={(e) => setVisualDirection(e.target.value)}
+            placeholder="Look, style, realism level..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5 xl:col-span-6">
+          <label className="system-label">CREATIVE GOALS</label>
+          <textarea
+            value={creativeGoals}
+            onChange={(e) => setCreativeGoals(e.target.value)}
+            placeholder="What good looks like, what to avoid, and what should become reusable..."
+            rows={3}
+            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+          />
+        </div>
       </div>
+
       <div className="flex items-center gap-2">
         <Button variant="primary" size="sm" onClick={handleSave} disabled={!title.trim() || saving}>
           {saving ? "Creating…" : "Create Project"}

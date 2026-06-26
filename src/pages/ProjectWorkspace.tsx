@@ -52,6 +52,17 @@ const CATEGORY_OPTIONS: Category[] = [
   "architecture", "portrait", "cinematic", "abstract", "other",
 ];
 
+const PROJECT_TYPE_OPTIONS = [
+  { value: "campaign", label: "Campaign" },
+  { value: "image-series", label: "Image series" },
+  { value: "video-sequence", label: "Video sequence" },
+  { value: "brand-system", label: "Brand system" },
+  { value: "research", label: "Research" },
+];
+
+const ASPECT_RATIO_OPTIONS = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
+const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
+
 // ─── Shared field atoms ───────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -94,6 +105,38 @@ function FieldSelect<T extends string>({ value, onChange, options, empty }: {
         {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
       </select>
       <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+    </div>
+  );
+}
+
+function PillToggleGroup({ values, options, onChange }: {
+  values: string[];
+  options: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const toggle = (value: string) => {
+    onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const selected = values.includes(option);
+        return (
+          <button
+            key={option}
+            type="button"
+            onClick={() => toggle(option)}
+            className={cn(
+              "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
+              selected ? "text-black bg-cyan" : "text-readable hover:text-white"
+            )}
+            style={selected ? undefined : { border: "var(--border-default)" }}
+          >
+            {option}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -396,6 +439,15 @@ export function ProjectWorkspace() {
   const [client, setClient] = useState("");
   const [campaign, setCampaign] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("draft");
+  const [projectType, setProjectType] = useState("");
+  const [intendedOutput, setIntendedOutput] = useState("");
+  const [imageNeeds, setImageNeeds] = useState("");
+  const [videoNeeds, setVideoNeeds] = useState("");
+  const [aspectRatios, setAspectRatios] = useState<string[]>([]);
+  const [providerTargets, setProviderTargets] = useState<string[]>([]);
+  const [visualDirection, setVisualDirection] = useState("");
+  const [constraints, setConstraints] = useState("");
+  const [creativeGoals, setCreativeGoals] = useState("");
   const [briefText, setBriefText] = useState("");
   const [productionGoal, setProductionGoal] = useState("");
   const [category, setCategory] = useState("");
@@ -429,6 +481,15 @@ export function ProjectWorkspace() {
       setClient(proj.client ?? "");
       setCampaign(proj.campaign ?? "");
       setStatus(proj.status);
+      setProjectType(proj.project_type ?? "");
+      setIntendedOutput(proj.intended_output ?? "");
+      setImageNeeds(proj.image_needs ?? "");
+      setVideoNeeds(proj.video_needs ?? "");
+      setAspectRatios(proj.aspect_ratios ?? []);
+      setProviderTargets(proj.provider_targets ?? []);
+      setVisualDirection(proj.visual_direction ?? "");
+      setConstraints(proj.constraints ?? "");
+      setCreativeGoals(proj.creative_goals ?? "");
       setBriefText(proj.brief_text ?? "");
       setProductionGoal(proj.production_goal ?? "");
       setCategory(proj.category ?? "");
@@ -447,6 +508,15 @@ export function ProjectWorkspace() {
     client: client.trim() || undefined,
     campaign: campaign.trim() || undefined,
     status,
+    project_type: projectType || undefined,
+    intended_output: intendedOutput.trim() || undefined,
+    image_needs: imageNeeds.trim() || undefined,
+    video_needs: videoNeeds.trim() || undefined,
+    aspect_ratios: aspectRatios,
+    provider_targets: providerTargets,
+    visual_direction: visualDirection.trim() || undefined,
+    constraints: constraints.trim() || undefined,
+    creative_goals: creativeGoals.trim() || undefined,
     brief_text: briefText.trim() || undefined,
     production_goal: productionGoal.trim() || undefined,
     category: (category || undefined) as Project["category"] | undefined,
@@ -478,7 +548,11 @@ export function ProjectWorkspace() {
         .finally(() => setSaving(false));
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [id, loading, title, client, campaign, status, briefText, productionGoal, category, tags, notes]);
+  }, [
+    id, loading, title, client, campaign, status, projectType, intendedOutput,
+    imageNeeds, videoNeeds, aspectRatios, providerTargets, visualDirection,
+    constraints, creativeGoals, briefText, productionGoal, category, tags, notes,
+  ]);
 
   const handleDelete = async () => {
     if (!confirmDelete) { setConfirmDelete(true); return; }
@@ -491,6 +565,14 @@ export function ProjectWorkspace() {
     await resetProjectContent(id!);
     setBriefText("");
     setProductionGoal("");
+    setIntendedOutput("");
+    setImageNeeds("");
+    setVideoNeeds("");
+    setAspectRatios([]);
+    setProviderTargets([]);
+    setVisualDirection("");
+    setConstraints("");
+    setCreativeGoals("");
     setCategory("");
     setTags("");
     setNotes("");
@@ -639,9 +721,59 @@ export function ProjectWorkspace() {
         className="hidden"
         onChange={(event) => handleImportProjectResult(event.target.files)}
       />
+      <div className="flex flex-col gap-5 p-5 rounded-card mb-7"
+        style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+        <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5">
+          <div className="flex flex-col gap-3 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cn("w-2 h-2 rounded-full", STATUS_DOT[status])} />
+              <span className="system-label text-soft-white">PROJECT WORKSPACE</span>
+              {projectType && (
+                <span className="font-mono text-[10px] tracking-widest uppercase text-readable px-2 py-1 rounded-sm"
+                  style={{ border: "var(--border-dim)" }}>
+                  {projectType}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {providerTargets.slice(0, 5).map((provider) => (
+                <span key={provider} className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm"
+                  style={{ border: "1px solid rgba(72, 229, 232, 0.28)", background: "rgba(72, 229, 232, 0.06)" }}>
+                  {provider}
+                </span>
+              ))}
+              {aspectRatios.slice(0, 5).map((ratio) => (
+                <span key={ratio} className="font-mono text-[10px] tracking-widest uppercase text-readable px-2 py-1 rounded-sm"
+                  style={{ border: "var(--border-dim)" }}>
+                  {ratio}
+                </span>
+              ))}
+              {!providerTargets.length && !aspectRatios.length && (
+                <span className="font-mono text-[11px] text-readable">Add provider and ratio targets in Setup.</span>
+              )}
+            </div>
+            {(intendedOutput || creativeGoals) && (
+              <p className="font-mono text-[12px] leading-relaxed text-readable max-w-4xl">
+                {intendedOutput || creativeGoals}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button variant="primary" size="sm" onClick={() => navigate(`/craft?projectId=${id}`)}>
+              <Plus size={10} /> Craft Prompt
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}/board`)}>
+              Pipeline
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/compare/${id}`)}>
+              Compare
+            </Button>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-8">
 
-        {/* Left column — brief + details */}
+        {/* Left column — setup + production */}
         <div className="flex flex-col gap-6">
 
           {/* Stats row */}
@@ -668,6 +800,33 @@ export function ProjectWorkspace() {
             </div>
           </div>
 
+          {/* Setup */}
+          <Panel title="SETUP">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>PROJECT TYPE</FieldLabel>
+                <FieldSelect<string>
+                  value={projectType}
+                  onChange={setProjectType}
+                  options={PROJECT_TYPE_OPTIONS}
+                  empty="-- project type --"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>INTENDED OUTPUT</FieldLabel>
+                <FieldTextarea value={intendedOutput} onChange={setIntendedOutput} placeholder="Final assets, prompt systems, boards, videos..." rows={3} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <FieldLabel>ASPECT RATIOS</FieldLabel>
+                <PillToggleGroup values={aspectRatios} options={ASPECT_RATIO_OPTIONS} onChange={setAspectRatios} />
+              </div>
+              <div className="flex flex-col gap-2">
+                <FieldLabel>PROVIDER TARGETS</FieldLabel>
+                <PillToggleGroup values={providerTargets} options={PROVIDER_TARGET_OPTIONS} onChange={setProviderTargets} />
+              </div>
+            </div>
+          </Panel>
+
           {/* Brief */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5">
@@ -682,6 +841,39 @@ export function ProjectWorkspace() {
             <FieldLabel>PRODUCTION GOAL</FieldLabel>
             <FieldTextarea value={productionGoal} onChange={setProductionGoal} placeholder="What does success look like for this production?" rows={3} />
           </div>
+
+          <Panel
+            title="CRAFT"
+            count={linkedPrompts.length}
+            action={
+              <Button variant="primary" size="sm" onClick={() => navigate(`/craft?projectId=${id}`)}>
+                <Plus size={10} /> Craft Prompt
+              </Button>
+            }
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>VISUAL DIRECTION</FieldLabel>
+                <FieldTextarea value={visualDirection} onChange={setVisualDirection} placeholder="Look, style, realism level..." rows={4} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>IMAGE NEEDS</FieldLabel>
+                <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>VIDEO NEEDS</FieldLabel>
+                <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
+              </div>
+              <div className="flex flex-col gap-1.5 lg:col-span-2">
+                <FieldLabel>CREATIVE GOALS</FieldLabel>
+                <FieldTextarea value={creativeGoals} onChange={setCreativeGoals} placeholder="What good looks like, what to avoid, and what should become reusable..." rows={3} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>CONSTRAINTS</FieldLabel>
+                <FieldTextarea value={constraints} onChange={setConstraints} placeholder="Brand, legal, AI-look, or production limits..." rows={3} />
+              </div>
+            </div>
+          </Panel>
 
           {/* Notes */}
           <div className="flex flex-col gap-1.5">
@@ -817,7 +1009,7 @@ export function ProjectWorkspace() {
           </Panel>
         </div>
 
-        {/* Right column — metadata + references */}
+        {/* Right column — metadata + inspirations */}
         <div className="flex flex-col gap-6">
 
           {/* Metadata */}
@@ -839,9 +1031,9 @@ export function ProjectWorkspace() {
             </div>
           </div>
 
-          {/* References panel */}
+          {/* Inspirations panel */}
           <Panel
-            title="REFERENCES"
+            title="INSPIRATIONS"
             count={linkedRefs.length}
             action={
               <button type="button"
@@ -862,7 +1054,7 @@ export function ProjectWorkspace() {
               </div>
             )}
             {linkedRefs.length === 0 && pickerMode !== "references" ? (
-              <span className="font-mono text-[11px] text-muted">No references linked yet.</span>
+              <span className="font-mono text-[11px] text-muted">No inspirations linked yet.</span>
             ) : (
               <div className="flex flex-col gap-1">
                 {linkedRefs.map((r) => (
@@ -911,7 +1103,7 @@ export function ProjectWorkspace() {
             Generation Queue
           </Button>
           <Button variant="ghost" size="sm"
-            onClick={() => navigate(`/craft?project=${id}`)}
+            onClick={() => navigate(`/craft?projectId=${id}`)}
             className="w-full justify-center">
             <Plus size={10} /> Craft New Prompt for Project
           </Button>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Check,
+  Copy,
   Cpu,
   Database,
   Download,
@@ -60,6 +61,35 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
       <span className="system-label text-[11px] text-muted">{label}</span>
       <span className="font-mono text-[13px] leading-relaxed text-white break-words">{value}</span>
     </div>
+  );
+}
+
+function CopyableError({ message }: { message: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(message);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title="Copy error"
+      className="group flex w-full items-start gap-3 rounded-sm p-4 text-left transition-precise hover:bg-red/8"
+      style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.045)" }}
+    >
+      <AlertTriangle size={13} className="mt-0.5 shrink-0 text-red/80" />
+      <span className="min-w-0 flex-1 font-mono text-[12px] leading-relaxed text-red/85 break-words">
+        {message}
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-readable group-hover:text-white">
+        {copied ? <Check size={10} className="text-cyan" /> : <Copy size={10} />}
+        {copied ? "Copied" : "Copy"}
+      </span>
+    </button>
   );
 }
 
@@ -558,10 +588,7 @@ export function Settings() {
               </div>
             )}
             {libraryError && (
-              <div className="font-mono text-[10px] text-red/70 leading-relaxed">
-                <AlertTriangle size={10} className="inline mr-1" />
-                {libraryError}
-              </div>
+              <CopyableError message={libraryError} />
             )}
           </div>
         </Section>
@@ -631,7 +658,11 @@ export function Settings() {
                       </span>
                       <div className="flex flex-col gap-1 min-w-0">
                         <span className="font-mono text-[13px] text-soft-white">{check.label}</span>
-                        <span className="font-mono text-[11.5px] text-readable leading-relaxed">{check.message}</span>
+                        {check.status === "fail" ? (
+                          <CopyableError message={check.message} />
+                        ) : (
+                          <span className="font-mono text-[11.5px] text-readable leading-relaxed">{check.message}</span>
+                        )}
                       </div>
                     </div>
                   ))}

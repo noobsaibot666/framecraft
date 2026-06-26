@@ -5,7 +5,11 @@ use rusqlite::{
 };
 use serde::Serialize;
 use serde_json::{Map, Value as JsonValue};
-use std::{path::Path, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 #[derive(Serialize)]
 pub struct NativeSqliteQueryResult {
@@ -97,15 +101,46 @@ pub fn native_sqlite_execute(
 }
 
 fn open_connection(db_path: &str) -> Result<Connection, String> {
-    if !Path::new(db_path).exists() {
+    let path = Path::new(db_path);
+    if !path.exists() {
         return Err(format!("Missing database file: {db_path}"));
     }
-    let conn = Connection::open(db_path).map_err(format_sqlite_error)?;
+    assert_parent_writable(path)?;
+    let conn = Connection::open(db_path).map_err(|error| format_open_error(db_path, error))?;
     conn.busy_timeout(Duration::from_secs(10))
+        .map_err(format_sqlite_error)?;
+    conn.pragma_update(None, "journal_mode", "DELETE")
         .map_err(format_sqlite_error)?;
     conn.pragma_update(None, "foreign_keys", "ON")
         .map_err(format_sqlite_error)?;
     Ok(conn)
+}
+
+fn assert_parent_writable(path: &Path) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Database path has no parent directory: {}", path.display()))?;
+    if !parent.exists() {
+        return Err(format!(
+            "Database parent directory is missing: {}",
+            parent.display()
+        ));
+    }
+
+    let probe = parent.join(format!(".framecraft-db-write-probe-{}", std::process::id()));
+    fs::write(&probe, b"probe").map_err(|error| {
+        format!(
+            "Database directory is not writable: {} ({error})",
+            parent.display()
+        )
+    })?;
+    fs::remove_file(&probe).map_err(|error| {
+        format!(
+            "Database directory write probe could not be cleaned up: {} ({error})",
+            probe.display()
+        )
+    })?;
+    Ok(())
 }
 
 fn sqlite_value_to_json(value: ValueRef<'_>) -> JsonValue {
@@ -122,6 +157,15 @@ fn sqlite_value_to_json(value: ValueRef<'_>) -> JsonValue {
 
 fn format_sqlite_error(error: rusqlite::Error) -> String {
     error.to_string()
+}
+
+fn format_open_error(db_path: &str, error: rusqlite::Error) -> String {
+    let path = PathBuf::from(db_path);
+    let parent = path
+        .parent()
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "<none>".to_string());
+    format!("Unable to open database file: {db_path}. Parent: {parent}. SQLite: {error}")
 }
 
 #[cfg(test)]
@@ -158,6 +202,40 @@ mod tests {
             rows[0].get("title"),
             Some(&JsonValue::String("NAS prompt".to_string()))
         );
+
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn portable_open_uses_delete_journal_mode_for_network_storage() {
+        let root = std::env::temp_dir().join(format!(
+            "framecraft_native_sqlite_journal_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("framecraft.db");
+        let db_path = db_path.to_str().unwrap().to_string();
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+             PRAGMA journal_mode=WAL;",
+        )
+        .unwrap();
+        drop(conn);
+
+        native_sqlite_select(
+            db_path.clone(),
+            "SELECT name FROM sqlite_master WHERE type = $1".to_string(),
+            vec![JsonValue::String("table".to_string())],
+        )
+        .unwrap();
+
+        let conn = Connection::open(&db_path).unwrap();
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_lowercase(), "delete");
 
         let _ = std::fs::remove_file(db_path);
         let _ = std::fs::remove_dir_all(root);

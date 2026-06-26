@@ -249,20 +249,23 @@ export async function processSharedIngestInbox(input: {
       const validation = validateSharedIngestJob(job);
       if (!validation.ok) throw new Error(validation.errors.join(", "));
 
-      if (await input.fs.exists(appliedPath(input.paths, job.idempotency_key))) {
-        await input.fs.removeFile(inboxPath);
-        result.skipped += 1;
-        continue;
-      }
+	      if (await input.fs.exists(appliedPath(input.paths, job.idempotency_key))) {
+	        await input.fs.removeFile(inboxPath);
+	        result.skipped += 1;
+	        continue;
+	      }
 
-      await applyJob(input.paths, input.fs, input.db, job);
-      await input.fs.writeTextFile(appliedPath(input.paths, job.idempotency_key), JSON.stringify({
-        job_id: job.job_id,
-        idempotency_key: job.idempotency_key,
-        applied_at: new Date().toISOString(),
-      }, null, 2));
-      await input.fs.removeFile(inboxPath);
-      result.applied += 1;
+	      if (await jobAlreadyExistsInDatabase(input.db, job)) {
+	        await writeAppliedMarker(input.paths, input.fs, job);
+	        await input.fs.removeFile(inboxPath);
+	        result.applied += 1;
+	        continue;
+	      }
+
+	      await applyJob(input.paths, input.fs, input.db, job);
+	      await writeAppliedMarker(input.paths, input.fs, job);
+	      await input.fs.removeFile(inboxPath);
+	      result.applied += 1;
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Shared ingest job failed.";
       await input.fs.writeTextFile(`${input.paths.failedDir}${name}`, JSON.stringify({ reason, source: inboxPath, job: rawJob }, null, 2));
@@ -392,6 +395,30 @@ async function applyJob(paths: LibraryPaths, fs: SharedIngestFileSystem, db: Sha
   await fs.copyFile(originalPath, filePath);
   await fs.copyFile(thumbnailPath, thumbPath);
   await insertResult(db, job, filePath, thumbPath);
+}
+
+async function jobAlreadyExistsInDatabase(db: SharedIngestDb, job: SharedIngestJob): Promise<boolean> {
+  if (job.kind === "reference.import") {
+    const rows = await db.select('SELECT id FROM "references" WHERE id = $1 LIMIT 1', [job.payload.referenceId]);
+    return rows.length > 0;
+  }
+  if (job.kind === "result.import") {
+    const rows = await db.select("SELECT id FROM results WHERE id = $1 LIMIT 1", [job.payload.resultId]);
+    return rows.length > 0;
+  }
+  const rows = await db.select(
+    "SELECT result_id FROM project_results WHERE project_id = $1 AND result_id = $2 LIMIT 1",
+    [job.payload.projectId, job.payload.resultId]
+  );
+  return rows.length > 0;
+}
+
+async function writeAppliedMarker(paths: LibraryPaths, fs: SharedIngestFileSystem, job: SharedIngestJob): Promise<void> {
+  await fs.writeTextFile(appliedPath(paths, job.idempotency_key), JSON.stringify({
+    job_id: job.job_id,
+    idempotency_key: job.idempotency_key,
+    applied_at: new Date().toISOString(),
+  }, null, 2));
 }
 
 async function insertProjectResultLink(db: SharedIngestDb, job: ProjectResultLinkJob): Promise<void> {

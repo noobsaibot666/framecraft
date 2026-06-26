@@ -113,7 +113,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Library In Use"
         message={`This library is locked by ${state.lock.user} on ${state.lock.machine}. Close it there before continuing.`}
-        action={<Button variant="danger" size="sm" onClick={() => acquire(true)}><RefreshCw size={10} /> Take Over Anyway</Button>}
+        action={<Button variant="ghost" size="sm" onClick={() => acquire(false)}><RefreshCw size={10} /> Check Again</Button>}
       />
     );
   }

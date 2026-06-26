@@ -6,7 +6,7 @@ use rusqlite::{
 use serde::Serialize;
 use std::{
     fs,
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -302,6 +302,35 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
+const REQUIRED_RELEASE_TABLES: [&str; 26] = [
+    "app_meta",
+    "assistant_messages",
+    "assistant_threads",
+    "avoidance_patterns",
+    "comparison_items",
+    "comparison_sessions",
+    "deliverable_references",
+    "export_presets",
+    "generation_queue",
+    "profiles",
+    "project_deliverables",
+    "project_prompts",
+    "project_references",
+    "project_results",
+    "projects",
+    "prompts",
+    "prompt_references",
+    "prompt_tokens",
+    "recipes",
+    "references",
+    "result_references",
+    "results",
+    "srefs",
+    "token_categories",
+    "token_patterns",
+    "tokens",
+];
+
 #[derive(Clone, Debug, PartialEq)]
 struct TableRecord {
     values: Vec<Value>,
@@ -425,8 +454,8 @@ fn merge_result_rows(
             }
             Some(_) => {
                 let new_id = generate_sqlite_id(&transaction)?;
-                copy_result_media_files(&merge_row, source, target)?;
                 merge_row.values[0] = Value::Text(new_id.clone());
+                copy_result_media_files_collision_safe(&mut merge_row, source, target, &new_id)?;
                 insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
                 report.results.imported += 1;
                 report.results.remapped += 1;
@@ -438,7 +467,7 @@ fn merge_result_rows(
                 });
             }
             None => {
-                copy_result_media_files(&merge_row, source, target)?;
+                copy_result_media_files_collision_safe(&mut merge_row, source, target, &source_id)?;
                 insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
                 report.results.imported += 1;
             }
@@ -481,8 +510,8 @@ fn merge_reference_rows(
             }
             Some(_) => {
                 let new_id = generate_sqlite_id(&transaction)?;
-                copy_reference_media_files(&merge_row, source, target)?;
                 merge_row.values[0] = Value::Text(new_id.clone());
+                copy_reference_media_files_collision_safe(&mut merge_row, source, target, &new_id)?;
                 insert_table_record(
                     &transaction,
                     "\"references\"",
@@ -499,7 +528,7 @@ fn merge_reference_rows(
                 });
             }
             None => {
-                copy_reference_media_files(&merge_row, source, target)?;
+                copy_reference_media_files_collision_safe(&mut merge_row, source, target, &source_id)?;
                 insert_table_record(
                     &transaction,
                     "\"references\"",
@@ -570,38 +599,53 @@ fn rewrite_media_value(
     Ok(())
 }
 
-fn copy_result_media_files(
-    row: &TableRecord,
+fn copy_result_media_files_collision_safe(
+    row: &mut TableRecord,
     source: &LibraryPathsDto,
     target: &LibraryPathsDto,
+    id_hint: &str,
 ) -> Result<(), String> {
-    copy_rewritten_media_value(&row.values[2], &source.results_dir, &target.results_dir)?;
-    copy_rewritten_media_value(&row.values[3], &source.results_dir, &target.results_dir)?;
-    Ok(())
-}
-
-fn copy_reference_media_files(
-    row: &TableRecord,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-) -> Result<(), String> {
-    copy_rewritten_media_value(
-        &row.values[4],
-        &source.references_dir,
-        &target.references_dir,
+    copy_media_value_collision_safe(
+        &mut row.values[2],
+        &source.results_dir,
+        &target.results_dir,
+        id_hint,
     )?;
-    copy_rewritten_media_value(
-        &row.values[5],
-        &source.references_dir,
-        &target.references_dir,
+    copy_media_value_collision_safe(
+        &mut row.values[3],
+        &source.results_dir,
+        &target.results_dir,
+        id_hint,
     )?;
     Ok(())
 }
 
-fn copy_rewritten_media_value(
-    value: &Value,
+fn copy_reference_media_files_collision_safe(
+    row: &mut TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+    id_hint: &str,
+) -> Result<(), String> {
+    copy_media_value_collision_safe(
+        &mut row.values[4],
+        &source.references_dir,
+        &target.references_dir,
+        id_hint,
+    )?;
+    copy_media_value_collision_safe(
+        &mut row.values[5],
+        &source.references_dir,
+        &target.references_dir,
+        id_hint,
+    )?;
+    Ok(())
+}
+
+fn copy_media_value_collision_safe(
+    value: &mut Value,
     source_prefix: &str,
     target_prefix: &str,
+    id_hint: &str,
 ) -> Result<(), String> {
     let Value::Text(target_path) = value else {
         return Ok(());
@@ -609,11 +653,88 @@ fn copy_rewritten_media_value(
     if !target_path.starts_with(target_prefix) {
         return Ok(());
     }
-    let relative = &target_path[target_prefix.len()..];
-    assert_safe_relative_media_path(relative)?;
+    let relative = target_path[target_prefix.len()..].to_string();
+    assert_safe_relative_media_path(&relative)?;
     let from = format!("{source_prefix}{relative}");
-    let to = format!("{target_prefix}{relative}");
-    copy_file(&from, &to)
+    let target_relative = collision_safe_relative_path(&relative, target_prefix, id_hint)?;
+    let to = format!("{target_prefix}{target_relative}");
+    copy_file(&from, &to)?;
+    *target_path = to;
+    Ok(())
+}
+
+fn collision_safe_relative_path(
+    relative: &str,
+    target_prefix: &str,
+    id_hint: &str,
+) -> Result<String, String> {
+    let original = Path::new(relative);
+    let parent = original.parent().unwrap_or_else(|| Path::new(""));
+    let stem = original
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| format!("Invalid media filename: {relative}"))?;
+    let extension = original.extension().and_then(|value| value.to_str());
+    let safe_hint = safe_filename_component(id_hint);
+
+    for index in 0..1000 {
+        let candidate_name = if index == 0 {
+            original
+                .file_name()
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| format!("Invalid media filename: {relative}"))?
+                .to_string()
+        } else {
+            let suffix = if index == 1 {
+                format!("-import-{safe_hint}")
+            } else {
+                format!("-import-{safe_hint}-{index}")
+            };
+            match extension {
+                Some(extension) => format!("{stem}{suffix}.{extension}"),
+                None => format!("{stem}{suffix}"),
+            }
+        };
+
+        let candidate_relative = if parent.as_os_str().is_empty() {
+            candidate_name
+        } else {
+            path_to_forward_slashes(parent.join(candidate_name))?
+        };
+        assert_safe_relative_media_path(&candidate_relative)?;
+        if !Path::new(&format!("{target_prefix}{candidate_relative}")).exists() {
+            return Ok(candidate_relative);
+        }
+    }
+
+    Err(format!(
+        "Unable to allocate collision-safe media path for {relative}"
+    ))
+}
+
+fn path_to_forward_slashes(path: PathBuf) -> Result<String, String> {
+    path.to_str()
+        .map(|value| value.replace('\\', "/"))
+        .ok_or_else(|| "Invalid media path encoding".to_string())
+}
+
+fn safe_filename_component(value: &str) -> String {
+    let sanitized: String = value
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' || character == '_' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let trimmed = sanitized.trim_matches('-').chars().take(48).collect::<String>();
+    if trimmed.is_empty() {
+        "item".to_string()
+    } else {
+        trimmed
+    }
 }
 
 fn read_table_records(
@@ -781,7 +902,7 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     if !Path::new(&paths.db_path).exists() {
         errors.push("Missing framecraft.db".to_string());
     } else {
-        match has_core_database_schema(&paths.db_path) {
+        match has_required_database_schema(&paths.db_path) {
             Ok(true) => {}
             Ok(false) => errors.push("Missing database schema".to_string()),
             Err(error) => errors.push(error),
@@ -852,7 +973,7 @@ fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationRes
         return Ok(validate_library_package(&paths.base_dir));
     }
 
-    if has_core_database_schema(&paths.db_path)? {
+    if has_required_database_schema(&paths.db_path)? {
         return Ok(validate_library_package(&paths.base_dir));
     }
 
@@ -897,9 +1018,9 @@ fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
     Ok(tables)
 }
 
-fn has_core_database_schema(db_path: &str) -> Result<bool, String> {
+fn has_required_database_schema(db_path: &str) -> Result<bool, String> {
     let conn = open_portable_database(db_path)?;
-    Ok(["prompts", "results", "references"].iter().all(|table| {
+    Ok(REQUIRED_RELEASE_TABLES.iter().all(|table| {
         conn.query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
             [table],
@@ -995,11 +1116,11 @@ fn normalize_dir(path: &str) -> String {
 }
 
 fn timestamp_slug() -> String {
-    let seconds = SystemTime::now()
+    let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
+        .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    format!("{seconds}")
+    format!("{nanos}")
 }
 
 fn format_io_error(error: std::io::Error) -> String {
@@ -1156,6 +1277,50 @@ mod tests {
         assert!(error.contains("Database schema is incomplete"));
         assert!(error.contains("prompts"));
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validation_rejects_database_with_only_legacy_core_tables() {
+        let root = test_root("validate-legacy-core-schema");
+        let package = root.join("LegacyCore.framecraftlib");
+        fs::create_dir_all(package.join("results")).unwrap();
+        fs::create_dir_all(package.join("references")).unwrap();
+        fs::write(
+            package.join("library.json"),
+            r#"{"format_version":1,"db_filename":"framecraft.db","results_dir":"results","references_dir":"references"}"#,
+        )
+        .unwrap();
+        let db_path = package.join("framecraft.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts (id TEXT PRIMARY KEY);
+             CREATE TABLE results (id TEXT PRIMARY KEY);
+             CREATE TABLE \"references\" (id TEXT PRIMARY KEY);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let validation = validate_library_package(package.to_str().unwrap());
+
+        assert!(!validation.ok);
+        assert!(validation.errors.contains(&"Missing database schema".to_string()));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn validation_rejects_database_missing_project_prompt_table() {
+        let root = test_root("validate-missing-project-prompts");
+        let package = root.join("MissingProjectPrompts.framecraftlib");
+        let paths = create_library_package(package.to_str().unwrap(), true).unwrap();
+        let conn = rusqlite::Connection::open(&paths.db_path).unwrap();
+        conn.execute("DROP TABLE project_prompts", []).unwrap();
+        drop(conn);
+
+        let validation = validate_library_package(package.to_str().unwrap());
+
+        assert!(!validation.ok);
+        assert!(validation.errors.contains(&"Missing database schema".to_string()));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1352,6 +1517,75 @@ mod tests {
     }
 
     #[test]
+    fn merge_result_collision_does_not_overwrite_existing_target_media() {
+        let root = test_root("merge-result-media-collision");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "prompt-a", "Source Prompt");
+        insert_prompt(&target_paths.db_path, "prompt-a", "Source Prompt");
+        fs::create_dir_all(source.join("results/campaign")).unwrap();
+        fs::create_dir_all(target.join("results/campaign")).unwrap();
+        fs::write(source.join("results/campaign/shared.png"), "source image").unwrap();
+        fs::write(source.join("results/campaign/shared-thumb.png"), "source thumb").unwrap();
+        fs::write(target.join("results/campaign/shared.png"), "target image").unwrap();
+        fs::write(target.join("results/campaign/shared-thumb.png"), "target thumb").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "shared-result",
+            "prompt-a",
+            Some(&format!("{}campaign/shared.png", source_paths.results_dir)),
+            Some(&format!("{}campaign/shared-thumb.png", source_paths.results_dir)),
+        );
+        insert_result(
+            &target_paths.db_path,
+            "shared-result",
+            "prompt-a",
+            Some(&format!("{}campaign/shared.png", target_paths.results_dir)),
+            Some(&format!(
+                "{}campaign/shared-thumb.png",
+                target_paths.results_dir
+            )),
+        );
+        let target_conn = rusqlite::Connection::open(&target_paths.db_path).unwrap();
+        target_conn
+            .execute(
+                "UPDATE results SET notes = 'different target result' WHERE id = 'shared-result'",
+                [],
+            )
+            .unwrap();
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let remap = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.table == "results" && remap.source_id == "shared-result")
+            .unwrap();
+        let (_, file_path, thumb_path) = result_paths(&target_paths.db_path, &remap.target_id).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(target.join("results/campaign/shared.png")).unwrap(),
+            "target image"
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("results/campaign/shared-thumb.png")).unwrap(),
+            "target thumb"
+        );
+        let file_path = file_path.unwrap();
+        let thumb_path = thumb_path.unwrap();
+        assert_ne!(file_path, format!("{}campaign/shared.png", target_paths.results_dir));
+        assert_ne!(
+            thumb_path,
+            format!("{}campaign/shared-thumb.png", target_paths.results_dir)
+        );
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "source image");
+        assert_eq!(fs::read_to_string(&thumb_path).unwrap(), "source thumb");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn merge_imports_reference_and_copies_media() {
         let root = test_root("merge-reference-media");
         let source = root.join("Source.framecraftlib");
@@ -1468,6 +1702,67 @@ mod tests {
                 .as_deref(),
             Some("Source Reference")
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_reference_collision_does_not_overwrite_existing_target_media() {
+        let root = test_root("merge-reference-media-collision");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        fs::create_dir_all(source.join("references/mood")).unwrap();
+        fs::create_dir_all(target.join("references/mood")).unwrap();
+        fs::write(source.join("references/mood/shared.png"), "source ref").unwrap();
+        fs::write(source.join("references/mood/shared-thumb.png"), "source thumb").unwrap();
+        fs::write(target.join("references/mood/shared.png"), "target ref").unwrap();
+        fs::write(target.join("references/mood/shared-thumb.png"), "target thumb").unwrap();
+        insert_reference(
+            &source_paths.db_path,
+            "shared-ref",
+            "Source Reference",
+            Some(&format!("{}mood/shared.png", source_paths.references_dir)),
+            Some(&format!("{}mood/shared-thumb.png", source_paths.references_dir)),
+        );
+        insert_reference(
+            &target_paths.db_path,
+            "shared-ref",
+            "Target Reference",
+            Some(&format!("{}mood/shared.png", target_paths.references_dir)),
+            Some(&format!(
+                "{}mood/shared-thumb.png",
+                target_paths.references_dir
+            )),
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let remap = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.table == "references" && remap.source_id == "shared-ref")
+            .unwrap();
+        let (_, file_path, thumb_path) =
+            reference_paths(&target_paths.db_path, &remap.target_id).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(target.join("references/mood/shared.png")).unwrap(),
+            "target ref"
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("references/mood/shared-thumb.png")).unwrap(),
+            "target thumb"
+        );
+        let file_path = file_path.unwrap();
+        let thumb_path = thumb_path.unwrap();
+        assert_ne!(file_path, format!("{}mood/shared.png", target_paths.references_dir));
+        assert_ne!(
+            thumb_path,
+            format!("{}mood/shared-thumb.png", target_paths.references_dir)
+        );
+        assert_eq!(fs::read_to_string(&file_path).unwrap(), "source ref");
+        assert_eq!(fs::read_to_string(&thumb_path).unwrap(), "source thumb");
         let _ = fs::remove_dir_all(root);
     }
 

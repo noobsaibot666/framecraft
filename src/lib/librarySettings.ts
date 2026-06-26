@@ -29,6 +29,7 @@ import {
   validateLibraryPackageNative,
 } from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
+import { createNativeSqliteDatabase, type NativeSqliteDatabase } from "./nativeSqlite";
 import {
   getSharedIngestStatus,
   processSharedIngestInbox,
@@ -334,8 +335,7 @@ async function repairCopiedLibraryMediaPaths(sourceBaseDir: string, targetBaseDi
   if (!isTauri()) return;
   const rewrites = buildPortableMediaPathRewrites({ sourceBaseDir, targetBaseDir });
   const target = resolveLibraryPaths(targetBaseDir);
-  const SqlPlugin = await import("@tauri-apps/plugin-sql");
-  const db = await SqlPlugin.default.load(`sqlite:${target.dbPath}`);
+  const db = createNativeSqliteDatabase(target.dbPath);
 
   try {
     for (const rewrite of rewrites) {
@@ -347,8 +347,7 @@ async function repairCopiedLibraryMediaPaths(sourceBaseDir: string, targetBaseDi
 }
 
 async function executeMediaPathRewrite(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: any,
+  db: Pick<NativeSqliteDatabase, "execute" | "close">,
   rewrite: PortableMediaPathRewrite
 ): Promise<void> {
   const table = rewrite.table === "references" ? "\"references\"" : "results";

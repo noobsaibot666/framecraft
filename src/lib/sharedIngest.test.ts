@@ -59,7 +59,7 @@ function createFs(existing: Record<string, string | Uint8Array> = {}): SharedIng
   return fs;
 }
 
-function createDb(options: { promptExists?: boolean; projectExists?: boolean; resultExists?: boolean } = {}): SharedIngestDb & {
+function createDb(options: { promptExists?: boolean; projectExists?: boolean; resultExists?: boolean; referenceExists?: boolean; projectResultExists?: boolean } = {}): SharedIngestDb & {
   references: unknown[][];
   results: unknown[][];
   projectResults: unknown[][];
@@ -68,12 +68,14 @@ function createDb(options: { promptExists?: boolean; projectExists?: boolean; re
     references: [],
     results: [],
     projectResults: [],
-    select: vi.fn(async (sql: string) => {
-      if (sql.includes("FROM prompts")) return options.promptExists ? [{ id: "prompt-1" }] : [];
-      if (sql.includes("FROM projects")) return options.projectExists ? [{ id: "project-1" }] : [];
-      if (sql.includes("FROM results")) return options.resultExists ? [{ id: "result-a" }] : [];
-      return [];
-    }),
+	    select: vi.fn(async (sql: string) => {
+	      if (sql.includes("FROM prompts")) return options.promptExists ? [{ id: "prompt-1" }] : [];
+	      if (sql.includes("FROM projects")) return options.projectExists ? [{ id: "project-1" }] : [];
+	      if (sql.includes('FROM "references"')) return options.referenceExists ? [{ id: "ref-a" }] : [];
+	      if (sql.includes("FROM project_results")) return options.projectResultExists ? [{ id: "result-a" }] : [];
+	      if (sql.includes("FROM results")) return options.resultExists ? [{ id: "result-a" }] : [];
+	      return [];
+	    }),
     execute: vi.fn(async function (this: SharedIngestDb & { references: unknown[][]; results: unknown[][]; projectResults: unknown[][] }, sql: string, values: unknown[]) {
       if (sql.includes('INTO "references"')) this.references.push(values);
       if (sql.includes("INTO results")) this.results.push(values);
@@ -200,6 +202,30 @@ describe("sharedIngest", () => {
 
     expect(result).toEqual({ applied: 0, failed: 0, skipped: 1 });
     expect(db.references).toHaveLength(0);
+    expect(fs.removed).toContain("/lib/Work.framecraftlib/inbox/job-a.json");
+  });
+
+  it("marks a job applied when its database row already exists but the applied marker is missing", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const job = createReferenceImportJob({
+      jobId: "job-a",
+      referenceId: "ref-a",
+      idempotencyKey: "ref:hash-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: "png",
+      reference: { title: "Mood", kind: "image" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-a.json": JSON.stringify(job),
+    });
+    const db = createDb({ referenceExists: true });
+
+    const result = await processSharedIngestInbox({ paths, fs, db });
+
+    expect(result).toEqual({ applied: 1, failed: 0, skipped: 0 });
+    expect(db.references).toHaveLength(0);
+    expect(fs.files["/lib/Work.framecraftlib/sync/applied/ref_hash-a.json"]).toContain('"job_id": "job-a"');
     expect(fs.removed).toContain("/lib/Work.framecraftlib/inbox/job-a.json");
   });
 

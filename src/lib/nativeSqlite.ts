@@ -8,6 +8,7 @@ export interface NativeSqliteQueryResult {
 export interface NativeSqliteDatabase {
   select<T>(query: string, bindValues?: unknown[]): Promise<T>;
   execute(query: string, bindValues?: unknown[]): Promise<NativeSqliteQueryResult>;
+  executeBatch(query: string): Promise<void>;
   close(): Promise<boolean>;
 }
 
@@ -15,6 +16,7 @@ export function createNativeSqliteDatabase(dbPath: string): NativeSqliteDatabase
   return {
     select: (query, bindValues = []) => invoke("native_sqlite_select", { dbPath, query, bindValues }),
     execute: (query, bindValues = []) => invoke("native_sqlite_execute", { dbPath, query, bindValues }),
+    executeBatch: (query) => invoke("native_sqlite_execute_batch", { dbPath, query }),
     close: async () => true,
   };
 }

@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path, sync::Mutex};
+use std::{fs, fs::OpenOptions, path::Path, sync::Mutex};
 
 const ACTIVE_LIBRARY_LOCK: &str = "locks/active.lock";
 const LIBRARY_LOCK_STALE_MS: i64 = 5 * 60 * 1000;
@@ -110,35 +110,59 @@ fn acquire_library_lock(
     state: &ActiveLockState,
 ) -> Result<LibraryLockInfo, String> {
     let path = lock_path(base_dir);
-    let existing = read_library_lock(&path);
-
-    match evaluate_library_lock(existing.as_ref(), &current, now_ms) {
-        LockEvaluation::Conflict if !force_takeover => {
-            return Err(format_lock_error(LOCK_CONFLICT_PREFIX, existing.as_ref()));
-        }
-        LockEvaluation::Stale if !force_takeover => {
-            return Err(format_lock_error(LOCK_STALE_PREFIX, existing.as_ref()));
-        }
-        LockEvaluation::Available
-        | LockEvaluation::Owned
-        | LockEvaluation::Conflict
-        | LockEvaluation::Stale => {}
-    }
-
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(format_io_error)?;
     }
     let raw = serde_json::to_string_pretty(&current).map_err(|error| error.to_string())?;
-    fs::write(&path, raw).map_err(format_io_error)?;
 
+    match OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(mut file) => {
+            use std::io::Write;
+            file.write_all(raw.as_bytes()).map_err(format_io_error)?;
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let existing = read_library_lock(&path);
+            if existing.is_none() {
+                if !force_takeover {
+                    return Err(format_lock_error(LOCK_STALE_PREFIX, None));
+                }
+                fs::write(&path, raw).map_err(format_io_error)?;
+                set_active_lock(state, base_dir, &current);
+                return Ok(current);
+            }
+            match evaluate_library_lock(existing.as_ref(), &current, now_ms) {
+                LockEvaluation::Available => {
+                    return Err(format_lock_error(LOCK_CONFLICT_PREFIX, existing.as_ref()));
+                }
+                LockEvaluation::Owned => {
+                    fs::write(&path, raw).map_err(format_io_error)?;
+                }
+                LockEvaluation::Conflict => {
+                    return Err(format_lock_error(LOCK_CONFLICT_PREFIX, existing.as_ref()));
+                }
+                LockEvaluation::Stale if !force_takeover => {
+                    return Err(format_lock_error(LOCK_STALE_PREFIX, existing.as_ref()));
+                }
+                LockEvaluation::Stale => {
+                    fs::write(&path, raw).map_err(format_io_error)?;
+                }
+            }
+        }
+        Err(error) => return Err(format_io_error(error)),
+    }
+
+    set_active_lock(state, base_dir, &current);
+
+    Ok(current)
+}
+
+fn set_active_lock(state: &ActiveLockState, base_dir: &str, current: &LibraryLockInfo) {
     if let Ok(mut guard) = state.active.lock() {
         *guard = Some(ActiveLock {
             base_dir: normalize_dir(base_dir),
             session_id: current.session_id.clone(),
         });
     }
-
-    Ok(current)
 }
 
 fn evaluate_library_lock(
@@ -152,10 +176,6 @@ fn evaluate_library_lock(
     if existing.session_id == current.session_id {
         return LockEvaluation::Owned;
     }
-    if existing.machine == current.machine && existing.user == current.user {
-        return LockEvaluation::Owned;
-    }
-
     let Some(updated_ms) = parse_rfc3339_ms(&existing.updated_at) else {
         return LockEvaluation::Stale;
     };
@@ -316,8 +336,8 @@ mod tests {
     }
 
     #[test]
-    fn recovers_same_machine_user_lock() {
-        let root = test_root("recover-owner");
+    fn blocks_fresh_same_machine_user_lock_from_different_session() {
+        let root = test_root("block-same-owner");
         let existing = lock_info("previous-session", "2026-06-25T09:59:00.000Z");
         let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
         let state = ActiveLockState::default();
@@ -325,19 +345,18 @@ mod tests {
 
         let result = acquire_library_lock(
             root.to_str().unwrap(),
-            current.clone(),
+            current,
             DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
                 .unwrap()
                 .timestamp_millis(),
             false,
             &state,
-        )
-        .unwrap();
+        );
 
-        assert_eq!(result, current);
+        assert!(result.unwrap_err().starts_with(LOCK_CONFLICT_PREFIX));
         assert_eq!(
             read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
-            current
+            existing
         );
         let _ = fs::remove_dir_all(root);
     }
@@ -364,12 +383,42 @@ mod tests {
     }
 
     #[test]
-    fn force_takeover_replaces_fresh_lock_from_another_owner() {
+    fn force_takeover_does_not_replace_fresh_lock_from_another_owner() {
         let root = test_root("force-fresh");
         let existing = LibraryLockInfo {
             machine: "other-machine".to_string(),
             user: "other-user".to_string(),
             ..lock_info("other-session", "2026-06-25T09:59:00.000Z")
+        };
+        let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
+        let state = ActiveLockState::default();
+        write_test_lock(&root, &existing);
+
+        let result = acquire_library_lock(
+            root.to_str().unwrap(),
+            current,
+            DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
+                .unwrap()
+                .timestamp_millis(),
+            true,
+            &state,
+        );
+
+        assert!(result.unwrap_err().starts_with(LOCK_CONFLICT_PREFIX));
+        assert_eq!(
+            read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
+            existing
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn force_takeover_replaces_stale_lock() {
+        let root = test_root("force-stale");
+        let existing = LibraryLockInfo {
+            machine: "other-machine".to_string(),
+            user: "other-user".to_string(),
+            ..lock_info("other-session", "2026-06-25T09:50:00.000Z")
         };
         let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
         let state = ActiveLockState::default();
@@ -387,6 +436,46 @@ mod tests {
         .unwrap();
 
         assert_eq!(result, current);
+        assert_eq!(
+            read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
+            current
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn corrupt_lock_blocks_until_forced_as_stale() {
+        let root = test_root("corrupt-lock");
+        let current = lock_info("session-a", "2026-06-25T10:00:00.000Z");
+        let state = ActiveLockState::default();
+        let path = root.join(ACTIVE_LIBRARY_LOCK);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "").unwrap();
+
+        let blocked = acquire_library_lock(
+            root.to_str().unwrap(),
+            current.clone(),
+            DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
+                .unwrap()
+                .timestamp_millis(),
+            false,
+            &state,
+        );
+
+        assert!(blocked.unwrap_err().starts_with(LOCK_STALE_PREFIX));
+
+        let acquired = acquire_library_lock(
+            root.to_str().unwrap(),
+            current.clone(),
+            DateTime::parse_from_rfc3339("2026-06-25T10:00:00.000Z")
+                .unwrap()
+                .timestamp_millis(),
+            true,
+            &state,
+        )
+        .unwrap();
+
+        assert_eq!(acquired, current);
         assert_eq!(
             read_library_lock(root.join(ACTIVE_LIBRARY_LOCK).to_str().unwrap()).unwrap(),
             current

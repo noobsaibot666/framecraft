@@ -96,6 +96,12 @@ pub fn native_sqlite_execute(
     })
 }
 
+#[tauri::command]
+pub fn native_sqlite_execute_batch(db_path: String, query: String) -> Result<(), String> {
+    let conn = open_connection(&db_path)?;
+    conn.execute_batch(&query).map_err(format_sqlite_error)
+}
+
 fn open_connection(db_path: &str) -> Result<Connection, String> {
     open_portable_database(db_path)
 }
@@ -185,6 +191,40 @@ mod tests {
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .unwrap();
         assert_eq!(journal_mode.to_lowercase(), "delete");
+
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn execute_batch_rolls_back_transaction_on_error() {
+        let root =
+            std::env::temp_dir().join(format!("framecraft_native_sqlite_batch_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("framecraft.db");
+        let db_path = db_path.to_str().unwrap().to_string();
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch("CREATE TABLE projects (id TEXT PRIMARY KEY, title TEXT NOT NULL);")
+            .unwrap();
+        drop(conn);
+
+        let result = native_sqlite_execute_batch(
+            db_path.clone(),
+            "BEGIN;
+             INSERT INTO projects (id, title) VALUES ('a', 'Project A');
+             INSERT INTO missing_table (id) VALUES ('broken');
+             COMMIT;"
+                .to_string(),
+        );
+
+        assert!(result.is_err());
+        let rows = native_sqlite_select(
+            db_path.clone(),
+            "SELECT id FROM projects".to_string(),
+            vec![],
+        )
+        .unwrap();
+        assert!(rows.is_empty());
 
         let _ = std::fs::remove_file(db_path);
         let _ = std::fs::remove_dir_all(root);

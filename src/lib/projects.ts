@@ -339,24 +339,69 @@ export async function removeReferenceFromProject(projectId: string, referenceId:
 export async function resetProjectContent(projectId: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
-  await db.execute("DELETE FROM project_prompts WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM project_results WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM project_references WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM project_deliverables WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM assistant_threads WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM comparison_sessions WHERE project_id = $1", [projectId]);
-  await db.execute("DELETE FROM export_presets WHERE project_id = $1", [projectId]);
-  await db.execute(
-    `UPDATE projects
-     SET brief_text = NULL,
-         production_goal = NULL,
-         category = NULL,
-         notes = NULL,
-         tags = NULL,
-         updated_at = $1
-     WHERE id = $2`,
-    [now(), projectId]
-  );
+  await executeProjectResetTransaction(db, projectId, now());
+}
+
+async function executeProjectResetTransaction(db: {
+  execute(sql: string, values?: unknown[]): Promise<unknown>;
+  executeBatch?: (sql: string) => Promise<void>;
+}, projectId: string, updatedAt: string): Promise<void> {
+  const quotedProjectId = sqlQuote(projectId);
+  const quotedUpdatedAt = sqlQuote(updatedAt);
+  const batchSql = `
+    BEGIN;
+    DELETE FROM project_prompts WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_results WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_references WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_deliverables WHERE project_id = ${quotedProjectId};
+    DELETE FROM assistant_threads WHERE project_id = ${quotedProjectId};
+    DELETE FROM comparison_sessions WHERE project_id = ${quotedProjectId};
+    DELETE FROM export_presets WHERE project_id = ${quotedProjectId};
+    UPDATE projects
+       SET brief_text = NULL,
+           production_goal = NULL,
+           category = NULL,
+           notes = NULL,
+           tags = NULL,
+           updated_at = ${quotedUpdatedAt}
+     WHERE id = ${quotedProjectId};
+    COMMIT;
+  `;
+
+  if (typeof db.executeBatch === "function") {
+    await db.executeBatch(batchSql);
+    return;
+  }
+
+  await db.execute("BEGIN");
+  try {
+    await db.execute("DELETE FROM project_prompts WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM project_results WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM project_references WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM project_deliverables WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM assistant_threads WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM comparison_sessions WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM export_presets WHERE project_id = $1", [projectId]);
+    await db.execute(
+      `UPDATE projects
+       SET brief_text = NULL,
+           production_goal = NULL,
+           category = NULL,
+           notes = NULL,
+           tags = NULL,
+           updated_at = $1
+       WHERE id = $2`,
+      [updatedAt, projectId]
+    );
+    await db.execute("COMMIT");
+  } catch (error) {
+    await db.execute("ROLLBACK").catch(() => undefined);
+    throw error;
+  }
+}
+
+function sqlQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 export async function getReferencesForProject(projectId: string): Promise<{

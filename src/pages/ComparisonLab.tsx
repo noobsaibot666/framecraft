@@ -24,6 +24,7 @@ import {
   getBestDimension,
   getWeakestDimension,
 } from "@/lib/comparisons";
+import { summarizeComparisonSlots } from "@/lib/comparisonSummary";
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
@@ -74,25 +75,20 @@ interface SlotState {
 
 function ComparisonSlot({
   slot,
-  sessionId,
   onRemove,
   onWinner,
   onRejected,
   onNotesChange,
-  onApplyDecision,
 }: {
   slot: SlotState;
-  sessionId?: string;
   onRemove: () => void;
   onWinner: () => void;
   onRejected: () => void;
   onNotesChange: (notes: string) => void;
-  onApplyDecision: () => void;
 }) {
   const r = slot.result;
   const best = getBestDimension(r);
   const weak = getWeakestDimension(r);
-  const hasDecision = slot.isWinner || slot.isRejected;
 
   return (
     <div
@@ -144,12 +140,12 @@ function ComparisonSlot({
       </div>
 
       {/* Metadata */}
-      <div className="flex flex-col gap-4 p-4 flex-1">
+      <div className="flex flex-col gap-5 p-5 flex-1">
 
         {/* Prompt info */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <span className="font-sans text-[14px] font-semibold text-soft-white block truncate">{r.prompt_title}</span>
+            <span className="font-sans text-[15px] font-semibold text-white block truncate">{r.prompt_title}</span>
             <div className="flex items-center gap-2 mt-0.5">
               <ProviderBadge provider={r.prompt_provider} />
               <span className="font-mono text-[10px] text-readable">v{r.prompt_version}</span>
@@ -164,7 +160,7 @@ function ComparisonSlot({
 
         {/* Score bars */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[10px] text-muted tracking-widest uppercase">Review scores</span>
+          <span className="font-mono text-[10px] text-readable tracking-widest uppercase">Review scores</span>
           <ScoreBar label="REALISM" value={r.score_realism} />
           <ScoreBar label="BRAND FIT" value={r.score_brand_fit} />
           <ScoreBar label="COMPOSIT." value={r.score_composition} />
@@ -210,17 +206,17 @@ function ComparisonSlot({
           onChange={(e) => onNotesChange(e.target.value)}
           placeholder="Comparison notes…"
           rows={2}
-          className="w-full px-3 py-2 font-mono text-[11px] text-soft-white placeholder:text-dim bg-black/20 rounded-sm resize-none focus:outline-none"
+          className="w-full px-3 py-2.5 font-mono text-[12px] text-soft-white placeholder:text-readable/55 bg-black/20 rounded-sm resize-none focus:outline-none"
           style={{ border: "var(--border-default)" }}
         />
 
         {/* Decision buttons */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={slot.isWinner ? () => { /* toggle off handled by clearWinner */ } : onWinner}
+            onClick={onWinner}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] transition-precise",
+              "flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
               slot.isWinner
                 ? "bg-amber/12 text-white border-amber/45"
                 : "text-readable hover:text-white hover:bg-white/5"
@@ -228,14 +224,14 @@ function ComparisonSlot({
             style={{ border: slot.isWinner ? "1px solid rgba(223,168,58,0.55)" : "var(--border-default)" }}
           >
             <Star size={9} className={slot.isWinner ? "fill-white/50" : ""} />
-            {slot.isWinner ? "Winner" : "Mark Winner"}
+            {slot.isWinner ? "Winner" : "Winner"}
           </button>
 
           <button
             type="button"
             onClick={onRejected}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] transition-precise",
+              "flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
               slot.isRejected
                 ? "bg-red/10 text-red/70 border-red/30"
                 : "text-readable hover:text-red hover:bg-red/5"
@@ -246,19 +242,6 @@ function ComparisonSlot({
             {slot.isRejected ? "Rejected" : "Reject"}
           </button>
         </div>
-
-        {/* Apply decision */}
-        {hasDecision && sessionId && (
-          <button
-            type="button"
-            onClick={onApplyDecision}
-            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-readable hover:text-white hover:bg-white/5 transition-precise"
-            style={{ border: "var(--border-default)" }}
-          >
-            <Check size={9} />
-            Apply to Library
-          </button>
-        )}
       </div>
     </div>
   );
@@ -617,6 +600,7 @@ export function ComparisonLab() {
   const filledSlots = slots.filter(Boolean).length;
   const selectedResultIds = new Set(slots.filter(Boolean).map((s) => s!.result.result_id));
   const displaySlots = layout === "2up" ? slots.slice(0, 2) : slots;
+  const comparisonSummary = summarizeComparisonSlots(slots);
 
   // ── Render ────────────────────────────────────────────────
 
@@ -690,9 +674,14 @@ export function ComparisonLab() {
       action={
         <div className="flex items-center gap-2">
           {synced && (
-            <span className="font-mono text-[9px] text-white/40 flex items-center gap-1">
+            <span className="font-mono text-[10px] text-cyan flex items-center gap-1">
               <Check size={9} /> Applied to library
             </span>
+          )}
+          {comparisonSummary.canApplyDecisions && (
+            <Button variant="primary" size="sm" onClick={handleApplyDecision}>
+              <Check size={11} /> Apply Decisions
+            </Button>
           )}
           <div className="flex items-center rounded-sm overflow-hidden" style={{ border: "var(--border-dim)" }}>
             {(["2up", "4up"] as const).map((l) => (
@@ -729,24 +718,39 @@ export function ComparisonLab() {
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 max-w-4xl">
-          {[
-            ["1", "Import or select results"],
-            ["2", "Compare review scores"],
-            ["3", "Mark winner or reject"],
-          ].map(([n, label]) => (
-            <div key={n} className="flex items-center gap-3 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.035)" }}>
-              <span className="w-6 h-6 rounded-sm flex items-center justify-center font-mono text-[10px] text-cyan" style={{ border: "1px solid rgba(56,183,200,0.45)", background: "rgba(56,183,200,0.08)" }}>{n}</span>
-              <span className="font-mono text-[11px] text-readable">{label}</span>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Loaded</span>
+            <span className="font-sans text-[22px] font-semibold text-white">{comparisonSummary.filledCount}</span>
+          </div>
+          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.34)", background: "rgba(223,168,58,0.07)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Winner</span>
+            <span className="font-sans text-[22px] font-semibold text-amber">{comparisonSummary.winnerCount}</span>
+          </div>
+          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Rejected</span>
+            <span className="font-sans text-[22px] font-semibold text-red">{comparisonSummary.rejectedCount}</span>
+          </div>
+          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.035)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Pending</span>
+            <span className="font-sans text-[22px] font-semibold text-soft-white">{comparisonSummary.pendingDecisionCount}</span>
+          </div>
+          <div className="col-span-2 xl:col-span-1 flex flex-col gap-1 px-4 py-3 rounded-sm min-w-0" style={{ border: "1px solid rgba(56,183,200,0.28)", background: "rgba(56,183,200,0.045)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Top score</span>
+            <span className="font-sans text-[14px] font-semibold text-white truncate">
+              {comparisonSummary.topScoreLabel ?? "No result"}
+            </span>
+            <span className="font-mono text-[10px] text-cyan">
+              {comparisonSummary.topScore !== null ? `${comparisonSummary.topScore}/5 overall` : "Add images to compare"}
+            </span>
+          </div>
         </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-6 min-w-0">
+      <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-7 min-w-0">
 
         {/* Left: result picker */}
         {(availableResults.length > 0 || projectId) && (
-          <div className="flex flex-col gap-4 min-w-0">
+          <div className="flex flex-col gap-5 min-w-0">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -756,19 +760,19 @@ export function ComparisonLab() {
                 if (e.dataTransfer.files.length) handleUploadFiles(e.dataTransfer.files);
               }}
               disabled={uploading}
-              className="flex flex-col items-center justify-center gap-2 rounded-card py-7 transition-precise disabled:opacity-60"
+              className="flex flex-col items-center justify-center gap-2 rounded-card py-8 transition-precise disabled:opacity-60 hover:bg-cyan/6"
               style={{ border: "2px dashed rgba(56,183,200,0.35)", background: "rgba(56,183,200,0.035)" }}
             >
               <Upload size={18} className="text-cyan" />
-              <span className="font-mono text-[11px] text-readable">{uploading ? "Importing..." : "Import image"}</span>
-              <span className="font-mono text-[10px] text-muted">Creates a project result and fills a slot</span>
+              <span className="font-mono text-[12px] text-soft-white">{uploading ? "Importing..." : "Import image"}</span>
+              <span className="font-mono text-[10px] text-readable">Creates a project result and fills a slot</span>
             </button>
             {uploadError && (
               <span className="font-mono text-[11px] text-red leading-snug">{uploadError}</span>
             )}
             <div className="flex flex-col gap-1">
               <span className="system-label">PROJECT RESULTS</span>
-              <span className="font-mono text-[10px] text-muted">Scores are defined in Result Review.</span>
+              <span className="font-mono text-[10px] text-readable">Add images here, decide on cards, apply once.</span>
             </div>
             {loadingResults ? (
               <span className="font-mono text-[11px] text-muted">Loading...</span>
@@ -801,12 +805,10 @@ export function ComparisonLab() {
                 <ComparisonSlot
                   key={slot.result.result_id}
                   slot={slot}
-                  sessionId={activeSessionId}
                   onRemove={() => handleRemoveSlot(i)}
                   onWinner={() => handleWinner(i)}
                   onRejected={() => handleRejected(i)}
                   onNotesChange={(n) => handleNotesChange(i, n)}
-                  onApplyDecision={() => handleApplyDecision()}
                 />
               ) : (
                 <EmptySlot

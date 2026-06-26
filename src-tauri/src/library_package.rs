@@ -1,4 +1,8 @@
 use crate::portable_sqlite::open_portable_database;
+use rusqlite::{
+    params_from_iter,
+    types::{Value, ValueRef},
+};
 use serde::Serialize;
 use std::{
     fs,
@@ -48,6 +52,34 @@ pub struct CopyLibraryPackageResult {
     paths: LibraryPathsDto,
     copied_files: Vec<String>,
     validation: LibraryValidationResult,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryMergeReport {
+    source_base_dir: String,
+    target_base_dir: String,
+    prompts: MergeTableReport,
+    id_remaps: Vec<MergeIdRemap>,
+    errors: Vec<String>,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeTableReport {
+    imported: u32,
+    skipped_duplicates: u32,
+    remapped: u32,
+    failed: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeIdRemap {
+    table: String,
+    source_id: String,
+    target_id: String,
+    reason: String,
 }
 
 #[derive(Serialize)]
@@ -142,6 +174,14 @@ pub fn backup_library_package_native(
     copy_library_package(&source_base_dir, &target, &result_files, &reference_files)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+pub fn merge_library_package_native(
+    source_base_dir: String,
+    target_base_dir: String,
+) -> Result<LibraryMergeReport, String> {
+    merge_library_package(&source_base_dir, &target_base_dir)
+}
+
 fn copy_library_package(
     source_base_dir: &str,
     target_base_dir: &str,
@@ -186,6 +226,210 @@ fn copy_library_package(
         copied_files,
         validation,
     })
+}
+
+const PROMPT_COLUMNS: [&str; 30] = [
+    "id",
+    "title",
+    "description",
+    "provider",
+    "category",
+    "use_case",
+    "prompt_text",
+    "avoidance_text",
+    "aspect_ratio",
+    "model_version",
+    "camera",
+    "lens",
+    "lighting",
+    "style_ref",
+    "character_ref",
+    "image_ref",
+    "parameters",
+    "tags",
+    "rating",
+    "ai_look_risk",
+    "reuse_potential",
+    "is_recipe",
+    "is_winner",
+    "is_failed",
+    "failure_notes",
+    "notes",
+    "version",
+    "parent_id",
+    "created_at",
+    "updated_at",
+];
+
+#[derive(Clone, Debug, PartialEq)]
+struct TableRecord {
+    values: Vec<Value>,
+}
+
+fn merge_library_package(
+    source_base_dir: &str,
+    target_base_dir: &str,
+) -> Result<LibraryMergeReport, String> {
+    let source = resolve_library_paths(source_base_dir);
+    let target = resolve_library_paths(target_base_dir);
+    if source.base_dir == target.base_dir {
+        return Err("Source and target libraries must be different.".to_string());
+    }
+    assert_valid_library_for_merge("source", &source.base_dir)?;
+    assert_valid_library_for_merge("target", &target.base_dir)?;
+
+    let source_conn = open_portable_database(&source.db_path)?;
+    let mut target_conn = open_portable_database(&target.db_path)?;
+    let mut report = LibraryMergeReport {
+        source_base_dir: source.base_dir,
+        target_base_dir: target.base_dir,
+        prompts: MergeTableReport::default(),
+        id_remaps: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    merge_prompt_rows(&source_conn, &mut target_conn, &mut report)?;
+    Ok(report)
+}
+
+fn assert_valid_library_for_merge(label: &str, base_dir: &str) -> Result<(), String> {
+    let validation = validate_library_package(base_dir);
+    if validation.ok {
+        Ok(())
+    } else {
+        Err(format!(
+            "Invalid {label} library: {}",
+            validation.errors.join(", ")
+        ))
+    }
+}
+
+fn merge_prompt_rows(
+    source_conn: &rusqlite::Connection,
+    target_conn: &mut rusqlite::Connection,
+    report: &mut LibraryMergeReport,
+) -> Result<(), String> {
+    let source_rows = read_prompt_records(source_conn)?;
+    let transaction = target_conn
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for source_row in source_rows {
+        let source_id = value_as_string(&source_row.values[0])?;
+        match read_record_by_id(&transaction, "prompts", &PROMPT_COLUMNS, &source_id)? {
+            Some(target_row) if target_row == source_row => {
+                report.prompts.skipped_duplicates += 1;
+            }
+            Some(_) => {
+                let new_id = generate_sqlite_id(&transaction)?;
+                let mut remapped_row = source_row.clone();
+                remapped_row.values[0] = Value::Text(new_id.clone());
+                insert_table_record(&transaction, "prompts", &PROMPT_COLUMNS, &remapped_row)?;
+                report.prompts.imported += 1;
+                report.prompts.remapped += 1;
+                report.id_remaps.push(MergeIdRemap {
+                    table: "prompts".to_string(),
+                    source_id,
+                    target_id: new_id,
+                    reason: "id_collision".to_string(),
+                });
+            }
+            None => {
+                insert_table_record(&transaction, "prompts", &PROMPT_COLUMNS, &source_row)?;
+                report.prompts.imported += 1;
+            }
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn read_prompt_records(conn: &rusqlite::Connection) -> Result<Vec<TableRecord>, String> {
+    let sql = format!(
+        "SELECT {} FROM prompts WHERE COALESCE(is_recipe, 0) = 0 ORDER BY created_at, id",
+        PROMPT_COLUMNS.join(", ")
+    );
+    read_records_with_sql(conn, &sql, PROMPT_COLUMNS.len())
+}
+
+fn read_records_with_sql(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    column_count: usize,
+) -> Result<Vec<TableRecord>, String> {
+    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| record_from_row(row, column_count))
+        .map_err(|error| error.to_string())?;
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(row.map_err(|error| error.to_string())?);
+    }
+    Ok(records)
+}
+
+fn read_record_by_id(
+    conn: &rusqlite::Connection,
+    table: &str,
+    columns: &[&str],
+    id: &str,
+) -> Result<Option<TableRecord>, String> {
+    let sql = format!("SELECT {} FROM {table} WHERE id = ?1", columns.join(", "));
+    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    match statement.query_row([id], |row| record_from_row(row, columns.len())) {
+        Ok(record) => Ok(Some(record)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn insert_table_record(
+    conn: &rusqlite::Connection,
+    table: &str,
+    columns: &[&str],
+    record: &TableRecord,
+) -> Result<(), String> {
+    let placeholders = (1..=columns.len())
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "INSERT INTO {table} ({}) VALUES ({placeholders})",
+        columns.join(", ")
+    );
+    conn.execute(&sql, params_from_iter(record.values.iter()))
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn record_from_row(row: &rusqlite::Row<'_>, len: usize) -> rusqlite::Result<TableRecord> {
+    let mut values = Vec::with_capacity(len);
+    for index in 0..len {
+        values.push(value_from_ref(row.get_ref(index)?));
+    }
+    Ok(TableRecord { values })
+}
+
+fn value_from_ref(value: ValueRef<'_>) -> Value {
+    match value {
+        ValueRef::Null => Value::Null,
+        ValueRef::Integer(value) => Value::Integer(value),
+        ValueRef::Real(value) => Value::Real(value),
+        ValueRef::Text(value) => Value::Text(String::from_utf8_lossy(value).to_string()),
+        ValueRef::Blob(value) => Value::Blob(value.to_vec()),
+    }
+}
+
+fn value_as_string(value: &Value) -> Result<String, String> {
+    match value {
+        Value::Text(value) => Ok(value.clone()),
+        _ => Err("Expected text ID while merging library table.".to_string()),
+    }
+}
+
+fn generate_sqlite_id(conn: &rusqlite::Connection) -> Result<String, String> {
+    conn.query_row("SELECT lower(hex(randomblob(16)))", [], |row| row.get(0))
+        .map_err(|error| error.to_string())
 }
 
 fn create_library_package(
@@ -631,6 +875,80 @@ mod tests {
     }
 
     #[test]
+    fn merge_imports_prompt_into_destination_library() {
+        let root = test_root("merge-prompt");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "prompt-a", "Source Prompt");
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.prompts.imported, 1);
+        assert_eq!(report.prompts.skipped_duplicates, 0);
+        assert_eq!(report.prompts.remapped, 0);
+        assert_eq!(
+            prompt_title(&target_paths.db_path, "prompt-a").as_deref(),
+            Some("Source Prompt")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_skips_identical_prompt_id_duplicate() {
+        let root = test_root("merge-identical-prompt");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "same-prompt", "Same Prompt");
+        insert_prompt(&target_paths.db_path, "same-prompt", "Same Prompt");
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.prompts.imported, 0);
+        assert_eq!(report.prompts.skipped_duplicates, 1);
+        assert_eq!(report.prompts.remapped, 0);
+        assert_eq!(prompt_count(&target_paths.db_path), 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_remaps_prompt_id_collision_with_different_content() {
+        let root = test_root("merge-prompt-collision");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "shared-id", "Source Prompt");
+        insert_prompt(&target_paths.db_path, "shared-id", "Target Prompt");
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.prompts.imported, 1);
+        assert_eq!(report.prompts.skipped_duplicates, 0);
+        assert_eq!(report.prompts.remapped, 1);
+        assert_eq!(report.id_remaps.len(), 1);
+        assert_eq!(report.id_remaps[0].table, "prompts");
+        assert_eq!(report.id_remaps[0].source_id, "shared-id");
+        assert_ne!(report.id_remaps[0].target_id, "shared-id");
+        assert_eq!(prompt_count(&target_paths.db_path), 2);
+        assert_eq!(
+            prompt_title(&target_paths.db_path, "shared-id").as_deref(),
+            Some("Target Prompt")
+        );
+        assert_eq!(
+            prompt_title(&target_paths.db_path, &report.id_remaps[0].target_id).as_deref(),
+            Some("Source Prompt")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn rejects_unsafe_media_paths() {
         assert!(assert_safe_relative_media_path("../escape.png").is_err());
         assert!(assert_safe_relative_media_path("/escape.png").is_err());
@@ -657,5 +975,33 @@ mod tests {
             |_| Ok(()),
         )
         .is_ok()
+    }
+
+    fn insert_prompt(db_path: &str, id: &str, title: &str) {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "INSERT INTO prompts (id, title, provider, prompt_text, created_at, updated_at)
+             VALUES (?1, ?2, 'midjourney', ?3, '2026-06-26T00:00:00Z', '2026-06-26T00:00:00Z')",
+            (id, title, format!("Prompt text for {title}")),
+        )
+        .unwrap();
+    }
+
+    fn prompt_title(db_path: &str, id: &str) -> Option<String> {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row("SELECT title FROM prompts WHERE id = ?1", [id], |row| {
+            row.get(0)
+        })
+        .ok()
+    }
+
+    fn prompt_count(db_path: &str) -> i64 {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM prompts WHERE COALESCE(is_recipe, 0) = 0",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
     }
 }

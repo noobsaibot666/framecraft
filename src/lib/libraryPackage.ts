@@ -54,6 +54,28 @@ export interface CopyLibraryPackageResult {
   validation: LibraryValidationResult;
 }
 
+export interface LibraryMergeReport {
+  sourceBaseDir: string;
+  targetBaseDir: string;
+  prompts: MergeTableReport;
+  idRemaps: MergeIdRemap[];
+  errors: string[];
+}
+
+export interface MergeTableReport {
+  imported: number;
+  skippedDuplicates: number;
+  remapped: number;
+  failed: number;
+}
+
+export interface MergeIdRemap {
+  table: string;
+  sourceId: string;
+  targetId: string;
+  reason: string;
+}
+
 export interface BackupLibraryPackageInput {
   sourceBaseDir: string;
   resultFiles: string[];

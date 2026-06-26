@@ -15,6 +15,7 @@ import {
 import {
   buildPortableMediaPathRewrites,
   listRelativeMediaFilenames,
+  type LibraryMergeReport,
   type LibraryValidationResult,
   type PortableMediaPathRewrite,
 } from "./libraryPackage";
@@ -22,6 +23,7 @@ import {
   backupLibraryPackageNative,
   copyLibraryPackageNative,
   createLibraryPackageNative,
+  mergeLibraryPackageNative,
   migrateAppDataToLibraryNative,
   repairLibraryDatabaseSchemaNative,
   validateLibraryPackageNative,
@@ -194,6 +196,23 @@ export async function exportActiveLibraryFromDialog(): Promise<string | null> {
 
 export async function restoreLibraryFromDialog(): Promise<SelectValidatedLibraryResult | null> {
   return openLibraryFromDialog();
+}
+
+export async function importLibraryIntoActiveFromDialog(): Promise<LibraryMergeReport | null> {
+  if (!isTauri()) throw new Error("Library merge import can only run in the native app.");
+  const state = await getLibrarySettingsState();
+  if (state.selection.mode !== "portable") throw new Error("Select a portable library before importing another library into it.");
+  if (state.validation && !state.validation.ok) throw new Error(state.validation.errors.join(", "));
+  const sourceBaseDir = await open({
+    title: "Import Library Into Current",
+    directory: true,
+    multiple: false,
+  });
+  if (!sourceBaseDir || Array.isArray(sourceBaseDir)) return null;
+  return mergeLibraryPackageNative({
+    sourceBaseDir,
+    targetBaseDir: state.paths.baseDir,
+  });
 }
 
 export async function repairActiveLibraryDatabaseSchema(): Promise<LibraryValidationResult> {

@@ -1,5 +1,6 @@
 import type {
   CopyLibraryPackageResult,
+  LibraryMergeReport,
   LibraryValidationResult,
   MigrateAppDataResult,
 } from "./libraryPackage";
@@ -47,4 +48,12 @@ export async function backupLibraryPackageNative(input: {
 }): Promise<CopyLibraryPackageResult> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<CopyLibraryPackageResult>("backup_library_package_native", input);
+}
+
+export async function mergeLibraryPackageNative(input: {
+  sourceBaseDir: string;
+  targetBaseDir: string;
+}): Promise<LibraryMergeReport> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<LibraryMergeReport>("merge_library_package_native", input);
 }

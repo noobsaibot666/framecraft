@@ -28,6 +28,7 @@ import {
   formatLibraryActionError,
   getActiveSharedIngestStatus,
   getLibrarySettingsState,
+  importLibraryIntoActiveFromDialog,
   isRepairableLibraryPackageError,
   migrateCurrentDataToLibraryFromDialog,
   openLibraryFromDialog,
@@ -184,10 +185,10 @@ export function Settings() {
     setSharedIngestStatus(await getActiveSharedIngestStatus().catch(() => null));
   };
 
-  const runLibraryAction = async (
+  const runLibraryAction = async <T,>(
     label: string,
-    action: () => Promise<string | null | { restartRequired: true }>,
-    message?: (result: string | { restartRequired: true }) => string
+    action: () => Promise<T | null>,
+    message?: (result: T) => string
   ) => {
     setLibraryBusy(label);
     setLibraryError(null);
@@ -200,7 +201,9 @@ export function Settings() {
             ? message(result)
             : typeof result === "string"
               ? "Library package created. Use Migrate Current Data to make it active with your current work."
-              : "Library selected. Restart Framecraft to use it."
+              : isRestartResult(result)
+                ? "Library selected. Restart Framecraft to use it."
+                : "Library action completed."
         );
       }
       await refreshLibraryState();
@@ -211,6 +214,9 @@ export function Settings() {
       setLibraryBusy(null);
     }
   };
+
+  const isRestartResult = (result: unknown): result is { restartRequired: true } =>
+    Boolean(result && typeof result === "object" && "restartRequired" in result);
 
   const handleExport = async () => {
     setExporting(true);
@@ -260,6 +266,16 @@ export function Settings() {
 
   const handleRestoreLibrary = () => {
     runLibraryAction("restore", restoreLibraryFromDialog, () => "Backup/library selected. Restart Framecraft to use it.");
+  };
+
+  const handleImportLibraryIntoActive = () => {
+    runLibraryAction(
+      "merge-library",
+      importLibraryIntoActiveFromDialog,
+      (report) => report
+        ? `Library merged. Prompts imported ${report.prompts.imported}, skipped ${report.prompts.skippedDuplicates}, remapped ${report.prompts.remapped}.`
+        : "Library import cancelled."
+    );
   };
 
   const handleRepairLibraryPackage = () => {
@@ -550,6 +566,15 @@ export function Settings() {
               <Button variant="ghost" size="sm" onClick={handleExportLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
                 <Download size={11} />
                 {libraryBusy === "export" ? "Exporting..." : "Export Copy"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleImportLibraryIntoActive}
+                disabled={!!libraryBusy || !libraryState?.nativeAvailable || libraryState?.selection.mode !== "portable"}
+              >
+                <Upload size={11} />
+                {libraryBusy === "merge-library" ? "Importing..." : "Import Library"}
               </Button>
               <Button
                 variant="ghost"

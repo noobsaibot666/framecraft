@@ -8,6 +8,8 @@ Local-first Tauri 2 desktop app for AI image/video prompt engineering. React 19 
 
 **All migrations must be registered in `src-tauri/src/lib.rs`** — there is no auto-discovery. Missing entries = tables never exist in the binary.
 
+**NAS portable libraries can fail if the DB header is still WAL-mode without sidecars.** Symptom: macOS/SMB path is readable/writable, but SQLite returns `unable to open database file`, with `WAL exists: false` and `SHM exists: false`. Check `src-tauri/src/portable_sqlite.rs`: `open_portable_database` normalizes this stale WAL header by backing up the DB under `backups/sqlite-journal-repair-*`, converting a local temp copy to `journal_mode=DELETE`, running `PRAGMA integrity_check`, and copying it back.
+
 **Never use `(VALUES ...) AS t(col)` in migration SQL.** SQLite rejects this syntax. Use `SELECT ... UNION ALL SELECT ...` instead:
 ```sql
 -- WRONG

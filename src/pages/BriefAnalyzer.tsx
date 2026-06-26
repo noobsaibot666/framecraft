@@ -8,6 +8,7 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import type { BriefResult, GeneratedPrompt, SuggestedRecipe } from "@/lib/aiResultParsers";
 import { analyzeBrief, type BriefContent } from "@/lib/analyzeBrief";
+import { buildBriefPromptAsset, buildBriefRecipeAsset } from "@/lib/analysisAssets";
 import { getProjects, createProject, addPromptToProject } from "@/lib/projects";
 import type { Project } from "@/types";
 import { cn } from "@/lib/utils";
@@ -160,13 +161,8 @@ export function BriefAnalyzer() {
   };
 
   const handleImport = async (p: GeneratedPrompt, idx: number) => {
-    await create({
-      title: p.title,
-      prompt_text: p.prompt,
-      provider: "midjourney",
-      tags: p.tags,
-      aspect_ratio: p.aspect_ratio || undefined,
-    });
+    if (!result) return;
+    await create(buildBriefPromptAsset(p, result));
     setImportedIds((prev) => new Set(prev).add(idx));
   };
 
@@ -186,13 +182,8 @@ export function BriefAnalyzer() {
   };
 
   const handleSaveRecipe = async (recipe: SuggestedRecipe, idx: number) => {
-    await create({
-      title: recipe.title,
-      prompt_text: recipe.token_sequence.join(", "),
-      provider: "midjourney",
-      is_recipe: true,
-      notes: recipe.description,
-    });
+    if (!result) return;
+    await create(buildBriefRecipeAsset(recipe, result));
     setSavedRecipeIds((prev) => new Set(prev).add(idx));
   };
 
@@ -209,13 +200,7 @@ export function BriefAnalyzer() {
     try {
       for (let i = 0; i < result.prompts.length; i++) {
         const p = result.prompts[i];
-        const id = await create({
-          title: p.title,
-          prompt_text: p.prompt,
-          provider: "midjourney",
-          tags: p.tags,
-          aspect_ratio: p.aspect_ratio || undefined,
-        });
+        const id = await create(buildBriefPromptAsset(p, result));
         await addPromptToProject(projectId, id);
         setImportedIds((prev) => new Set(prev).add(i));
       }

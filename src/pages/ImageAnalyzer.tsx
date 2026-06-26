@@ -9,6 +9,7 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
+import { buildImagePromptAsset } from "@/lib/analysisAssets";
 import { createReference } from "@/lib/references";
 import { cn } from "@/lib/utils";
 
@@ -190,17 +191,7 @@ export function ImageAnalyzer() {
     if (!result) return;
     setImporting(true);
     try {
-      await create({
-        title: result.title,
-        prompt_text: result.suggested_prompt,
-        provider: (result.provider as "midjourney") ?? "midjourney",
-        tags: editableTags,
-        notes: result.style_notes,
-        aspect_ratio: result.aspect_ratio ?? undefined,
-        avoidance_text: result.avoidance_suggestions?.length
-          ? result.avoidance_suggestions.join(", ")
-          : undefined,
-      });
+      await create(buildImagePromptAsset(result, editableTags));
       setImported(true);
     } finally {
       setImporting(false);
@@ -211,13 +202,7 @@ export function ImageAnalyzer() {
     if (!result?.variation_prompt) return;
     setImportingVariation(true);
     try {
-      await create({
-        title: `${result.title} — variation`,
-        prompt_text: result.variation_prompt,
-        provider: (result.provider as "midjourney") ?? "midjourney",
-        tags: editableTags,
-        aspect_ratio: result.aspect_ratio ?? undefined,
-      });
+      await create(buildImagePromptAsset(result, editableTags, result.variation_prompt, `${result.title} - variation`));
       setImportedVariation(true);
     } finally {
       setImportingVariation(false);

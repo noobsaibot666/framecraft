@@ -61,6 +61,7 @@ pub struct LibraryMergeReport {
     target_base_dir: String,
     prompts: MergeTableReport,
     results: MergeTableReport,
+    references: MergeTableReport,
     id_remaps: Vec<MergeIdRemap>,
     errors: Vec<String>,
 }
@@ -282,6 +283,25 @@ const RESULT_COLUMNS: [&str; 17] = [
     "created_at",
 ];
 
+const REFERENCE_COLUMNS: [&str; 16] = [
+    "id",
+    "title",
+    "description",
+    "kind",
+    "file_data",
+    "thumbnail_data",
+    "provider",
+    "category",
+    "source_url",
+    "tags",
+    "rating",
+    "best_use",
+    "risk_notes",
+    "notes",
+    "created_at",
+    "updated_at",
+];
+
 #[derive(Clone, Debug, PartialEq)]
 struct TableRecord {
     values: Vec<Value>,
@@ -306,12 +326,20 @@ fn merge_library_package(
         target_base_dir: target.base_dir.clone(),
         prompts: MergeTableReport::default(),
         results: MergeTableReport::default(),
+        references: MergeTableReport::default(),
         id_remaps: Vec::new(),
         errors: Vec::new(),
     };
 
     merge_prompt_rows(&source_conn, &mut target_conn, &mut report)?;
     merge_result_rows(
+        &source_conn,
+        &mut target_conn,
+        &source,
+        &target,
+        &mut report,
+    )?;
+    merge_reference_rows(
         &source_conn,
         &mut target_conn,
         &source,
@@ -420,6 +448,72 @@ fn merge_result_rows(
     transaction.commit().map_err(|error| error.to_string())
 }
 
+fn merge_reference_rows(
+    source_conn: &rusqlite::Connection,
+    target_conn: &mut rusqlite::Connection,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+    report: &mut LibraryMergeReport,
+) -> Result<(), String> {
+    let source_rows = read_table_records(
+        source_conn,
+        "\"references\"",
+        &REFERENCE_COLUMNS,
+        "created_at",
+    )?;
+    let transaction = target_conn
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for source_row in source_rows {
+        let source_id = value_as_string(&source_row.values[0])?;
+        let mut merge_row = source_row.clone();
+        rewrite_reference_media_paths(&mut merge_row, source, target)?;
+
+        match read_record_by_id(
+            &transaction,
+            "\"references\"",
+            &REFERENCE_COLUMNS,
+            &source_id,
+        )? {
+            Some(target_row) if target_row == merge_row => {
+                report.references.skipped_duplicates += 1;
+            }
+            Some(_) => {
+                let new_id = generate_sqlite_id(&transaction)?;
+                copy_reference_media_files(&merge_row, source, target)?;
+                merge_row.values[0] = Value::Text(new_id.clone());
+                insert_table_record(
+                    &transaction,
+                    "\"references\"",
+                    &REFERENCE_COLUMNS,
+                    &merge_row,
+                )?;
+                report.references.imported += 1;
+                report.references.remapped += 1;
+                report.id_remaps.push(MergeIdRemap {
+                    table: "references".to_string(),
+                    source_id,
+                    target_id: new_id,
+                    reason: "id_collision".to_string(),
+                });
+            }
+            None => {
+                copy_reference_media_files(&merge_row, source, target)?;
+                insert_table_record(
+                    &transaction,
+                    "\"references\"",
+                    &REFERENCE_COLUMNS,
+                    &merge_row,
+                )?;
+                report.references.imported += 1;
+            }
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())
+}
+
 fn remap_result_prompt_id(row: &mut TableRecord, remaps: &[MergeIdRemap]) -> Result<(), String> {
     let prompt_id = value_as_string(&row.values[1])?;
     if let Some(remap) = remaps
@@ -438,6 +532,24 @@ fn rewrite_result_media_paths(
 ) -> Result<(), String> {
     rewrite_media_value(&mut row.values[2], &source.results_dir, &target.results_dir)?;
     rewrite_media_value(&mut row.values[3], &source.results_dir, &target.results_dir)?;
+    Ok(())
+}
+
+fn rewrite_reference_media_paths(
+    row: &mut TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<(), String> {
+    rewrite_media_value(
+        &mut row.values[4],
+        &source.references_dir,
+        &target.references_dir,
+    )?;
+    rewrite_media_value(
+        &mut row.values[5],
+        &source.references_dir,
+        &target.references_dir,
+    )?;
     Ok(())
 }
 
@@ -465,6 +577,24 @@ fn copy_result_media_files(
 ) -> Result<(), String> {
     copy_rewritten_media_value(&row.values[2], &source.results_dir, &target.results_dir)?;
     copy_rewritten_media_value(&row.values[3], &source.results_dir, &target.results_dir)?;
+    Ok(())
+}
+
+fn copy_reference_media_files(
+    row: &TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<(), String> {
+    copy_rewritten_media_value(
+        &row.values[4],
+        &source.references_dir,
+        &target.references_dir,
+    )?;
+    copy_rewritten_media_value(
+        &row.values[5],
+        &source.references_dir,
+        &target.references_dir,
+    )?;
     Ok(())
 }
 
@@ -1222,6 +1352,126 @@ mod tests {
     }
 
     #[test]
+    fn merge_imports_reference_and_copies_media() {
+        let root = test_root("merge-reference-media");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        fs::create_dir_all(source.join("references/mood")).unwrap();
+        fs::write(source.join("references/mood/ref.png"), "reference").unwrap();
+        fs::write(source.join("references/mood/ref-thumb.png"), "thumb").unwrap();
+        insert_reference(
+            &source_paths.db_path,
+            "ref-a",
+            "Source Reference",
+            Some(&format!("{}mood/ref.png", source_paths.references_dir)),
+            Some(&format!(
+                "{}mood/ref-thumb.png",
+                source_paths.references_dir
+            )),
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.references.imported, 1);
+        assert_eq!(report.references.skipped_duplicates, 0);
+        assert_eq!(report.references.remapped, 0);
+        assert_eq!(
+            reference_paths(&target_paths.db_path, "ref-a"),
+            Some((
+                "Source Reference".to_string(),
+                Some(format!("{}mood/ref.png", target_paths.references_dir)),
+                Some(format!("{}mood/ref-thumb.png", target_paths.references_dir)),
+            ))
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("references/mood/ref.png")).unwrap(),
+            "reference"
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("references/mood/ref-thumb.png")).unwrap(),
+            "thumb"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_skips_identical_reference_id_duplicate() {
+        let root = test_root("merge-reference-duplicate");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_reference(
+            &source_paths.db_path,
+            "same-ref",
+            "Same Reference",
+            None,
+            None,
+        );
+        insert_reference(
+            &target_paths.db_path,
+            "same-ref",
+            "Same Reference",
+            None,
+            None,
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.references.imported, 0);
+        assert_eq!(report.references.skipped_duplicates, 1);
+        assert_eq!(reference_count(&target_paths.db_path), 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_remaps_reference_id_collision_with_different_content() {
+        let root = test_root("merge-reference-collision");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_reference(
+            &source_paths.db_path,
+            "shared-ref",
+            "Source Reference",
+            None,
+            None,
+        );
+        insert_reference(
+            &target_paths.db_path,
+            "shared-ref",
+            "Target Reference",
+            None,
+            None,
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.references.imported, 1);
+        assert_eq!(report.references.remapped, 1);
+        let remap = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.table == "references" && remap.source_id == "shared-ref")
+            .unwrap();
+        assert_ne!(remap.target_id, "shared-ref");
+        assert_eq!(reference_count(&target_paths.db_path), 2);
+        assert_eq!(
+            reference_paths(&target_paths.db_path, &remap.target_id)
+                .map(|row| row.0)
+                .as_deref(),
+            Some("Source Reference")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn rejects_unsafe_media_paths() {
         assert!(assert_safe_relative_media_path("../escape.png").is_err());
         assert!(assert_safe_relative_media_path("/escape.png").is_err());
@@ -1276,6 +1526,22 @@ mod tests {
         .unwrap();
     }
 
+    fn insert_reference(
+        db_path: &str,
+        id: &str,
+        title: &str,
+        file_data: Option<&str>,
+        thumbnail_data: Option<&str>,
+    ) {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "INSERT INTO \"references\" (id, title, kind, file_data, thumbnail_data, rating, created_at, updated_at)
+             VALUES (?1, ?2, 'image', ?3, ?4, 0, '2026-06-26T00:00:00Z', '2026-06-26T00:00:00Z')",
+            (id, title, file_data, thumbnail_data),
+        )
+        .unwrap();
+    }
+
     fn prompt_title(db_path: &str, id: &str) -> Option<String> {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.query_row("SELECT title FROM prompts WHERE id = ?1", [id], |row| {
@@ -1311,6 +1577,25 @@ mod tests {
     fn result_count(db_path: &str) -> i64 {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.query_row("SELECT COUNT(*) FROM results", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    fn reference_paths(
+        db_path: &str,
+        id: &str,
+    ) -> Option<(String, Option<String>, Option<String>)> {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT title, file_data, thumbnail_data FROM \"references\" WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok()
+    }
+
+    fn reference_count(db_path: &str) -> i64 {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM \"references\"", [], |row| row.get(0))
             .unwrap()
     }
 }

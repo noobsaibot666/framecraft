@@ -273,7 +273,7 @@ export function Settings() {
       "merge-library",
       importLibraryIntoActiveFromDialog,
       (report) => report
-        ? `Library merged. Prompts ${report.prompts.imported} imported, ${report.prompts.skippedDuplicates} skipped, ${report.prompts.remapped} remapped. Results ${report.results.imported} imported, ${report.results.skippedDuplicates} skipped, ${report.results.remapped} remapped.`
+        ? `Library merged. Prompts ${report.prompts.imported} imported, ${report.prompts.skippedDuplicates} skipped, ${report.prompts.remapped} remapped. Results ${report.results.imported} imported, ${report.results.skippedDuplicates} skipped, ${report.results.remapped} remapped. References ${report.references.imported} imported, ${report.references.skippedDuplicates} skipped, ${report.references.remapped} remapped.`
         : "Library import cancelled."
     );
   };

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, ChevronDown, Archive, X } from "lucide-react";
+import { Plus, ChevronDown, Archive, ArchiveRestore, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { getProjects, searchProjects, createProject, updateProject } from "@/lib/projects";
+import { getProjects, searchProjects, createProject, updateProject, deleteProject } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, ProjectFilters } from "@/types";
 
@@ -28,7 +28,6 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "active",   label: "Active" },
   { value: "draft",    label: "Draft" },
   { value: "review",   label: "Review" },
-  { value: "archived", label: "Archived" },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────
@@ -54,10 +53,12 @@ function FilterSelect({ label, value, onChange, options }: {
   );
 }
 
-function ProjectCard({ project, onClick, onArchive }: {
+function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   project: Project;
+  view: "active" | "archived";
   onClick: () => void;
   onArchive: () => void;
+  onDelete: () => void;
 }) {
   const isArchived = project.status === "archived";
 
@@ -81,12 +82,22 @@ function ProjectCard({ project, onClick, onArchive }: {
             <span className={cn("font-sans text-[15px] font-semibold leading-snug", STATUS_COLORS[project.status])}>
               {project.title}
             </span>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); onArchive(); }}
-              className="text-muted hover:text-cyan transition-precise opacity-0 group-hover:opacity-100 shrink-0"
-              title={isArchived ? "Un-archive" : "Archive"}>
-              {isArchived ? <X size={10} /> : <Archive size={10} />}
-            </button>
+            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-precise shrink-0">
+              <button type="button"
+                onClick={(e) => { e.stopPropagation(); onArchive(); }}
+                className="text-muted hover:text-cyan transition-precise"
+                title={view === "archived" ? "Restore" : "Archive"}>
+                {view === "archived" ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+              </button>
+              {view === "archived" && (
+                <button type="button"
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="text-muted hover:text-red transition-precise"
+                  title="Delete permanently">
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Client / Campaign */}
@@ -221,11 +232,13 @@ export function ProjectLibrary() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [view, setView] = useState<"active" | "archived">("active");
   const [showCreate, setShowCreate] = useState(false);
 
   const buildFilters = (): ProjectFilters => {
     const f: ProjectFilters = {};
-    if (statusFilter !== "all") f.status = statusFilter as ProjectStatus;
+    if (view === "archived") f.status = "archived";
+    else if (statusFilter !== "all") f.status = statusFilter as ProjectStatus;
     return f;
   };
 
@@ -236,18 +249,25 @@ export function ProjectLibrary() {
       const results = search.trim()
         ? await searchProjects(search.trim(), filters)
         : await getProjects(filters);
-      setProjects(results);
+      setProjects(view === "active" ? results.filter((project) => project.status !== "archived") : results);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [search, statusFilter]);
+  useEffect(() => { load(); }, [search, statusFilter, view]);
 
   const handleArchive = async (project: Project) => {
     const nextStatus: ProjectStatus = project.status === "archived" ? "draft" : "archived";
     await updateProject(project.id, { status: nextStatus });
-    setProjects((prev) => prev.map((p) => p.id === project.id ? { ...p, status: nextStatus } : p));
+    setProjects((prev) => prev.filter((p) => p.id !== project.id));
+  };
+
+  const handleDelete = async (project: Project) => {
+    if (project.status !== "archived") return;
+    if (!window.confirm(`Delete archived project "${project.title}" permanently?`)) return;
+    await deleteProject(project.id);
+    setProjects((prev) => prev.filter((p) => p.id !== project.id));
   };
 
   const handleCreated = (id: string) => {
@@ -258,11 +278,26 @@ export function ProjectLibrary() {
   return (
     <PageContainer
       title="Projects"
-      subtitle="CAMPAIGN WORKSPACE"
+      subtitle={view === "archived" ? "ARCHIVED PROJECTS" : "CAMPAIGN WORKSPACE"}
       action={
-        <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
-          <Plus size={11} /> New Project
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={view === "archived" ? "ghost" : "primary"}
+            size="md"
+            onClick={() => setShowCreate(true)}
+            disabled={view === "archived"}
+          >
+            <Plus size={11} /> New Project
+          </Button>
+          <Button
+            variant={view === "archived" ? "primary" : "ghost"}
+            size="md"
+            onClick={() => setView(view === "archived" ? "active" : "archived")}
+          >
+            {view === "archived" ? <ArchiveRestore size={11} /> : <Archive size={11} />}
+            {view === "archived" ? "Projects" : "Archive"}
+          </Button>
+        </div>
       }
     >
       {/* Toolbar */}
@@ -274,9 +309,13 @@ export function ProjectLibrary() {
           className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
           style={{ border: "var(--border-default)" }}
         />
-        <FilterSelect label="STATUS" value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
+        {view === "active" && (
+          <FilterSelect label="STATUS" value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
+        )}
         <div className="flex-1" />
-        <span className="font-mono text-[11px] text-readable">{projects.length} projects</span>
+        <span className="font-mono text-[11px] text-readable">
+          {projects.length} {view === "archived" ? "archived" : "active"} projects
+        </span>
       </div>
 
       {/* Create form */}
@@ -290,9 +329,13 @@ export function ProjectLibrary() {
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-3">
           <span className="font-mono text-[12px] text-readable">
-            {search || statusFilter !== "all" ? "No projects match your filters." : "No projects yet."}
+            {view === "archived"
+              ? "No archived projects."
+              : search || statusFilter !== "all"
+                ? "No projects match your filters."
+                : "No projects yet."}
           </span>
-          {!search && statusFilter === "all" && (
+          {view === "active" && !search && statusFilter === "all" && (
             <Button variant="ghost" size="sm" onClick={() => setShowCreate(true)}>
               <Plus size={10} /> Create your first project
             </Button>
@@ -304,8 +347,10 @@ export function ProjectLibrary() {
             <ProjectCard
               key={p.id}
               project={p}
+              view={view}
               onClick={() => navigate(`/projects/${p.id}`)}
               onArchive={() => handleArchive(p)}
+              onDelete={() => handleDelete(p)}
             />
           ))}
         </div>

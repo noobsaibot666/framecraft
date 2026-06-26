@@ -244,6 +244,7 @@ export async function removePromptFromProject(projectId: string, promptId: strin
     "DELETE FROM project_prompts WHERE project_id = $1 AND prompt_id = $2",
     [projectId, promptId]
   );
+  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
 }
 
 export async function getPromptsForProject(projectId: string): Promise<{
@@ -288,6 +289,7 @@ export async function removeResultFromProject(projectId: string, resultId: strin
     "DELETE FROM project_results WHERE project_id = $1 AND result_id = $2",
     [projectId, resultId]
   );
+  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
 }
 
 export async function getResultsForProject(projectId: string): Promise<{
@@ -330,6 +332,30 @@ export async function removeReferenceFromProject(projectId: string, referenceId:
   await db.execute(
     "DELETE FROM project_references WHERE project_id = $1 AND reference_id = $2",
     [projectId, referenceId]
+  );
+  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
+}
+
+export async function resetProjectContent(projectId: string): Promise<void> {
+  if (!isTauri) return;
+  const db = await getDb();
+  await db.execute("DELETE FROM project_prompts WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM project_results WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM project_references WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM project_deliverables WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM assistant_threads WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM comparison_sessions WHERE project_id = $1", [projectId]);
+  await db.execute("DELETE FROM export_presets WHERE project_id = $1", [projectId]);
+  await db.execute(
+    `UPDATE projects
+     SET brief_text = NULL,
+         production_goal = NULL,
+         category = NULL,
+         notes = NULL,
+         tags = NULL,
+         updated_at = $1
+     WHERE id = $2`,
+    [now(), projectId]
   );
 }
 

@@ -14,10 +14,12 @@ import {
   getResultsForProject,
   getReferencesForProject,
   addResultToProject,
+  removeResultFromProject,
   addPromptToProject,
   removePromptFromProject,
   addReferenceToProject,
   removeReferenceFromProject,
+  resetProjectContent,
   type CreateProjectInput,
 } from "@/lib/projects";
 import { getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
@@ -386,6 +388,7 @@ export function ProjectWorkspace() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const hydratedRef = useRef(false);
 
   // Form state
@@ -483,6 +486,21 @@ export function ProjectWorkspace() {
     navigate("/projects");
   };
 
+  const handleResetProject = async () => {
+    if (!confirmReset) { setConfirmReset(true); return; }
+    await resetProjectContent(id!);
+    setBriefText("");
+    setProductionGoal("");
+    setCategory("");
+    setTags("");
+    setNotes("");
+    setLinkedPrompts([]);
+    setLinkedRefs([]);
+    setLinkedResults([]);
+    setPickerMode(null);
+    setConfirmReset(false);
+  };
+
   const handleRemovePrompt = async (promptId: string) => {
     await removePromptFromProject(id!, promptId);
     setLinkedPrompts((prev) => prev.filter((p) => p.id !== promptId));
@@ -491,6 +509,11 @@ export function ProjectWorkspace() {
   const handleRemoveRef = async (refId: string) => {
     await removeReferenceFromProject(id!, refId);
     setLinkedRefs((prev) => prev.filter((r) => r.id !== refId));
+  };
+
+  const handleRemoveResult = async (resultId: string) => {
+    await removeResultFromProject(id!, resultId);
+    setLinkedResults((prev) => prev.filter((r) => r.id !== resultId));
   };
 
   const reloadLinks = async () => {
@@ -589,6 +612,16 @@ export function ProjectWorkspace() {
             style={{ border: confirmDelete ? "1px solid" : "var(--border-dim)" }}>
             <Trash2 size={9} className="inline mr-1" />
             {confirmDelete ? "Confirm" : "Delete"}
+          </button>
+          <button type="button" onClick={handleResetProject}
+            onBlur={() => setConfirmReset(false)}
+            className={cn(
+              "font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise",
+              confirmReset ? "text-red border-red/40" : "text-dim hover:text-red"
+            )}
+            style={{ border: confirmReset ? "1px solid" : "var(--border-dim)" }}>
+            <X size={9} className="inline mr-1" />
+            {confirmReset ? "Confirm Reset" : "Reset"}
           </button>
           <Button variant="ghost" size="md" onClick={() => navigate("/projects")}>
             <ArrowLeft size={11} /> Projects
@@ -759,6 +792,14 @@ export function ProjectWorkspace() {
                 {linkedResults.map((r) => (
                     <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
                       <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveResult(r.id)}
+                        className="absolute bottom-1 right-1 w-6 h-6 rounded-sm bg-black/70 text-white/60 hover:text-red opacity-0 group-hover:opacity-100 transition-precise flex items-center justify-center"
+                        title="Remove result from project"
+                      >
+                        <Trash2 size={10} />
+                      </button>
                       {r.is_winner && (
                         <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-sm bg-white/20 flex items-center justify-center">
                           <Star size={8} className="text-white/80 fill-white/60" />

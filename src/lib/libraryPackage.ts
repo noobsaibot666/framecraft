@@ -58,6 +58,7 @@ export interface LibraryMergeReport {
   sourceBaseDir: string;
   targetBaseDir: string;
   prompts: MergeTableReport;
+  results: MergeTableReport;
   idRemaps: MergeIdRemap[];
   errors: string[];
 }

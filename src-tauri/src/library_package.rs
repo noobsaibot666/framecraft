@@ -60,6 +60,7 @@ pub struct LibraryMergeReport {
     source_base_dir: String,
     target_base_dir: String,
     prompts: MergeTableReport,
+    results: MergeTableReport,
     id_remaps: Vec<MergeIdRemap>,
     errors: Vec<String>,
 }
@@ -261,6 +262,26 @@ const PROMPT_COLUMNS: [&str; 30] = [
     "updated_at",
 ];
 
+const RESULT_COLUMNS: [&str; 17] = [
+    "id",
+    "prompt_id",
+    "file_path",
+    "thumbnail_path",
+    "provider",
+    "score_overall",
+    "score_realism",
+    "score_brand_fit",
+    "score_composition",
+    "score_lighting",
+    "score_ai_risk",
+    "reuse_potential",
+    "is_winner",
+    "is_failed",
+    "artifacts",
+    "notes",
+    "created_at",
+];
+
 #[derive(Clone, Debug, PartialEq)]
 struct TableRecord {
     values: Vec<Value>,
@@ -281,14 +302,22 @@ fn merge_library_package(
     let source_conn = open_portable_database(&source.db_path)?;
     let mut target_conn = open_portable_database(&target.db_path)?;
     let mut report = LibraryMergeReport {
-        source_base_dir: source.base_dir,
-        target_base_dir: target.base_dir,
+        source_base_dir: source.base_dir.clone(),
+        target_base_dir: target.base_dir.clone(),
         prompts: MergeTableReport::default(),
+        results: MergeTableReport::default(),
         id_remaps: Vec::new(),
         errors: Vec::new(),
     };
 
     merge_prompt_rows(&source_conn, &mut target_conn, &mut report)?;
+    merge_result_rows(
+        &source_conn,
+        &mut target_conn,
+        &source,
+        &target,
+        &mut report,
+    )?;
     Ok(report)
 }
 
@@ -342,6 +371,132 @@ fn merge_prompt_rows(
     }
 
     transaction.commit().map_err(|error| error.to_string())
+}
+
+fn merge_result_rows(
+    source_conn: &rusqlite::Connection,
+    target_conn: &mut rusqlite::Connection,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+    report: &mut LibraryMergeReport,
+) -> Result<(), String> {
+    let source_rows = read_table_records(source_conn, "results", &RESULT_COLUMNS, "created_at")?;
+    let transaction = target_conn
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for source_row in source_rows {
+        let source_id = value_as_string(&source_row.values[0])?;
+        let mut merge_row = source_row.clone();
+        remap_result_prompt_id(&mut merge_row, &report.id_remaps)?;
+        rewrite_result_media_paths(&mut merge_row, source, target)?;
+
+        match read_record_by_id(&transaction, "results", &RESULT_COLUMNS, &source_id)? {
+            Some(target_row) if target_row == merge_row => {
+                report.results.skipped_duplicates += 1;
+            }
+            Some(_) => {
+                let new_id = generate_sqlite_id(&transaction)?;
+                copy_result_media_files(&merge_row, source, target)?;
+                merge_row.values[0] = Value::Text(new_id.clone());
+                insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
+                report.results.imported += 1;
+                report.results.remapped += 1;
+                report.id_remaps.push(MergeIdRemap {
+                    table: "results".to_string(),
+                    source_id,
+                    target_id: new_id,
+                    reason: "id_collision".to_string(),
+                });
+            }
+            None => {
+                copy_result_media_files(&merge_row, source, target)?;
+                insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
+                report.results.imported += 1;
+            }
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn remap_result_prompt_id(row: &mut TableRecord, remaps: &[MergeIdRemap]) -> Result<(), String> {
+    let prompt_id = value_as_string(&row.values[1])?;
+    if let Some(remap) = remaps
+        .iter()
+        .find(|remap| remap.table == "prompts" && remap.source_id == prompt_id)
+    {
+        row.values[1] = Value::Text(remap.target_id.clone());
+    }
+    Ok(())
+}
+
+fn rewrite_result_media_paths(
+    row: &mut TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<(), String> {
+    rewrite_media_value(&mut row.values[2], &source.results_dir, &target.results_dir)?;
+    rewrite_media_value(&mut row.values[3], &source.results_dir, &target.results_dir)?;
+    Ok(())
+}
+
+fn rewrite_media_value(
+    value: &mut Value,
+    source_prefix: &str,
+    target_prefix: &str,
+) -> Result<(), String> {
+    let Value::Text(path) = value else {
+        return Ok(());
+    };
+    if !path.starts_with(source_prefix) {
+        return Ok(());
+    }
+    let relative = &path[source_prefix.len()..];
+    assert_safe_relative_media_path(relative)?;
+    *path = format!("{target_prefix}{relative}");
+    Ok(())
+}
+
+fn copy_result_media_files(
+    row: &TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<(), String> {
+    copy_rewritten_media_value(&row.values[2], &source.results_dir, &target.results_dir)?;
+    copy_rewritten_media_value(&row.values[3], &source.results_dir, &target.results_dir)?;
+    Ok(())
+}
+
+fn copy_rewritten_media_value(
+    value: &Value,
+    source_prefix: &str,
+    target_prefix: &str,
+) -> Result<(), String> {
+    let Value::Text(target_path) = value else {
+        return Ok(());
+    };
+    if !target_path.starts_with(target_prefix) {
+        return Ok(());
+    }
+    let relative = &target_path[target_prefix.len()..];
+    assert_safe_relative_media_path(relative)?;
+    let from = format!("{source_prefix}{relative}");
+    let to = format!("{target_prefix}{relative}");
+    copy_file(&from, &to)
+}
+
+fn read_table_records(
+    conn: &rusqlite::Connection,
+    table: &str,
+    columns: &[&str],
+    order_column: &str,
+) -> Result<Vec<TableRecord>, String> {
+    let sql = format!(
+        "SELECT {} FROM {table} ORDER BY {order_column}, id",
+        columns.join(", ")
+    );
+    read_records_with_sql(conn, &sql, columns.len())
 }
 
 fn read_prompt_records(conn: &rusqlite::Connection) -> Result<Vec<TableRecord>, String> {
@@ -949,6 +1104,124 @@ mod tests {
     }
 
     #[test]
+    fn merge_imports_result_and_copies_media() {
+        let root = test_root("merge-result-media");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "prompt-a", "Source Prompt");
+        fs::create_dir_all(source.join("results/campaign")).unwrap();
+        fs::write(source.join("results/campaign/a.png"), "image").unwrap();
+        fs::write(source.join("results/campaign/a-thumb.png"), "thumb").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "result-a",
+            "prompt-a",
+            Some(&format!("{}campaign/a.png", source_paths.results_dir)),
+            Some(&format!("{}campaign/a-thumb.png", source_paths.results_dir)),
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.results.imported, 1);
+        assert_eq!(report.results.skipped_duplicates, 0);
+        assert_eq!(report.results.remapped, 0);
+        assert_eq!(
+            result_paths(&target_paths.db_path, "result-a"),
+            Some((
+                "prompt-a".to_string(),
+                Some(format!("{}campaign/a.png", target_paths.results_dir)),
+                Some(format!("{}campaign/a-thumb.png", target_paths.results_dir)),
+            ))
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("results/campaign/a.png")).unwrap(),
+            "image"
+        );
+        assert_eq!(
+            fs::read_to_string(target.join("results/campaign/a-thumb.png")).unwrap(),
+            "thumb"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_result_uses_remapped_prompt_id() {
+        let root = test_root("merge-result-prompt-remap");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "shared-id", "Source Prompt");
+        insert_prompt(&target_paths.db_path, "shared-id", "Target Prompt");
+        insert_result(&source_paths.db_path, "result-a", "shared-id", None, None);
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let remapped_prompt_id = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.table == "prompts" && remap.source_id == "shared-id")
+            .map(|remap| remap.target_id.clone())
+            .unwrap();
+
+        assert_eq!(report.results.imported, 1);
+        assert_eq!(
+            result_prompt_id(&target_paths.db_path, "result-a").as_deref(),
+            Some(remapped_prompt_id.as_str())
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_remaps_result_id_collision_with_different_content() {
+        let root = test_root("merge-result-collision");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "prompt-a", "Source Prompt");
+        insert_prompt(&target_paths.db_path, "prompt-a", "Source Prompt");
+        insert_result(
+            &source_paths.db_path,
+            "shared-result",
+            "prompt-a",
+            None,
+            None,
+        );
+        insert_result(
+            &target_paths.db_path,
+            "shared-result",
+            "prompt-a",
+            None,
+            None,
+        );
+        let target_conn = rusqlite::Connection::open(&target_paths.db_path).unwrap();
+        target_conn
+            .execute(
+                "UPDATE results SET notes = 'different target result' WHERE id = 'shared-result'",
+                [],
+            )
+            .unwrap();
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.results.imported, 1);
+        assert_eq!(report.results.remapped, 1);
+        let remap = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.table == "results" && remap.source_id == "shared-result")
+            .unwrap();
+        assert_ne!(remap.target_id, "shared-result");
+        assert_eq!(result_count(&target_paths.db_path), 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn rejects_unsafe_media_paths() {
         assert!(assert_safe_relative_media_path("../escape.png").is_err());
         assert!(assert_safe_relative_media_path("/escape.png").is_err());
@@ -987,6 +1260,22 @@ mod tests {
         .unwrap();
     }
 
+    fn insert_result(
+        db_path: &str,
+        id: &str,
+        prompt_id: &str,
+        file_path: Option<&str>,
+        thumbnail_path: Option<&str>,
+    ) {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.execute(
+            "INSERT INTO results (id, prompt_id, file_path, thumbnail_path, provider, notes, created_at)
+             VALUES (?1, ?2, ?3, ?4, 'midjourney', 'source result', '2026-06-26T00:00:00Z')",
+            (id, prompt_id, file_path, thumbnail_path),
+        )
+        .unwrap();
+    }
+
     fn prompt_title(db_path: &str, id: &str) -> Option<String> {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.query_row("SELECT title FROM prompts WHERE id = ?1", [id], |row| {
@@ -1003,5 +1292,25 @@ mod tests {
             |row| row.get(0),
         )
         .unwrap()
+    }
+
+    fn result_paths(db_path: &str, id: &str) -> Option<(String, Option<String>, Option<String>)> {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT prompt_id, file_path, thumbnail_path FROM results WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .ok()
+    }
+
+    fn result_prompt_id(db_path: &str, id: &str) -> Option<String> {
+        result_paths(db_path, id).map(|row| row.0)
+    }
+
+    fn result_count(db_path: &str) -> i64 {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM results", [], |row| row.get(0))
+            .unwrap()
     }
 }

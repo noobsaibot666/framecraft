@@ -3,6 +3,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod library_lock;
 mod library_package;
+mod native_sqlite;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -109,6 +110,8 @@ pub fn run() {
             library_package::migrate_app_data_to_library_native,
             library_package::copy_library_package_native,
             library_package::backup_library_package_native,
+            native_sqlite::native_sqlite_execute,
+            native_sqlite::native_sqlite_select,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

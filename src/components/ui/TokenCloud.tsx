@@ -4,6 +4,24 @@ import { getTokenCategories, getTokensByCategory, createToken, toggleTokenFavori
 import { cn } from "@/lib/utils";
 import type { TokenCategory, Token } from "@/types";
 
+const CATEGORY_HINTS: Record<string, string> = {
+  subject: "Who or what the output is about.",
+  action: "Movement, pose, interaction, or behavior.",
+  environment: "Place, set, surface, or world context.",
+  camera: "Framing, viewpoint, shot type, and capture movement.",
+  lens: "Optics, focal length, depth of field, and lens artifacts.",
+  composition: "Layout, balance, crop, and spatial structure.",
+  lighting: "Source, quality, direction, and time of light.",
+  mood: "Emotional tone and visual atmosphere.",
+  material: "Surface, texture, construction, and tactile detail.",
+  color: "Palette, contrast, and color direction.",
+  realism: "Reality anchors and anti-AI visual details.",
+  brand_tone: "Commercial voice, audience feel, and positioning.",
+  motion: "Video/frame movement and dynamic image cues.",
+  avoidance: "Negative cues that reduce common AI artifacts.",
+  parameters: "Provider flags and technical output controls.",
+};
+
 interface TokenCloudProps {
   selectedTexts: string[];
   onToggle: (token: Token) => void;
@@ -108,24 +126,31 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
   return (
     <div className="flex flex-col gap-3">
       {/* Category tabs */}
-      <div className="flex flex-wrap gap-1.5 pb-0.5">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            type="button"
-            onClick={() => handleCategoryChange(cat)}
-            className={cn(
-              "font-mono text-[9px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise whitespace-nowrap",
-              activeCategoryId === cat.id ? "text-white" : "text-readable hover:text-cyan"
-            )}
-            style={{
-              border: activeCategoryId === cat.id ? "var(--border-strong)" : "var(--border-dim)",
-              background: activeCategoryId === cat.id ? "rgba(255,255,255,0.06)" : "transparent",
-            }}
-          >
-            {cat.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap gap-1.5 pb-0.5">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => handleCategoryChange(cat)}
+              className={cn(
+                "font-mono text-[9px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise whitespace-nowrap",
+                activeCategoryId === cat.id ? "text-white" : "text-readable hover:text-cyan"
+              )}
+              style={{
+                border: activeCategoryId === cat.id ? "var(--border-strong)" : "var(--border-dim)",
+                background: activeCategoryId === cat.id ? "rgba(255,255,255,0.06)" : "transparent",
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+        {activeCategoryName && (
+          <span className="font-mono text-[10px] leading-snug text-readable">
+            {CATEGORY_HINTS[activeCategoryName] ?? "Reusable prompt tokens for this category."}
+          </span>
+        )}
       </div>
 
       {/* Search + favorites toggle + add custom */}

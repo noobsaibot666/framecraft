@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2 } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -13,6 +13,7 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { addPromptToProject, getProjectById } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
+import { buildRecipeDraft } from "@/lib/craftRecipe";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -485,6 +486,7 @@ export function CraftPrompt() {
   const [mode, setMode] = useState<"builder" | "manual">("builder");
   const [originalVersion, setOriginalVersion] = useState(1);
   const [projectContext, setProjectContext] = useState<Project | null>(null);
+  const [appliedRecipeId, setAppliedRecipeId] = useState<string | undefined>(prefillState?.prefillRecipeId);
 
   // Production Memory (Phase 06)
   const [duplicates, setDuplicates] = useState<SimilarPrompt[]>([]);
@@ -660,6 +662,10 @@ export function CraftPrompt() {
     : assembled;
 
   const charCount = assembled.length;
+  const availableRecipes = allPrompts
+    .filter((prompt) => prompt.is_recipe && prompt.id !== id)
+    .filter((recipe) => !fields.category || !recipe.category || recipe.category === fields.category)
+    .slice(0, 5);
 
   const validate = (): boolean => {
     const errs: typeof errors = {};
@@ -712,9 +718,24 @@ export function CraftPrompt() {
     is_winner: fields.is_winner,
     is_failed: fields.is_failed,
     is_recipe: asRecipe,
-    parent_id: !isEdit ? prefillState?.prefillRecipeId : undefined,
+    parent_id: !isEdit ? appliedRecipeId ?? prefillState?.prefillRecipeId : undefined,
     notes: fields.notes || undefined,
   });
+
+  const handleApplyRecipe = (recipe: Prompt) => {
+    const draft = buildRecipeDraft(recipe);
+    setFields((current) => ({
+      ...current,
+      title: draft.title,
+      provider: draft.provider,
+      category: draft.category,
+      prompt_text: draft.promptText,
+      tags: draft.tags,
+    }));
+    setAppliedRecipeId(draft.parentId);
+    setMode("manual");
+    setOutputOverride(null);
+  };
 
   const handleSave = async (asRecipe = false) => {
     if (!validate()) return;
@@ -1141,6 +1162,34 @@ export function CraftPrompt() {
                       <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
                     ))}
                   </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Recipes */}
+          {availableRecipes.length > 0 && (
+            <div
+              className="flex flex-col gap-3 p-5 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+            >
+              <div className="flex items-center gap-2">
+                <Wand2 size={11} className="text-cyan" />
+                <span className="system-label text-soft-white">RECIPES</span>
+              </div>
+              {availableRecipes.map((recipe) => (
+                <button
+                  key={recipe.id}
+                  type="button"
+                  onClick={() => handleApplyRecipe(recipe)}
+                  className="flex items-start justify-between gap-3 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
+                  style={{ border: appliedRecipeId === recipe.id ? "1px solid rgba(72,229,232,0.35)" : "var(--border-dim)" }}
+                >
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="font-mono text-[11px] text-readable truncate">{recipe.title}</span>
+                    <span className="font-mono text-[9px] text-muted truncate">{recipe.provider}</span>
+                  </div>
+                  <span className="font-mono text-[9px] text-cyan shrink-0">Use</span>
                 </button>
               ))}
             </div>

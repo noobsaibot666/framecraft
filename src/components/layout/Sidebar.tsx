@@ -1,54 +1,70 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Settings } from "lucide-react";
+import {
+  Archive,
+  BookOpen,
+  FileText,
+  GitCompare,
+  Image,
+  Layers,
+  ListChecks,
+  Settings,
+  Upload,
+  Wand2,
+} from "lucide-react";
 import { getQueue } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
   {
-    label: "WORK",
+    label: "START",
     items: [
-      { num: "01", label: "DASHBOARD", to: "/" },
-      { num: "02", label: "PROJECTS", to: "/projects" },
-      { num: "03", label: "QUEUE", to: "/queue" },
+      { label: "Dashboard", to: "/", icon: Layers },
+    ],
+  },
+  {
+    label: "PROJECTS",
+    items: [
+      { label: "Projects", to: "/projects", icon: Archive },
+      { label: "Queue", to: "/queue", icon: ListChecks },
     ],
   },
   {
     label: "CREATE",
     items: [
-      { num: "04", label: "CRAFT", to: "/craft" },
-      { num: "05", label: "LIBRARY", to: "/library" },
-      { num: "06", label: "RECIPES", to: "/recipes" },
-      { num: "07", label: "IMPORT", to: "/import" },
+      { label: "Craft", to: "/craft", icon: Wand2 },
+      { label: "Recipes", to: "/recipes", icon: BookOpen },
+      { label: "Import", to: "/import", icon: Upload },
     ],
   },
   {
-    label: "ANALYZE",
+    label: "LIBRARY",
     items: [
-      { num: "08", label: "IMAGE", to: "/analyze" },
-      { num: "09", label: "BRIEF", to: "/brief" },
-      { num: "10", label: "FRAMES", to: "/frames" },
-      { num: "11", label: "COMPARE", to: "/compare" },
+      { label: "Library", to: "/library", icon: Archive },
+      { label: "References", to: "/references", icon: Image },
+      { label: "SREFs", to: "/srefs", icon: BookOpen },
     ],
   },
   {
-    label: "ASSETS",
+    label: "INTELLIGENCE",
     items: [
-      { num: "12", label: "REFERENCES", to: "/references" },
-      { num: "13", label: "SREFS", to: "/srefs" },
+      { label: "Image", to: "/analyze", icon: Image },
+      { label: "Brief", to: "/brief", icon: FileText },
+      { label: "Frames", to: "/frames", icon: Layers },
+      { label: "Compare", to: "/compare", icon: GitCompare },
     ],
   },
 ] as const;
 
 function NavItem({
-  num,
   label,
   to,
+  icon: Icon,
   badge,
 }: {
-  num: string;
   label: string;
   to: string;
+  icon: typeof Settings;
   badge?: number;
 }) {
   return (
@@ -57,11 +73,11 @@ function NavItem({
       end={to === "/"}
       className={({ isActive }) =>
         cn(
-          "relative flex items-center gap-3 px-4 py-3",
+          "relative flex min-h-10 items-center gap-3 px-4 py-2.5",
           "group transition-all duration-150",
           isActive
-            ? "text-white bg-red/10"
-            : "text-readable hover:text-cyan"
+            ? "bg-red/10 text-white"
+            : "text-soft-white/75 hover:bg-cyan/6 hover:text-cyan"
         )
       }
     >
@@ -75,21 +91,18 @@ function NavItem({
               isActive ? "bg-red h-7" : "bg-transparent"
             )}
           />
-          {/* Number */}
-          <span
+          <Icon
+            size={14}
             className={cn(
-              "font-mono text-[10px] tabular-nums shrink-0 transition-colors",
-              isActive ? "text-red" : "text-muted group-hover:text-cyan"
+              "shrink-0 transition-colors",
+              isActive ? "text-red" : "text-soft-white/55 group-hover:text-cyan"
             )}
-          >
-            {num}
-          </span>
-          {/* Label */}
-          <span className="font-sans text-[12.5px] font-semibold tracking-[0.04em] uppercase">
+          />
+          <span className="font-sans text-[13px] font-semibold tracking-[0.04em] uppercase">
             {label}
           </span>
           {badge != null && badge > 0 && (
-            <span className="ml-auto font-mono text-[9px] text-white/70 px-1.5 py-0.5 rounded-sm border border-white/15">
+            <span className="ml-auto rounded-sm border border-red/35 bg-red/12 px-1.5 py-0.5 font-mono text-[9px] text-white">
               {badge}
             </span>
           )}
@@ -114,10 +127,10 @@ export function Sidebar() {
       style={{ borderRight: "var(--border-default)" }}
     >
       {/* Navigation */}
-      <nav className="flex-1 pt-4 pb-3 flex flex-col gap-3 overflow-y-auto">
+      <nav className="flex-1 overflow-y-auto pb-3 pt-4 flex flex-col gap-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="flex flex-col gap-1">
-            <span className="px-4 pt-2 pb-1 font-mono text-[10px] tracking-widest uppercase text-muted">
+            <span className="px-4 pb-1 pt-2 font-mono text-[10.5px] tracking-widest text-soft-white/60 uppercase">
               {group.label}
             </span>
             {group.items.map((item) => (
@@ -136,9 +149,9 @@ export function Sidebar() {
           to="/settings"
           className={({ isActive }) =>
             cn(
-              "relative flex items-center gap-3 px-4 py-3",
+              "relative flex min-h-10 items-center gap-3 px-4 py-2.5",
               "transition-all duration-150",
-              isActive ? "text-white" : "text-readable hover:text-cyan"
+              isActive ? "bg-red/10 text-white" : "text-soft-white/75 hover:bg-cyan/6 hover:text-cyan"
             )
           }
         >
@@ -151,8 +164,11 @@ export function Sidebar() {
                   isActive ? "bg-red" : "bg-transparent"
                 )}
               />
-              <Settings size={12} className="shrink-0" />
-              <span className="font-sans text-[12.5px] font-semibold tracking-[0.04em] uppercase">
+              <Settings
+                size={14}
+                className={cn("shrink-0", isActive ? "text-red" : "text-soft-white/55")}
+              />
+              <span className="font-sans text-[13px] font-semibold tracking-[0.04em] uppercase">
                 Settings
               </span>
             </>
@@ -162,7 +178,7 @@ export function Sidebar() {
 
       {/* Bottom identifier */}
       <div className="px-4 pb-3 pt-1">
-        <span className="system-label text-[9px] text-muted">
+        <span className="system-label text-[9px] text-soft-white/55">
           FRAMECRAFT / LOCAL
         </span>
       </div>

@@ -425,7 +425,7 @@ export function PromptLibrary() {
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <span className="font-ndot text-[32px] text-dim/30 dot-blink">···</span>
+          <span className="font-ndot text-[32px] text-dim/30">···</span>
         </div>
       ) : prompts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">

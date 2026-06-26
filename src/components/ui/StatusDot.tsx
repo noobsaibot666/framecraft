@@ -2,12 +2,11 @@ import { cn } from "@/lib/utils";
 
 interface StatusDotProps {
   active?: boolean;
-  pulse?: boolean;
   size?: "sm" | "md";
   className?: string;
 }
 
-export function StatusDot({ active, pulse = true, size = "md", className }: StatusDotProps) {
+export function StatusDot({ active, size = "md", className }: StatusDotProps) {
   return (
     <span
       className={cn(
@@ -16,7 +15,6 @@ export function StatusDot({ active, pulse = true, size = "md", className }: Stat
           "w-1.5 h-1.5": size === "sm",
           "w-2 h-2": size === "md",
           "bg-red": active,
-          "dot-blink": active && pulse,
           "bg-dim": !active,
         },
         className

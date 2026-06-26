@@ -252,17 +252,6 @@
   transition: all var(--duration-fast) var(--ease-precise);
 }
 
-/* ─── Status Dot Blink ───────────────────────────────────── */
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.3; }
-}
-
-.dot-blink {
-  animation: blink 1.8s ease-in-out infinite;
-}
-
 /* ─── Dot-matrix grid background (subtle) ───────────────── */
 
 .dot-grid-bg {

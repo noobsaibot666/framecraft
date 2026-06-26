@@ -57,7 +57,7 @@ export function RecipeApply() {
     return (
       <PageContainer>
         <div className="flex items-center justify-center py-32">
-          <span className="font-ndot text-[32px] text-dim/30 dot-blink">···</span>
+          <span className="font-ndot text-[32px] text-dim/30">···</span>
         </div>
       </PageContainer>
     );

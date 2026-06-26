@@ -423,7 +423,7 @@ export function ProjectAssistant() {
     return (
       <PageContainer title="ASSISTANT">
         <div className="flex items-center justify-center py-32">
-          <span className="font-ndot text-[32px] text-dim/30 dot-blink">···</span>
+          <span className="font-ndot text-[32px] text-dim/30">···</span>
         </div>
       </PageContainer>
     );
@@ -521,7 +521,7 @@ export function ProjectAssistant() {
                   <Cpu size={11} className="text-amber" />
                 </div>
                 <div className="px-4 py-3 rounded-card" style={{ border: "var(--border-dim)" }}>
-                  <span className="font-ndot text-[14px] text-readable dot-blink">···</span>
+                  <span className="font-ndot text-[14px] text-readable">···</span>
                 </div>
               </div>
             )}

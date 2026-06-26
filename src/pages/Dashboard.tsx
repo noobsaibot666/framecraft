@@ -188,7 +188,7 @@ export function Dashboard() {
               <CardBody>
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
-                    <span className="font-ndot text-[24px] text-dim/30 dot-blink">···</span>
+                    <span className="font-ndot text-[24px] text-dim/30">···</span>
                   </div>
                 ) : stats.recent_prompts.length > 0 ? (
                   <div className="flex flex-col">

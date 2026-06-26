@@ -118,7 +118,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
   if (loadingCats) {
     return (
       <div className="flex items-center justify-center py-6">
-        <span className="font-ndot text-[20px] text-dim/30 dot-blink">·</span>
+        <span className="font-ndot text-[20px] text-dim/30">·</span>
       </div>
     );
   }

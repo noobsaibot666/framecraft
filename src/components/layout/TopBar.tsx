@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { StatusDot } from "@/components/ui/StatusDot";
+import { AppMenu } from "./AppMenu";
 
 function LiveClock() {
   const [time, setTime] = useState("");
@@ -41,8 +42,10 @@ export function TopBar() {
 
       {/* Right: Status + Clock */}
       <div className="flex items-center gap-4">
+        <AppMenu />
+        <div className="w-px h-3 bg-white/10" />
         <div className="flex items-center gap-2">
-          <StatusDot active pulse />
+          <StatusDot active />
           <span className="system-label text-[9px]">SYSTEM READY</span>
         </div>
         <div className="w-px h-3 bg-white/10" />

@@ -118,7 +118,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
   if (loadingCats) {
     return (
       <div className="flex items-center justify-center py-6">
-        <span className="font-ndot text-[20px] text-dim/30">·</span>
+        <span className="font-ndot text-[20px] text-readable">·</span>
       </div>
     );
   }
@@ -134,7 +134,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
               type="button"
               onClick={() => handleCategoryChange(cat)}
               className={cn(
-                "font-mono text-[9px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise whitespace-nowrap",
+                "font-mono text-[10.5px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise whitespace-nowrap",
                 activeCategoryId === cat.id ? "text-white" : "text-readable hover:text-cyan"
               )}
               style={{
@@ -156,12 +156,12 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
       {/* Search + favorites toggle + add custom */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1">
-          <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-readable pointer-events-none" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter tokens…"
-            className="w-full h-8 pl-6 pr-2 font-mono text-[10px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none transition-precise"
+            className="w-full h-9 pl-7 pr-2.5 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none transition-precise"
             style={{ border: "var(--border-default)" }}
           />
         </div>
@@ -170,26 +170,26 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
           type="button"
           onClick={() => setFavoritesOnly((v) => !v)}
           className={cn(
-            "h-8 px-2.5 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise flex items-center gap-1",
+            "h-9 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise flex items-center gap-1.5",
             favoritesOnly ? "text-white" : "text-readable hover:text-cyan"
           )}
           style={{ border: favoritesOnly ? "var(--border-strong)" : "var(--border-dim)" }}
           title="Show favorites only"
         >
-          <Star size={8} className={cn(favoritesOnly && "fill-white/50")} />
+          <Star size={10} className={cn(favoritesOnly && "fill-white/50")} />
           {favoriteCount > 0 && !favoritesOnly && <span>{favoriteCount}</span>}
         </button>
         <button
           type="button"
           onClick={() => setAddingNew((v) => !v)}
           className={cn(
-            "h-8 px-2.5 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise flex items-center gap-1",
+            "h-9 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise flex items-center gap-1.5",
             addingNew ? "text-white" : "text-readable hover:text-cyan"
           )}
           style={{ border: addingNew ? "var(--border-strong)" : "var(--border-dim)" }}
           title="Add custom token"
         >
-          <Plus size={8} />
+          <Plus size={10} />
           New
         </button>
       </div>
@@ -272,8 +272,8 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
                   }}
                   title={isSuppressed ? `${token.text} is reduced by project constraints or avoidance text.` : token.text}
                 >
-                  {active && <span className="mr-1 text-white/40 text-[8px]">✓</span>}
-                  {isSuppressed && !active && <span className="mr-1 text-white/18 text-[8px]">-</span>}
+                  {active && <span className="mr-1 text-cyan text-[10px]">✓</span>}
+                  {isSuppressed && !active && <span className="mr-1 text-readable text-[10px]">-</span>}
                   {token.text}
                 </button>
                 {/* Favorite star — always visible if favorited, hover-visible otherwise */}
@@ -284,7 +284,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
                     "absolute right-1 top-1/2 -translate-y-1/2 transition-precise",
                     token.is_favorite
                       ? "opacity-100 text-white/60"
-                      : "opacity-0 group-hover/pill:opacity-100 text-dim/30 hover:text-white/50"
+                      : "opacity-0 group-hover/pill:opacity-100 text-readable hover:text-cyan"
                   )}
                   title={token.is_favorite ? "Remove from favorites" : "Add to favorites"}
                 >

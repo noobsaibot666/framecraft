@@ -11,13 +11,13 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        "rounded-card border bg-white/4",
+        "rounded-card border bg-white/5",
         "transition-all duration-150 ease-out",
         active
-          ? "border-red/60 bg-red/4"
-          : "border-white/10",
+          ? "border-red/65 bg-red/6"
+          : "border-white/14",
         hoverable && !active &&
-          "hover:bg-white/7 hover:border-white/18 cursor-pointer",
+          "hover:bg-white/8 hover:border-white/24 cursor-pointer",
         className
       )}
       {...props}
@@ -47,7 +47,7 @@ const CardHeader = ({ label, count, action, className, ...props }: CardHeaderPro
     <div className="flex items-center gap-3">
       <span className="system-label">{label}</span>
       {count !== undefined && (
-        <span className="font-mono text-[10px] text-dim tabular-nums">
+        <span className="font-mono text-[10.5px] text-readable tabular-nums">
           {String(count).padStart(3, "0")}
         </span>
       )}
@@ -57,7 +57,7 @@ const CardHeader = ({ label, count, action, className, ...props }: CardHeaderPro
 );
 
 const CardBody = ({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("p-4", className)} {...props}>
+  <div className={cn("p-5", className)} {...props}>
     {children}
   </div>
 );

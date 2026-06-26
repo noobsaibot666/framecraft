@@ -62,16 +62,16 @@ function SortablePill({
     <div
       ref={setNodeRef}
       style={{ ...style, border: "var(--border-strong)", background: "rgba(255,255,255,0.06)" }}
-      className="shrink-0 inline-flex items-center gap-1 rounded-sm"
+      className="shrink-0 inline-flex min-h-8 items-center gap-1.5 rounded-sm"
     >
       {/* Drag handle */}
       <button
         type="button"
-        className="pl-1.5 py-1 text-dim/30 hover:text-dim/70 cursor-grab active:cursor-grabbing transition-precise"
+        className="pl-2 py-1.5 text-readable hover:text-cyan cursor-grab active:cursor-grabbing transition-precise"
         {...attributes}
         {...listeners}
       >
-        <GripHorizontal size={10} />
+        <GripHorizontal size={12} />
       </button>
 
       {/* Text — click to edit inline */}
@@ -84,12 +84,12 @@ function SortablePill({
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === "Escape") onEditCommit();
           }}
-          className="font-mono text-[9px] tracking-wide text-white bg-transparent outline-none min-w-0 py-1"
+          className="font-mono text-[10.5px] tracking-wide text-white bg-transparent outline-none min-w-0 py-1"
           style={{ width: `${Math.max(editText.length, 4)}ch` }}
         />
       ) : (
         <span
-          className="font-mono text-[9px] tracking-wide text-white/80 py-1 cursor-text select-none"
+          className="font-mono text-[10.5px] tracking-wide text-white py-1 cursor-text select-none"
           onClick={() => onEditStart(token.id)}
           title="Click to edit"
         >
@@ -101,7 +101,7 @@ function SortablePill({
       <button
         type="button"
         onClick={() => onRemove(token.id)}
-        className="pr-1.5 py-1 text-dim/40 hover:text-red transition-precise leading-none text-[10px]"
+        className="pr-2 py-1.5 text-readable hover:text-red transition-precise leading-none text-[12px]"
       >
         ×
       </button>
@@ -164,7 +164,7 @@ export function SequenceBuilder({
         className="flex items-center justify-center h-9 rounded-sm"
         style={{ border: "var(--border-dim)", borderStyle: "dashed" }}
       >
-        <span className="font-mono text-[9px] text-dim/40">Add tokens from the library below</span>
+        <span className="font-mono text-[10.5px] text-readable">Add tokens from the library below</span>
       </div>
     );
   }

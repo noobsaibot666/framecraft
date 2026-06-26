@@ -30,21 +30,21 @@ export function TokenPill({
         selected
           ? "border-red/60 bg-red/8 text-white"
           : "border-white/15 bg-white/4 text-soft-white hover:border-white/25",
-        compact ? "text-[10px] px-2 py-0.5" : "text-[11px] px-2.5 py-1",
+        compact ? "text-[10.5px] px-2.5 py-1" : "text-[11.5px] px-3 py-1.5",
         className
       )}
     >
       {draggable && (
         <GripVertical
           size={10}
-          className="text-dim cursor-grab active:cursor-grabbing shrink-0"
+          className="text-readable cursor-grab active:cursor-grabbing shrink-0"
         />
       )}
       <span className="font-mono tracking-wide leading-none">{text}</span>
       {onRemove && (
         <button
           onClick={onRemove}
-          className="ml-0.5 text-dim hover:text-red transition-colors shrink-0"
+          className="ml-0.5 text-readable hover:text-red transition-colors shrink-0"
           aria-label={`Remove ${text}`}
         >
           <X size={9} />
@@ -67,13 +67,13 @@ export function TokenCloudItem({ text, onClick, added, className }: TokenCloudIt
       onClick={onClick}
       className={cn(
         "inline-flex items-center",
-        "border rounded-pill px-3 py-1",
-        "font-mono text-[11px] tracking-wide",
+        "border rounded-pill px-3.5 py-1.5",
+        "font-mono text-[11.5px] tracking-wide",
         "transition-all duration-150",
         "focus-visible:outline-none",
         added
           ? "border-red/40 text-red/70 bg-red/5 cursor-default"
-          : "border-white/12 text-dim hover:border-white/25 hover:text-soft-white hover:bg-white/4",
+          : "border-white/18 text-readable hover:border-cyan/45 hover:text-white hover:bg-cyan/6",
         className
       )}
     >

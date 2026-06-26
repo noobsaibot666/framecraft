@@ -102,7 +102,7 @@ function NavItem({
             {label}
           </span>
           {badge != null && badge > 0 && (
-            <span className="ml-auto rounded-sm border border-red/35 bg-red/12 px-1.5 py-0.5 font-mono text-[9px] text-white">
+            <span className="ml-auto rounded-sm border border-red/40 bg-red/14 px-2 py-1 font-mono text-[10px] text-white">
               {badge}
             </span>
           )}
@@ -178,7 +178,7 @@ export function Sidebar() {
 
       {/* Bottom identifier */}
       <div className="px-4 pb-3 pt-1">
-        <span className="system-label text-[9px] text-soft-white/55">
+        <span className="system-label text-[10px] text-soft-white/65">
           FRAMECRAFT / LOCAL
         </span>
       </div>

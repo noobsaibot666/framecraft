@@ -9,7 +9,7 @@ interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 }
 
 const SEVERITY_COLORS: Record<Severity, string> = {
-  low: "border-white/20 text-dim",
+  low: "border-white/24 text-readable",
   medium: "border-white/25 text-muted",
   high: "border-red/40 text-red/80",
   critical: "border-red/70 text-red bg-red/10",
@@ -20,14 +20,14 @@ function Badge({ className, variant = "default", active, severity, children, ...
     <span
       className={cn(
         "inline-flex items-center",
-        "font-mono text-[9px] tracking-[0.12em] uppercase",
-        "border rounded-[4px] px-1.5 py-0.5",
+        "font-mono text-[10px] tracking-[0.12em] uppercase",
+        "border rounded-[4px] px-2 py-1",
         "transition-colors duration-150",
         {
-          "border-white/15 text-dim": variant === "default" && !active,
+          "border-white/20 text-readable": variant === "default" && !active,
           "border-red/60 text-red bg-red/8": active,
           "border-white/12 text-muted/80": variant === "provider",
-          "border-white/10 text-dim": variant === "category" || variant === "tag",
+          "border-white/16 text-readable": variant === "category" || variant === "tag",
         },
         severity && SEVERITY_COLORS[severity],
         className

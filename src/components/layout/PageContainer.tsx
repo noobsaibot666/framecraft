@@ -19,23 +19,23 @@ export function PageContainer({
     <div className={cn("flex flex-col min-w-0 min-h-full", className)} {...props}>
       {(title || action) && (
         <div
-          className="flex items-center justify-between px-9 py-6 shrink-0"
+          className="flex items-center justify-between px-10 py-7 shrink-0"
           style={{ borderBottom: "var(--border-default)" }}
         >
           <div className="flex flex-col gap-1">
             {title && (
-              <h1 className="font-sans text-[15px] font-semibold text-white tracking-[0.04em] uppercase">
+              <h1 className="font-sans text-[17px] font-semibold text-white tracking-[0.03em] uppercase">
                 {title}
               </h1>
             )}
             {subtitle && (
-              <span className="system-label text-[10px]">{subtitle}</span>
+              <span className="system-label text-[11px] text-readable">{subtitle}</span>
             )}
           </div>
           {action && <div className="shrink-0 ml-6">{action}</div>}
         </div>
       )}
-      <div className="p-9">
+      <div className="p-10">
         {children}
       </div>
     </div>

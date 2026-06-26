@@ -46,10 +46,10 @@ import { cn } from "@/lib/utils";
 
 function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("flex flex-col gap-6", className)}>
+    <div className={cn("flex flex-col gap-7", className)}>
       <div className="flex items-center gap-3">
-        <span className="system-label text-[12px] text-soft-white">{label}</span>
-        <div className="flex-1 h-px bg-white/16" />
+        <span className="system-label text-[13px] text-white">{label}</span>
+        <div className="flex-1 h-px bg-white/22" />
       </div>
       {children}
     </div>
@@ -58,9 +58,9 @@ function Section({ label, children, className }: { label: string; children: Reac
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="grid grid-cols-[170px_minmax(0,1fr)] items-baseline gap-6">
-      <span className="system-label text-[11px] text-muted">{label}</span>
-      <span className="font-mono text-[13px] leading-relaxed text-white break-words">{value}</span>
+    <div className="grid grid-cols-[180px_minmax(0,1fr)] items-baseline gap-7">
+      <span className="system-label text-[11.5px] text-readable">{label}</span>
+      <span className="font-mono text-[13.5px] leading-relaxed text-white break-words">{value}</span>
     </div>
   );
 }
@@ -86,7 +86,7 @@ function CopyableError({ message }: { message: string }) {
       <span className="min-w-0 flex-1 font-mono text-[12px] leading-relaxed text-red/85 break-words">
         {message}
       </span>
-      <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-readable group-hover:text-white">
+      <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-readable group-hover:text-white">
         {copied ? <Check size={10} className="text-cyan" /> : <Copy size={10} />}
         {copied ? "Copied" : "Copy"}
       </span>
@@ -116,11 +116,11 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] tracking-widest uppercase text-muted">{label}</span>
+        <span className="font-mono text-[11px] tracking-widest uppercase text-readable">{label}</span>
         {hasValue && (
           <span
-            className={`font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm ${validation.valid ? "text-white/40" : "text-red/70"}`}
-            style={{ border: validation.valid ? "1px solid rgba(255,255,255,0.10)" : "1px solid rgba(215,25,33,0.25)" }}
+            className={`font-mono text-[9.5px] tracking-widest uppercase px-2 py-1 rounded-sm ${validation.valid ? "text-readable" : "text-red"}`}
+            style={{ border: validation.valid ? "1px solid rgba(255,255,255,0.22)" : "1px solid rgba(215,25,33,0.42)" }}
           >
             {validation.valid ? "VALID FORMAT" : "CHECK FORMAT"}
           </span>
@@ -134,12 +134,12 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
             onChange={(e) => setValue(e.target.value)}
             onFocus={() => setShow(true)}
             placeholder={placeholder}
-            className="w-full h-9 pl-3 pr-8 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
-            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+            className="w-full h-10 pl-3 pr-9 font-mono text-[13px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none transition-precise"
+            style={{ border: "1px solid rgba(255,255,255,0.24)" }}
           />
           <button type="button" onClick={() => setShow((v) => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise">
-            {show ? <EyeOff size={10} /> : <Eye size={10} />}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-readable hover:text-cyan transition-precise">
+            {show ? <EyeOff size={12} /> : <Eye size={12} />}
           </button>
         </div>
         <Button variant="ghost" size="sm" onClick={handleSave}>
@@ -147,7 +147,7 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
         </Button>
       </div>
       {hasValue && !validation.valid && (
-        <span className="font-mono text-[10.5px] text-red/80">{validation.message}</span>
+        <span className="font-mono text-[11px] text-red">{validation.message}</span>
       )}
     </div>
   );
@@ -400,7 +400,7 @@ export function Settings() {
 
   return (
     <PageContainer title="Settings" subtitle="APP CONFIGURATION">
-      <div className="flex flex-col gap-12 max-w-5xl">
+      <div className="flex flex-col gap-14 max-w-5xl">
 
         {/* App Info */}
         <Section label="APPLICATION" className="order-50">

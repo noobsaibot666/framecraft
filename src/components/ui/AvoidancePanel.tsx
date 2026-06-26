@@ -46,33 +46,33 @@ function RiskItem({
   return (
     <div
       className="flex flex-col rounded-sm overflow-hidden"
-      style={{ border: "var(--border-dim)" }}
+      style={{ border: "var(--border-default)" }}
     >
       {/* Header row */}
-      <div className="flex items-center gap-2 px-3 py-2">
+      <div className="flex min-h-10 items-center gap-2.5 px-3 py-2.5">
         <span
           className={cn("w-1.5 h-1.5 rounded-full shrink-0", SEVERITY_DOT[pattern.severity] ?? "bg-white/20")}
         />
-        <span className="font-mono text-[9px] text-dim/70 tracking-widest uppercase shrink-0">
+        <span className="font-mono text-[10px] text-readable tracking-widest uppercase shrink-0">
           {SEVERITY_LABEL[pattern.severity]}
         </span>
-        <span className="flex-1 font-mono text-[10px] text-soft-white truncate">{pattern.label}</span>
+        <span className="flex-1 font-mono text-[11px] text-soft-white truncate">{pattern.label}</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-dim/50 hover:text-muted transition-precise"
+            className="text-readable hover:text-cyan transition-precise"
             title={expanded ? "Collapse" : "Expand"}
           >
-            {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
           <button
             type="button"
             onClick={onDismiss}
-            className="text-dim/40 hover:text-red transition-precise"
+            className="text-readable hover:text-red transition-precise"
             title="Dismiss"
           >
-            <X size={9} />
+            <X size={11} />
           </button>
         </div>
       </div>
@@ -84,13 +84,13 @@ function RiskItem({
           style={{ borderTop: "var(--border-dim)" }}
         >
           {pattern.description && (
-            <p className="font-mono text-[9px] text-dim/70 leading-relaxed pt-2">{pattern.description}</p>
+            <p className="font-mono text-[11px] text-readable leading-relaxed pt-2">{pattern.description}</p>
           )}
           {risk.triggered_by && risk.triggered_by.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest mr-1">Triggered by:</span>
+              <span className="font-mono text-[10px] text-readable uppercase tracking-widest mr-1">Triggered by:</span>
               {risk.triggered_by.map((kw) => (
-                <span key={kw} className="font-mono text-[8px] text-dim/60 px-1.5 py-0.5 rounded-sm" style={{ border: "var(--border-dim)" }}>
+                <span key={kw} className="font-mono text-[10px] text-readable px-2 py-1 rounded-sm" style={{ border: "var(--border-default)" }}>
                   {kw}
                 </span>
               ))}
@@ -100,10 +100,10 @@ function RiskItem({
             <button
               type="button"
               onClick={() => onAddCorrection(pattern.correction_prompt!)}
-              className="flex items-center gap-1.5 self-start font-mono text-[9px] text-dim hover:text-white px-2.5 py-1.5 rounded-sm transition-precise"
-              style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.04)" }}
+              className="flex min-h-8 items-center gap-1.5 self-start font-mono text-[10px] text-readable hover:text-cyan px-2.5 py-1.5 rounded-sm transition-precise"
+              style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.05)" }}
             >
-              <Plus size={8} />
+              <Plus size={10} />
               Add correction
             </button>
           )}
@@ -149,45 +149,45 @@ function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => voi
     <div className="flex flex-col gap-3 p-3 rounded-sm"
       style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.03)" }}>
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[8px] text-dim/70 uppercase tracking-widest">Custom Rule</span>
-        <button type="button" onClick={onClose} className="text-dim/40 hover:text-white transition-precise"><X size={9} /></button>
+        <span className="font-mono text-[10px] text-readable uppercase tracking-widest">Custom Rule</span>
+        <button type="button" onClick={onClose} className="text-readable hover:text-white transition-precise"><X size={11} /></button>
       </div>
       <input ref={labelRef} value={label} onChange={(e) => setLabel(e.target.value)}
         placeholder="Rule label (e.g. Over-processed skin)"
-        className="h-7 px-2.5 font-mono text-[10px] text-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
-        style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+        className="h-9 px-3 font-mono text-[11px] text-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.22)" }}
         onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }} />
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">Severity</span>
+          <span className="font-mono text-[10px] text-readable uppercase tracking-widest">Severity</span>
           <div className="relative">
             <select value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}
-              className="w-full appearance-none h-7 px-2 font-mono text-[10px] text-white bg-dark rounded-sm focus:outline-none cursor-pointer"
-              style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+              className="w-full appearance-none h-9 px-3 font-mono text-[11px] text-white bg-dark rounded-sm focus:outline-none cursor-pointer"
+              style={{ border: "1px solid rgba(255,255,255,0.22)" }}>
               {SEVERITY_OPTIONS.map((s) => <option key={s} value={s} className="bg-panel">{s}</option>)}
             </select>
           </div>
         </div>
         <div className="flex flex-col gap-1">
-          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">Correction</span>
+          <span className="font-mono text-[10px] text-readable uppercase tracking-widest">Correction</span>
           <input value={correction} onChange={(e) => setCorrection(e.target.value)}
             placeholder="Fix phrase to append…"
-            className="h-7 px-2 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
-            style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+            className="h-9 px-3 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.22)" }} />
         </div>
       </div>
       <input value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder="Description (optional)"
-        className="h-7 px-2.5 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
-        style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+        className="h-9 px-3 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+        style={{ border: "1px solid rgba(255,255,255,0.20)" }} />
       <div className="flex items-center gap-2">
         <button type="button" onClick={handleSave} disabled={!label.trim() || saving}
-          className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-white px-2.5 py-1.5 rounded-sm transition-precise disabled:opacity-40"
+          className="flex min-h-9 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-white px-3 py-1.5 rounded-sm transition-precise disabled:opacity-40"
           style={{ border: "var(--border-strong)", background: "rgba(255,255,255,0.07)" }}>
-          <Plus size={8} />{saving ? "Saving…" : "Add Rule"}
+          <Plus size={10} />{saving ? "Saving..." : "Add Rule"}
         </button>
         <button type="button" onClick={onClose}
-          className="font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-2 py-1.5 transition-precise">
+          className="font-mono text-[10px] tracking-widest uppercase text-readable hover:text-white px-3 py-1.5 transition-precise">
           Cancel
         </button>
       </div>
@@ -268,13 +268,13 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
   if (risks.length === 0 && promptText.trim().length < 8) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-sm" style={{ border: "var(--border-dim)" }}>
-          <AlertTriangle size={10} className="text-dim/30 shrink-0" />
-          <span className="font-mono text-[9px] text-dim/40 flex-1">Risk analysis runs as you build the prompt.</span>
+        <div className="flex items-center gap-2.5 px-3 py-3 rounded-sm" style={{ border: "var(--border-default)" }}>
+          <AlertTriangle size={12} className="text-readable shrink-0" />
+          <span className="font-mono text-[11px] text-readable flex-1">Risk analysis runs as you build the prompt.</span>
           <button type="button" onClick={() => setShowAddForm((v) => !v)}
-            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-1.5 py-0.5 rounded-sm transition-precise"
-            style={{ border: "var(--border-dim)" }}>
-            <Plus size={7} />Rule
+            className="flex min-h-8 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan px-2.5 py-1 rounded-sm transition-precise"
+            style={{ border: "var(--border-default)" }}>
+            <Plus size={9} />Rule
           </button>
         </div>
         {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
@@ -285,13 +285,13 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
   if (activeRisks.length === 0) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 px-3 py-2.5 rounded-sm" style={{ border: "var(--border-dim)" }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-white/20 shrink-0" />
-          <span className="font-mono text-[9px] text-dim/50 flex-1">No risks detected. Risk score: 0/10.</span>
+        <div className="flex items-center gap-2.5 px-3 py-3 rounded-sm" style={{ border: "var(--border-default)" }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan shrink-0" />
+          <span className="font-mono text-[11px] text-readable flex-1">No risks detected. Risk score: 0/10.</span>
           <button type="button" onClick={() => setShowAddForm((v) => !v)}
-            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-1.5 py-0.5 rounded-sm transition-precise"
-            style={{ border: "var(--border-dim)" }}>
-            <Plus size={7} />Rule
+            className="flex min-h-8 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan px-2.5 py-1 rounded-sm transition-precise"
+            style={{ border: "var(--border-default)" }}>
+            <Plus size={9} />Rule
           </button>
         </div>
         {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
@@ -299,37 +299,37 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
     );
   }
 
-  const scoreColor = riskScore >= 7 ? "text-red" : riskScore >= 5 ? "text-red/70" : riskScore >= 3 ? "text-muted" : "text-dim";
+  const scoreColor = riskScore >= 7 ? "text-red" : riskScore >= 5 ? "text-red/80" : riskScore >= 3 ? "text-muted" : "text-readable";
 
   return (
     <div className="flex flex-col gap-2">
       {/* Summary header */}
       <div
-        className="flex items-center gap-3 px-3 py-2 rounded-sm"
+        className="flex items-center gap-3 px-3 py-3 rounded-sm"
         style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
       >
-        <AlertTriangle size={10} className={cn("shrink-0", riskScore >= 5 ? "text-red/70" : "text-dim/50")} />
+        <AlertTriangle size={12} className={cn("shrink-0", riskScore >= 5 ? "text-red/80" : "text-readable")} />
         <div className="flex-1 flex flex-col gap-0.5">
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[9px] text-dim/70 uppercase tracking-widest">
+            <span className="font-mono text-[10.5px] text-readable uppercase tracking-widest">
               {activeRisks.length} risk{activeRisks.length !== 1 ? "s" : ""} detected
             </span>
             {criticalCount > 0 && (
-              <span className="font-mono text-[8px] text-red uppercase tracking-widest">{criticalCount} critical</span>
+              <span className="font-mono text-[10px] text-red uppercase tracking-widest">{criticalCount} critical</span>
             )}
             {highCount > 0 && (
-              <span className="font-mono text-[8px] text-red/60 uppercase tracking-widest">{highCount} high</span>
+              <span className="font-mono text-[10px] text-red/80 uppercase tracking-widest">{highCount} high</span>
             )}
           </div>
         </div>
-        <span className={cn("font-mono text-[11px] font-medium shrink-0", scoreColor)}>
-          {riskScore.toFixed(1)}<span className="text-dim/50 text-[9px]">/10</span>
+        <span className={cn("font-mono text-[12px] font-medium shrink-0", scoreColor)}>
+          {riskScore.toFixed(1)}<span className="text-readable text-[10px]">/10</span>
         </span>
         <button type="button" onClick={() => setShowAddForm((v) => !v)}
-          className={cn("flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm transition-precise",
-            showAddForm ? "text-white" : "text-dim/50 hover:text-white")}
-          style={{ border: showAddForm ? "var(--border-strong)" : "var(--border-dim)" }}>
-          <Plus size={7} />Rule
+          className={cn("flex min-h-8 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase px-2.5 py-1 rounded-sm transition-precise",
+            showAddForm ? "text-white" : "text-readable hover:text-cyan")}
+          style={{ border: showAddForm ? "var(--border-strong)" : "var(--border-default)" }}>
+          <Plus size={9} />Rule
         </button>
       </div>
 
@@ -348,7 +348,7 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
             />
             {!risk.pattern.is_builtin && !dismissed.has(risk.pattern.id) && (
               <button type="button" onClick={() => handleDeletePattern(risk.pattern.id)}
-                className="absolute top-2 right-8 opacity-0 group-hover/risk:opacity-100 text-dim/30 hover:text-red/60 transition-precise"
+                className="absolute top-2 right-8 opacity-0 group-hover/risk:opacity-100 text-readable hover:text-red transition-precise"
                 title="Delete custom rule">
                 <Trash2 size={9} />
               </button>
@@ -362,10 +362,10 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
         <button
           type="button"
           onClick={handleAddAll}
-          className="flex items-center justify-center gap-1.5 h-7 font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white rounded-sm transition-precise"
-          style={{ border: "var(--border-dim)" }}
+          className="flex min-h-9 items-center justify-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan rounded-sm transition-precise"
+          style={{ border: "var(--border-default)" }}
         >
-          <Plus size={8} />
+          <Plus size={10} />
           Add all corrections
         </button>
       )}
@@ -373,12 +373,12 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
       {/* Past failure artifacts */}
       {pastArtifacts.length > 0 && (
         <div className="flex flex-col gap-2 pt-1">
-          <span className="font-mono text-[8px] text-dim/50 uppercase tracking-widest">From your past failures</span>
+          <span className="font-mono text-[10px] text-readable uppercase tracking-widest">From your past failures</span>
           <div className="flex flex-wrap gap-1">
             {pastArtifacts.slice(0, 8).map((label) => (
               <span
                 key={label}
-                className="font-mono text-[8px] text-red/50 px-1.5 py-0.5 rounded-sm"
+                className="font-mono text-[10px] text-red/80 px-2 py-1 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.2)" }}
               >
                 {label}

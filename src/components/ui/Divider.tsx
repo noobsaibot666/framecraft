@@ -16,9 +16,9 @@ export function Divider({ label, className, vertical }: DividerProps) {
   if (label) {
     return (
       <div className={cn("flex items-center gap-3", className)}>
-        <div className="flex-1 h-px bg-white/8" />
-        <span className="system-label text-[9px]">{label}</span>
-        <div className="flex-1 h-px bg-white/8" />
+        <div className="flex-1 h-px bg-white/14" />
+        <span className="system-label text-[10.5px] text-readable">{label}</span>
+        <div className="flex-1 h-px bg-white/14" />
       </div>
     );
   }

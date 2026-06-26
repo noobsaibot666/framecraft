@@ -713,6 +713,11 @@ export function ComparisonLab() {
           <Button variant="ghost" size="sm" onClick={() => { setActiveSessionId(null); setSlots([null, null, null, null]); }}>
             <ArrowLeft size={11} /> Sessions
           </Button>
+          {projectId && (
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectId}`)}>
+              <ArrowLeft size={11} /> Project
+            </Button>
+          )}
         </div>
       }
     >

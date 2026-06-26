@@ -17,7 +17,7 @@ import {
   getMessages,
 } from "@/lib/assistant";
 import { createPrompt } from "@/lib/db";
-import { updateProject } from "@/lib/projects";
+import { addPromptToProject, updateProject } from "@/lib/projects";
 import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import { cn } from "@/lib/utils";
 import type {
@@ -398,6 +398,7 @@ export function ProjectAssistant() {
             provider: "midjourney",
             prompt_text: "[AI-suggested draft — fill in]",
           });
+          await addPromptToProject(id, promptId);
           navigate(`/craft/${promptId}`);
         },
       });

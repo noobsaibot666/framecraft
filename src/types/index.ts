@@ -198,6 +198,15 @@ export interface Project {
   client?: string;
   campaign?: string;
   status: ProjectStatus;
+  project_type?: string;
+  intended_output?: string;
+  image_needs?: string;
+  video_needs?: string;
+  aspect_ratios?: string[];
+  provider_targets?: string[];
+  visual_direction?: string;
+  constraints?: string;
+  creative_goals?: string;
   brief_text?: string;
   production_goal?: string;
   category?: Category;

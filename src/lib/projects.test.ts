@@ -80,6 +80,41 @@ describe("projects in-memory CRUD", () => {
     expect(found!.status).toBe("active");
   });
 
+  it("round trips project setup metadata", async () => {
+    const id = await createProject({
+      title: "Setup Metadata Project",
+      project_type: "campaign",
+      intended_output: "Launch-ready image and video prompt system",
+      image_needs: "Hero stills and product closeups",
+      video_needs: "Short motion tests",
+      aspect_ratios: ["16:9", "4:5"],
+      provider_targets: ["midjourney", "kling"],
+      visual_direction: "Premium studio realism",
+      constraints: "Avoid over-polished AI skin",
+      creative_goals: "Build a reusable craft baseline",
+    });
+
+    await updateProject(id, {
+      aspect_ratios: ["1:1"],
+      provider_targets: ["midjourney", "runway"],
+      creative_goals: "Updated production goal",
+    });
+
+    const found = await getProjectById(id);
+    expect(found).toMatchObject({
+      id,
+      project_type: "campaign",
+      intended_output: "Launch-ready image and video prompt system",
+      image_needs: "Hero stills and product closeups",
+      video_needs: "Short motion tests",
+      aspect_ratios: ["1:1"],
+      provider_targets: ["midjourney", "runway"],
+      visual_direction: "Premium studio realism",
+      constraints: "Avoid over-polished AI skin",
+      creative_goals: "Updated production goal",
+    });
+  });
+
   it("deleteProject removes the project", async () => {
     const id = await createProject(proj({ title: "Will Be Deleted Project" }));
     expect(await getProjectById(id)).not.toBeNull();

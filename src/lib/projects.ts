@@ -27,6 +27,15 @@ function rowToProject(row: Record<string, unknown>): Project {
     client: row.client as string | undefined,
     campaign: row.campaign as string | undefined,
     status: (row.status as ProjectStatus) ?? "draft",
+    project_type: row.project_type as string | undefined,
+    intended_output: row.intended_output as string | undefined,
+    image_needs: row.image_needs as string | undefined,
+    video_needs: row.video_needs as string | undefined,
+    aspect_ratios: tryParse<string[]>(row.aspect_ratios, []),
+    provider_targets: tryParse<string[]>(row.provider_targets, []),
+    visual_direction: row.visual_direction as string | undefined,
+    constraints: row.constraints as string | undefined,
+    creative_goals: row.creative_goals as string | undefined,
     brief_text: row.brief_text as string | undefined,
     production_goal: row.production_goal as string | undefined,
     category: row.category as Project["category"] | undefined,
@@ -51,6 +60,15 @@ export interface CreateProjectInput {
   client?: string;
   campaign?: string;
   status?: ProjectStatus;
+  project_type?: string;
+  intended_output?: string;
+  image_needs?: string;
+  video_needs?: string;
+  aspect_ratios?: string[];
+  provider_targets?: string[];
+  visual_direction?: string;
+  constraints?: string;
+  creative_goals?: string;
   brief_text?: string;
   production_goal?: string;
   category?: Project["category"];
@@ -66,15 +84,26 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
     const db = await getDb();
     await db.execute(
       `INSERT INTO projects
-        (id, title, client, campaign, status, brief_text, production_goal,
-         category, tags, notes, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        (id, title, client, campaign, status, project_type, intended_output,
+         image_needs, video_needs, aspect_ratios, provider_targets,
+         visual_direction, constraints, creative_goals, brief_text,
+         production_goal, category, tags, notes, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         id,
         data.title,
         data.client ?? null,
         data.campaign ?? null,
         data.status ?? "draft",
+        data.project_type ?? null,
+        data.intended_output ?? null,
+        data.image_needs ?? null,
+        data.video_needs ?? null,
+        data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null,
+        data.provider_targets ? JSON.stringify(data.provider_targets) : null,
+        data.visual_direction ?? null,
+        data.constraints ?? null,
+        data.creative_goals ?? null,
         data.brief_text ?? null,
         data.production_goal ?? null,
         data.category ?? null,
@@ -93,6 +122,15 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
     client: data.client,
     campaign: data.campaign,
     status: data.status ?? "draft",
+    project_type: data.project_type,
+    intended_output: data.intended_output,
+    image_needs: data.image_needs,
+    video_needs: data.video_needs,
+    aspect_ratios: data.aspect_ratios ?? [],
+    provider_targets: data.provider_targets ?? [],
+    visual_direction: data.visual_direction,
+    constraints: data.constraints,
+    creative_goals: data.creative_goals,
     brief_text: data.brief_text,
     production_goal: data.production_goal,
     category: data.category,
@@ -199,6 +237,15 @@ export async function updateProject(id: string, data: Partial<CreateProjectInput
     if ("client" in data) add("client", data.client ?? null);
     if ("campaign" in data) add("campaign", data.campaign ?? null);
     if ("status" in data && data.status != null) add("status", data.status);
+    if ("project_type" in data) add("project_type", data.project_type ?? null);
+    if ("intended_output" in data) add("intended_output", data.intended_output ?? null);
+    if ("image_needs" in data) add("image_needs", data.image_needs ?? null);
+    if ("video_needs" in data) add("video_needs", data.video_needs ?? null);
+    if ("aspect_ratios" in data) add("aspect_ratios", data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null);
+    if ("provider_targets" in data) add("provider_targets", data.provider_targets ? JSON.stringify(data.provider_targets) : null);
+    if ("visual_direction" in data) add("visual_direction", data.visual_direction ?? null);
+    if ("constraints" in data) add("constraints", data.constraints ?? null);
+    if ("creative_goals" in data) add("creative_goals", data.creative_goals ?? null);
     if ("brief_text" in data) add("brief_text", data.brief_text ?? null);
     if ("production_goal" in data) add("production_goal", data.production_goal ?? null);
     if ("category" in data) add("category", data.category ?? null);

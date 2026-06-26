@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OpenFlags};
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -8,6 +9,7 @@ use std::{
 pub(crate) fn open_portable_database(db_path: &str) -> Result<Connection, String> {
     let path = Path::new(db_path);
     assert_database_access(path)?;
+    normalize_portable_journal_header(path)?;
     let first_error = match open_configured_connection(path) {
         Ok(conn) => return Ok(conn),
         Err(error) => error,
@@ -96,6 +98,152 @@ fn assert_database_access(path: &Path) -> Result<(), String> {
         })
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum JournalHeader {
+    Rollback,
+    Wal,
+    Other,
+}
+
+fn database_journal_header(path: &Path) -> Result<JournalHeader, String> {
+    let mut file = File::open(path).map_err(|error| {
+        format!(
+            "Could not read database journal header: {} ({error})",
+            path.display()
+        )
+    })?;
+    file.seek(SeekFrom::Start(18)).map_err(|error| {
+        format!(
+            "Could not seek database journal header: {} ({error})",
+            path.display()
+        )
+    })?;
+    let mut header = [0u8; 2];
+    match file.read_exact(&mut header) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
+            return Ok(JournalHeader::Other);
+        }
+        Err(error) => {
+            return Err(format!(
+                "Could not read database journal header: {} ({error})",
+                path.display()
+            ));
+        }
+    }
+
+    Ok(match header {
+        [1, 1] => JournalHeader::Rollback,
+        [2, 2] => JournalHeader::Wal,
+        _ => JournalHeader::Other,
+    })
+}
+
+fn normalize_portable_journal_header(path: &Path) -> Result<bool, String> {
+    if database_journal_header(path)? != JournalHeader::Wal {
+        return Ok(false);
+    }
+
+    let wal = sidecar_path(path, "wal");
+    let shm = sidecar_path(path, "shm");
+    if wal.exists() || shm.exists() {
+        return Err(format!(
+            "Database is still in WAL mode and has SQLite sidecar files. Close every app using this library, then reopen it. WAL exists: {}. SHM exists: {}",
+            wal.exists(),
+            shm.exists()
+        ));
+    }
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "framecraft-sqlite-journal-repair-{}-{}.db",
+        std::process::id(),
+        timestamp_slug()
+    ));
+    fs::copy(path, &temp_path).map_err(|error| {
+        format!(
+            "Could not copy database for journal repair: {} -> {} ({error})",
+            path.display(),
+            temp_path.display()
+        )
+    })?;
+
+    let repair_result = convert_local_copy_to_rollback_journal(&temp_path)
+        .and_then(|_| backup_database_before_repair(path))
+        .and_then(|_| {
+            fs::copy(&temp_path, path).map(|_| ()).map_err(|error| {
+                format!(
+                    "Could not replace database after journal repair: {} -> {} ({error})",
+                    temp_path.display(),
+                    path.display()
+                )
+            })
+        });
+
+    let _ = fs::remove_file(&temp_path);
+    repair_result?;
+    Ok(true)
+}
+
+fn convert_local_copy_to_rollback_journal(path: &Path) -> Result<(), String> {
+    let conn = open_configured_connection(path).map_err(|error| {
+        format!(
+            "Could not normalize database journal mode: {} ({error})",
+            path.display()
+        )
+    })?;
+    let integrity: String = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(|error| {
+            format!(
+                "Could not verify database after journal repair: {} ({error})",
+                path.display()
+            )
+        })?;
+    if integrity.to_lowercase() != "ok" {
+        return Err(format!(
+            "Database integrity check failed after journal repair: {} ({integrity})",
+            path.display()
+        ));
+    }
+    drop(conn);
+
+    if database_journal_header(path)? != JournalHeader::Rollback {
+        return Err(format!(
+            "Database journal repair did not switch to rollback mode: {}",
+            path.display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn backup_database_before_repair(path: &Path) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("Database path has no parent directory: {}", path.display()))?;
+    let backup_dir = parent
+        .join("backups")
+        .join(format!("sqlite-journal-repair-{}", timestamp_slug()));
+    fs::create_dir_all(&backup_dir).map_err(|error| {
+        format!(
+            "Could not create database repair backup folder: {} ({error})",
+            backup_dir.display()
+        )
+    })?;
+    let backup_path = backup_dir.join(
+        path.file_name()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("framecraft.db")),
+    );
+    fs::copy(path, &backup_path).map(|_| ()).map_err(|error| {
+        format!(
+            "Could not back up database before journal repair: {} -> {} ({error})",
+            path.display(),
+            backup_path.display()
+        )
+    })
+}
+
 fn quarantine_stale_shm(path: &Path) -> Result<bool, String> {
     let shm = sidecar_path(path, "shm");
     if !shm.exists() {
@@ -175,7 +323,7 @@ fn sqlite_nolock_uri(path: &Path) -> String {
 fn timestamp_slug() -> String {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
+        .map(|duration| duration.as_nanos())
         .unwrap_or_default();
     format!("{millis}")
 }
@@ -253,6 +401,42 @@ mod tests {
 
         assert_eq!(count, 1);
         assert_eq!(journal_mode.to_lowercase(), "delete");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn normalizes_wal_header_without_sidecars_before_portable_open() {
+        let root = test_root("wal-header-normalize");
+        let db_path = root.join("framecraft.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+             INSERT INTO prompts (title) VALUES ('Test');
+             PRAGMA journal_mode=WAL;",
+        )
+        .unwrap();
+        drop(conn);
+        let _ = fs::remove_file(sidecar_path(&db_path, "wal"));
+        let _ = fs::remove_file(sidecar_path(&db_path, "shm"));
+
+        assert_eq!(
+            database_journal_header(&db_path).unwrap(),
+            JournalHeader::Wal
+        );
+
+        let repaired = normalize_portable_journal_header(&db_path).unwrap();
+        let conn = open_portable_database(db_path.to_str().unwrap()).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM prompts", [], |row| row.get(0))
+            .unwrap();
+
+        assert!(repaired);
+        assert_eq!(
+            database_journal_header(&db_path).unwrap(),
+            JournalHeader::Rollback
+        );
+        assert_eq!(count, 1);
+        assert!(root.join("backups").exists());
         let _ = fs::remove_dir_all(root);
     }
 

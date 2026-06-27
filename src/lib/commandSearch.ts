@@ -1,9 +1,9 @@
-import { searchPrompts } from "./db";
+import { searchPrompts, searchTokens } from "./db";
 import { searchProjects } from "./projects";
 import { searchReferences } from "./references";
 import { searchCampaigns } from "./campaigns";
 
-export type CommandResultType = "prompt" | "project" | "reference" | "campaign";
+export type CommandResultType = "prompt" | "recipe" | "token" | "project" | "reference" | "campaign" | "nav";
 
 export interface CommandResult {
   id: string;
@@ -13,18 +13,32 @@ export interface CommandResult {
   path: string;
 }
 
-const PER_TYPE = 5;
+const PER_TYPE = 4;
+
+// Static navigation shortcuts — shown when query is empty
+export const NAV_SHORTCUTS: CommandResult[] = [
+  { id: "nav-craft",      type: "nav", title: "New Prompt",      subtitle: "Open the prompt crafter",     path: "/craft" },
+  { id: "nav-recipe",     type: "nav", title: "New Recipe",      subtitle: "Open the recipe editor",      path: "/recipes/new" },
+  { id: "nav-library",    type: "nav", title: "Prompt Library",  subtitle: "Browse all prompts",           path: "/library" },
+  { id: "nav-queue",      type: "nav", title: "Generation Queue",subtitle: "View and manage the queue",   path: "/queue" },
+  { id: "nav-results",    type: "nav", title: "Result Gallery",  subtitle: "Browse all generated results", path: "/results" },
+  { id: "nav-references", type: "nav", title: "References",      subtitle: "Browse the reference library", path: "/references" },
+];
 
 export async function searchAll(query: string): Promise<CommandResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
 
-  const [prompts, projects, references, campaigns] = await Promise.all([
+  const [allPrompts, projects, references, campaigns, tokens] = await Promise.all([
     searchPrompts(q).catch(() => []),
     searchProjects(q).catch(() => []),
     searchReferences(q).catch(() => []),
     searchCampaigns(q).catch(() => []),
+    searchTokens(q).catch(() => []),
   ]);
+
+  const prompts  = allPrompts.filter((p) => !p.is_recipe);
+  const recipes  = allPrompts.filter((p) => p.is_recipe);
 
   const results: CommandResult[] = [];
 
@@ -35,6 +49,16 @@ export async function searchAll(query: string): Promise<CommandResult[]> {
       title: p.title,
       subtitle: p.provider + (p.is_winner ? " · winner" : p.is_failed ? " · failed" : ""),
       path: `/library/${p.id}`,
+    });
+  }
+
+  for (const r of recipes.slice(0, PER_TYPE)) {
+    results.push({
+      id: r.id,
+      type: "recipe",
+      title: r.title,
+      subtitle: r.provider + ` · recipe`,
+      path: `/recipes/${r.id}/edit`,
     });
   }
 
@@ -67,6 +91,23 @@ export async function searchAll(query: string): Promise<CommandResult[]> {
       path: `/campaigns/${c.id}`,
     });
   }
+
+  for (const t of tokens.slice(0, PER_TYPE)) {
+    results.push({
+      id: t.id,
+      type: "token",
+      title: t.text,
+      subtitle: t.category_name ?? "token",
+      path: `/tokens/${t.id}`,
+    });
+  }
+
+  // Also filter nav shortcuts by query
+  const qLower = q.toLowerCase();
+  const matchingNav = NAV_SHORTCUTS.filter(
+    (n) => n.title.toLowerCase().includes(qLower) || (n.subtitle ?? "").toLowerCase().includes(qLower)
+  );
+  results.push(...matchingNav);
 
   return results;
 }

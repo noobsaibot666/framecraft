@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Plus, Star, Trash2, ChevronRight, Layers, Wand2 } from "lucide-react";
+import { Copy, Download, Plus, Star, Trash2, ChevronRight, Layers, Wand2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -168,14 +168,33 @@ export function RecipeLibrary() {
     navigate(`/recipes/${id}/apply`);
   };
 
+  const handleExport = () => {
+    if (!recipes.length) return;
+    const data = JSON.stringify({ version: 1, exported_at: new Date().toISOString(), recipes }, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `framecraft-recipes-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <PageContainer
       title="Recipes"
-      subtitle="REUSABLE PROMPT STRUCTURES"
+      subtitle={`REUSABLE PROMPT STRUCTURES${recipes.length ? ` · ${recipes.length} RECIPES` : ""}`}
       action={
-        <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>
-          <Plus size={11} /> New Recipe
-        </Button>
+        <div className="flex items-center gap-2">
+          {recipes.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={handleExport}>
+              <Download size={10} /> Export
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>
+            <Plus size={11} /> New Recipe
+          </Button>
+        </div>
       }
     >
       {/* Filter bar */}

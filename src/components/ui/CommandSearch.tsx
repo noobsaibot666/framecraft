@@ -1,28 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, FileText, FolderOpen, Image, Briefcase, ArrowRight } from "lucide-react";
-import { searchAll, type CommandResult, type CommandResultType } from "@/lib/commandSearch";
+import {
+  ArrowRight, Briefcase, Compass, FileText, FolderOpen, Image, Layers, Tag, Zap,
+} from "lucide-react";
+import { searchAll, NAV_SHORTCUTS, type CommandResult, type CommandResultType } from "@/lib/commandSearch";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABEL: Record<CommandResultType, string> = {
   prompt:    "PROMPT",
+  recipe:    "RECIPE",
+  token:     "TOKEN",
   project:   "PROJECT",
   reference: "REF",
   campaign:  "CAMPAIGN",
+  nav:       "GO",
 };
 
 const TYPE_ICON: Record<CommandResultType, React.ReactNode> = {
   prompt:    <FileText size={11} />,
+  recipe:    <Layers size={11} />,
+  token:     <Tag size={11} />,
   project:   <FolderOpen size={11} />,
   reference: <Image size={11} />,
   campaign:  <Briefcase size={11} />,
+  nav:       <Compass size={11} />,
 };
 
 const TYPE_COLOR: Record<CommandResultType, string> = {
   prompt:    "text-cyan",
+  recipe:    "text-white/60",
+  token:     "text-amber/70",
   project:   "text-amber",
   reference: "text-readable",
-  campaign:  "text-white/60",
+  campaign:  "text-white/50",
+  nav:       "text-dim/70",
 };
 
 function ResultRow({ result, active, onClick }: {
@@ -76,6 +87,9 @@ export function CommandSearch({ onClose }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const showingNavShortcuts = query.trim().length < 2;
+  const displayResults = showingNavShortcuts ? NAV_SHORTCUTS : results;
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -111,12 +125,12 @@ export function CommandSearch({ onClose }: Props) {
     if (e.key === "Escape") { onClose(); return; }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+      setActiveIndex((i) => Math.min(i + 1, displayResults.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && results[activeIndex]) {
-      navigate_to(results[activeIndex].path);
+    } else if (e.key === "Enter" && displayResults[activeIndex]) {
+      navigate_to(displayResults[activeIndex].path);
     }
   };
 
@@ -141,17 +155,17 @@ export function CommandSearch({ onClose }: Props) {
       >
         {/* Input row */}
         <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "var(--border-default)" }}>
-          <Search size={13} className="text-readable shrink-0" />
+          <Zap size={13} className="text-readable shrink-0" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search prompts, projects, references, campaigns…"
+            placeholder="Search or jump to… (prompts, recipes, tokens, projects…)"
             className="flex-1 bg-transparent font-mono text-[13px] text-white placeholder:text-dim focus:outline-none"
           />
           {loading && (
-            <span className="font-mono text-[9px] text-dim/40 shrink-0">searching…</span>
+            <span className="font-mono text-[9px] text-dim/40 shrink-0">···</span>
           )}
           <kbd className="font-mono text-[9px] text-dim/40 px-1.5 py-0.5 rounded shrink-0"
             style={{ border: "var(--border-dim)" }}>
@@ -159,8 +173,27 @@ export function CommandSearch({ onClose }: Props) {
           </kbd>
         </div>
 
-        {/* Results */}
-        {results.length > 0 && (
+        {/* Navigation shortcuts (when query empty) */}
+        {showingNavShortcuts && (
+          <>
+            <div className="px-4 pt-3 pb-1">
+              <span className="font-mono text-[8px] uppercase tracking-widest text-dim/40">QUICK NAVIGATE</span>
+            </div>
+            <div className="pb-1">
+              {NAV_SHORTCUTS.map((r, i) => (
+                <ResultRow
+                  key={r.id}
+                  result={r}
+                  active={i === activeIndex}
+                  onClick={() => navigate_to(r.path)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Search results */}
+        {!showingNavShortcuts && results.length > 0 && (
           <div className="max-h-80 overflow-y-auto py-1">
             {results.map((r, i) => (
               <ResultRow
@@ -173,25 +206,23 @@ export function CommandSearch({ onClose }: Props) {
           </div>
         )}
 
-        {/* Empty state */}
-        {query.trim().length >= 2 && !loading && results.length === 0 && (
+        {/* Empty search state */}
+        {!showingNavShortcuts && !loading && results.length === 0 && (
           <div className="px-4 py-6 text-center">
             <span className="font-mono text-[11px] text-muted">No results for "{query}"</span>
           </div>
         )}
 
-        {/* Footer hint */}
-        {query.trim().length < 2 && (
-          <div className="px-4 py-3 flex items-center gap-4">
-            {(["prompt", "project", "reference", "campaign"] as CommandResultType[]).map((t) => (
-              <span key={t} className={cn("flex items-center gap-1 font-mono text-[9px] tracking-widest", TYPE_COLOR[t])}>
-                {TYPE_ICON[t]} {TYPE_LABEL[t]}
-              </span>
-            ))}
-            <span className="flex-1" />
-            <span className="font-mono text-[9px] text-dim/40">↑↓ navigate · ↵ open</span>
-          </div>
-        )}
+        {/* Footer */}
+        <div className="px-4 py-2.5 flex items-center gap-3" style={{ borderTop: "var(--border-dim)" }}>
+          {(["prompt", "recipe", "token", "project", "reference"] as CommandResultType[]).map((t) => (
+            <span key={t} className={cn("flex items-center gap-1 font-mono text-[8px] tracking-widest", TYPE_COLOR[t])}>
+              {TYPE_ICON[t]}
+            </span>
+          ))}
+          <span className="flex-1" />
+          <span className="font-mono text-[9px] text-dim/40">↑↓ navigate · ↵ open</span>
+        </div>
       </div>
     </>
   );

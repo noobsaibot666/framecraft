@@ -9,7 +9,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults } from "@/lib/db";
-import { getDashboardHealth, type ProductionHealth, EMPTY_HEALTH } from "@/lib/dashboardHealth";
+import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
@@ -199,16 +199,75 @@ function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: (
   );
 }
 
+// ─── Activity Chart ───────────────────────────────────────────
+
+function ActivityChart({ data }: { data: DayActivity[] }) {
+  if (!data.length || data.every((d) => d.prompts === 0 && d.results === 0)) return null;
+  const maxVal = Math.max(1, ...data.flatMap((d) => [d.prompts, d.results]));
+  const H = 32;
+  const BAR_W = 7;
+  const GAP = 1;
+  const GROUP_W = BAR_W * 2 + GAP + 6;
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-end gap-px">
+        {data.map((d, i) => {
+          const ph = Math.max(1, Math.round((d.prompts / maxVal) * H));
+          const rh = Math.max(d.results > 0 ? 1 : 0, Math.round((d.results / maxVal) * H));
+          return (
+            <div key={i} className="flex flex-col items-center gap-px" style={{ width: GROUP_W }}>
+              <div className="flex items-end gap-px">
+                <div
+                  className="rounded-sm"
+                  style={{ width: BAR_W, height: ph, background: "rgba(72,229,232,0.55)" }}
+                  title={`${d.prompts} prompt${d.prompts !== 1 ? "s" : ""}`}
+                />
+                <div
+                  className="rounded-sm"
+                  style={{ width: BAR_W, height: rh, background: "rgba(255,255,255,0.18)" }}
+                  title={`${d.results} result${d.results !== 1 ? "s" : ""}`}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex">
+        {data.map((d, i) => (
+          <span key={i} className="font-mono text-center" style={{ width: GROUP_W, fontSize: 7, color: "rgba(255,255,255,0.25)" }}>
+            {d.label.slice(0, 2)}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(72,229,232,0.55)" }} />
+          <span className="font-mono text-[8px] text-dim/50">Prompts</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(255,255,255,0.18)" }} />
+          <span className="font-mono text-[8px] text-dim/50">Results</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Page ──────────────────────────────────────────────────────
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
+  const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
+  useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
   const q = search.trim().toLowerCase();
   const recentPrompts = q
@@ -282,7 +341,7 @@ export function Dashboard() {
             <div className="flex-1 h-px bg-white/10" />
             <span className="font-mono text-[8px] text-dim/40 uppercase tracking-widest">THIS WEEK</span>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <HealthChip label="PROMPTS CRAFTED" value={health.promptsThisWeek} unit="prompts" />
             <HealthChip label="RESULTS REVIEWED" value={health.resultsThisWeek} unit="results" />
             <HealthChip label="WIN RATE" value={`${health.winRate}%`} />
@@ -295,6 +354,17 @@ export function Dashboard() {
             <HealthChip label="ACTIVE PROJECTS" value={health.activeProjectCount} unit="projects" />
             <HealthChip label="QUEUE DEPTH" value={health.queueDepth} unit="pending" alert={health.queueDepth > 5} />
           </div>
+          {weeklyActivity.length > 0 && (
+            <div
+              className="flex items-center gap-6 px-4 py-3 rounded-sm"
+              style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
+            >
+              <div className="flex flex-col gap-0.5 shrink-0">
+                <span className="system-label text-[10px] text-muted">7-DAY ACTIVITY</span>
+              </div>
+              <ActivityChart data={weeklyActivity} />
+            </div>
+          )}
         </div>
 
         {/* Continue where you left off */}
@@ -443,6 +513,42 @@ export function Dashboard() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
+            {/* Winner Token Correlations */}
+            {health.winnerTokens.length > 0 && (
+              <Card>
+                <CardHeader
+                  label="Winner Tokens"
+                  action={<Star size={11} className="text-amber fill-amber/30" />}
+                />
+                <CardBody>
+                  <div className="flex flex-col gap-0">
+                    {health.winnerTokens.map((t, i) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-3 px-4 py-2"
+                        style={{ borderBottom: "var(--border-dim)" }}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[10px] text-dim/30 w-4 text-right shrink-0">{i + 1}</span>
+                          <span className="font-mono text-[11px] text-soft-white truncate">{t.text}</span>
+                        </div>
+                        <span className="font-mono text-[9px] text-amber/60 shrink-0">{t.win_appearances}★</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="px-4 pb-3 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/tokens")}
+                      className="font-mono text-[9px] text-dim/50 hover:text-white transition-precise"
+                    >
+                      View all tokens →
+                    </button>
                   </div>
                 </CardBody>
               </Card>

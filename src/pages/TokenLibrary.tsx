@@ -10,13 +10,14 @@ import type { Token, TokenCategory } from "@/types";
 
 registerShortcutLabel("f", "Toggle favorite (Token Library — hover)");
 
-type SortOption = "quality" | "use" | "alpha" | "rating";
+type SortOption = "quality" | "use" | "alpha" | "rating" | "winners";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "quality", label: "Quality" },
   { value: "use", label: "Most Used" },
   { value: "alpha", label: "A–Z" },
   { value: "rating", label: "Rating" },
+  { value: "winners", label: "Winners" },
 ];
 
 function QualityBar({ score }: { score: number }) {
@@ -72,6 +73,9 @@ function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle
         </span>
         {(token.avg_rating ?? 0) > 0 && (
           <span className="font-mono text-[9px] text-dim/50">{(token.avg_rating ?? 0).toFixed(1)} avg</span>
+        )}
+        {(token.win_appearances ?? 0) > 0 && (
+          <span className="font-mono text-[9px] text-amber font-medium">{token.win_appearances}★</span>
         )}
         {token.is_builtin && (
           <span className="font-mono text-[8px] uppercase tracking-widest text-dim/30">built-in</span>

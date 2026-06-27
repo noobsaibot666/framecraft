@@ -437,6 +437,7 @@ function rowToToken(row: Record<string, unknown>): Token {
     provider: row.provider as Token["provider"] | undefined,
     use_count: (row.use_count as number) ?? 0,
     quality_score: (row.quality_score as number) ?? 0,
+    win_appearances: row.win_appearances !== undefined ? (row.win_appearances as number) : undefined,
     is_builtin: Boolean(row.is_builtin),
     is_favorite: Boolean(row.is_favorite),
   };
@@ -453,9 +454,20 @@ export async function getTokenCategories(): Promise<TokenCategory[]> {
   return STATIC_CATEGORIES;
 }
 
-export async function getAllTokens(sort: "quality" | "use" | "alpha" | "rating" = "quality"): Promise<Token[]> {
+export async function getAllTokens(sort: "quality" | "use" | "alpha" | "rating" | "winners" = "quality"): Promise<Token[]> {
   if (!isTauri) return [];
   const db = await getDb();
+  if (sort === "winners") {
+    const rows = (await db.select(
+      `SELECT t.*, COUNT(DISTINCT p.id) AS win_appearances
+       FROM tokens t
+       LEFT JOIN prompt_tokens pt ON pt.token_id = t.id
+       LEFT JOIN prompts p ON pt.prompt_id = p.id AND p.is_winner = 1
+       GROUP BY t.id
+       ORDER BY win_appearances DESC, t.quality_score DESC, t.text ASC`
+    )) as Record<string, unknown>[];
+    return rows.map(rowToToken);
+  }
   const orderBy = {
     quality: "quality_score DESC, use_count DESC, text ASC",
     use: "use_count DESC, quality_score DESC, text ASC",

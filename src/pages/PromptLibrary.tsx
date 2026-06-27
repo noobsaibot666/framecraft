@@ -279,10 +279,11 @@ export function PromptLibrary() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [batchWorking, setBatchWorking] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [tagFilter, setTagFilter] = useState<string>("");
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter]);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -440,8 +441,10 @@ export function PromptLibrary() {
   }, [filteredAndSorted, resultMap, selectedIds.size]);
 
   const allPrompts = filteredAndSorted(resultMap);
-  const prompts = allPrompts.slice(0, visibleCount);
-  const hasMoreVisible = visibleCount < allPrompts.length;
+  const uniqueTags = [...new Set(allPrompts.flatMap((p) => p.tags ?? []))].sort();
+  const tagFilteredPrompts = tagFilter ? allPrompts.filter((p) => (p.tags ?? []).includes(tagFilter)) : allPrompts;
+  const prompts = tagFilteredPrompts.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < tagFilteredPrompts.length;
   const metrics = getPromptLibraryMetrics(allPrompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
@@ -511,6 +514,28 @@ export function PromptLibrary() {
             options={STATUS_FILTER_OPTIONS}
           />
         </div>
+
+        {/* Tag filter chips */}
+        {uniqueTags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {tagFilter && (
+              <button type="button" onClick={() => setTagFilter("")}
+                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"
+                style={{ border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)" }}>
+                <X size={8} /> Clear
+              </button>
+            )}
+            {uniqueTags.map((tag) => (
+              <button key={tag} type="button"
+                onClick={() => setTagFilter(tag === tagFilter ? "" : tag)}
+                className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
+                  tagFilter === tag ? "text-white" : "text-dim/60 hover:text-muted")}
+                style={{ border: tagFilter === tag ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)" }}>
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Batch toolbar */}
@@ -624,8 +649,9 @@ export function PromptLibrary() {
         <>
           <div className="flex items-center justify-between mb-5">
             <span className="system-label text-soft-white">
-              <DotMatrix value={prompts.length} size="sm" className="inline-block mr-2" />
-              {prompts.length === 1 ? "PROMPT" : "PROMPTS"}
+              <DotMatrix value={tagFilteredPrompts.length} size="sm" className="inline-block mr-2" />
+              {tagFilteredPrompts.length === 1 ? "PROMPT" : "PROMPTS"}
+              {tagFilter && <span className="text-dim/50 ml-2">#{tagFilter}</span>}
             </span>
             <span className="font-mono text-[11px] text-readable">
               {metrics.withResults} with results · {metrics.failed} failed marked

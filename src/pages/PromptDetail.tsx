@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
-  Layers, ListPlus,
+  Layers, ListPlus, Shuffle, X,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,7 @@ import { formatDate, cn } from "@/lib/utils";
 import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/promptFormatter";
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
+import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analyzePrompt";
 
 registerShortcutLabel("e", "Edit prompt (Prompt Detail)");
 registerShortcutLabel("q", "Add to queue (Prompt Detail)");
@@ -59,7 +60,7 @@ function ResultImage({ src }: { src?: string }) {
 export function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getById, remove, update } = usePromptStore();
+  const { getById, remove, update, create } = usePromptStore();
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +69,9 @@ export function PromptDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [showExtractRecipe, setShowExtractRecipe] = useState(false);
+  const [showVariations, setShowVariations] = useState(false);
+  const [variations, setVariations] = useState<string[]>([]);
+  const [variationsLoading, setVariationsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
   const [versions, setVersions] = useState<VersionNode[]>([]);
 
@@ -139,6 +143,44 @@ export function PromptDetail() {
     }
   };
 
+  const handleGenerateVariations = async () => {
+    if (!prompt) return;
+    const check = validatePromptForAnalysis(prompt.prompt_text);
+    if (!check.valid) { toast.error(check.message ?? "Cannot generate variations"); return; }
+    setShowVariations(true);
+    setVariationsLoading(true);
+    setVariations([]);
+    try {
+      const result = await generatePromptVariations({ promptText: prompt.prompt_text });
+      setVariations(result.variations);
+      if (result.variations.length === 0) toast.error("No variations returned — try a longer prompt");
+    } catch {
+      toast.error("Variation generation failed — check your Anthropic API key");
+    } finally {
+      setVariationsLoading(false);
+    }
+  };
+
+  const handleSaveVariation = async (variationText: string) => {
+    if (!prompt) return;
+    try {
+      const newId = await create({
+        title: prompt.title,
+        provider: prompt.provider,
+        category: prompt.category,
+        use_case: prompt.use_case,
+        prompt_text: variationText,
+        tags: prompt.tags,
+        parent_id: prompt.id,
+        version: prompt.version + 1,
+      });
+      toast.success("Variation saved as draft");
+      navigate(`/library/${newId}`);
+    } catch {
+      toast.error("Failed to save variation");
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -188,6 +230,9 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
           </Button>
+          <Button variant="ghost" size="sm" onClick={handleGenerateVariations} disabled={variationsLoading}>
+            <Shuffle size={11} /> Variations
+          </Button>
           {prompt.is_recipe ? (
             <Button variant="ghost" size="sm" onClick={() => navigate(`/recipes/${prompt.id}/edit`)}>
               <Layers size={11} /> Edit Recipe
@@ -224,6 +269,47 @@ export function PromptDetail() {
               onCancel={() => setShowExtractRecipe(false)}
               onSaved={(recipeId) => navigate(`/recipes/${recipeId}/edit`)}
             />
+          )}
+
+          {/* Variations Panel */}
+          {showVariations && (
+            <div className="flex flex-col gap-4 p-4 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shuffle size={10} className="text-dim/50" />
+                  <span className="system-label">VARIATIONS</span>
+                  {variationsLoading && <span className="font-ndot text-[16px] text-dim/30 leading-none">···</span>}
+                </div>
+                <button type="button" onClick={() => setShowVariations(false)} className="text-dim/40 hover:text-white transition-precise">
+                  <X size={12} />
+                </button>
+              </div>
+              {!variationsLoading && variations.length === 0 && (
+                <span className="font-mono text-[11px] text-muted">Click "Variations" again to retry.</span>
+              )}
+              {variations.map((v, i) => (
+                <div key={i} className="flex flex-col gap-2.5 p-3 rounded-sm" style={{ border: "var(--border-dim)" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[9px] text-dim/40 tracking-widest uppercase">Variation {i + 1}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button type="button"
+                        onClick={() => navigator.clipboard.writeText(v)}
+                        className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
+                        style={{ border: "var(--border-dim)" }}>
+                        <Copy size={8} /> Copy
+                      </button>
+                      <button type="button"
+                        onClick={() => handleSaveVariation(v)}
+                        className="flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase text-cyan/70 hover:text-cyan px-2 py-1 rounded-sm transition-precise"
+                        style={{ border: "1px solid rgba(0,229,255,0.2)" }}>
+                        <Plus size={8} /> Save Draft
+                      </button>
+                    </div>
+                  </div>
+                  <pre className="font-mono text-[10px] text-soft-white/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">{v}</pre>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Prompt Text */}

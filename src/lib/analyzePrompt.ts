@@ -60,6 +60,70 @@ export function validatePromptForAnalysis(promptText: string): { valid: boolean;
   return { valid: true };
 }
 
+// ─── Prompt Variations ───────────────────────────────────────
+
+export interface PromptVariations {
+  variations: string[];
+}
+
+export const EMPTY_VARIATIONS: PromptVariations = { variations: [] };
+
+const VARIATIONS_SYSTEM = `You are an expert AI image prompt engineer for advertising-grade production.
+Given a base prompt, generate exactly 3 distinct variations.
+Each variation should preserve the core subject and intent, but explore a different stylistic angle, mood, or technical approach. Keep each variation complete and ready-to-use.
+Return ONLY a valid JSON object:
+{
+  "variations": [
+    "variation 1 full prompt text",
+    "variation 2 full prompt text",
+    "variation 3 full prompt text"
+  ]
+}
+Return only the JSON — no markdown fences, no preamble.`;
+
+function parseVariations(raw: string): PromptVariations {
+  try {
+    const json = JSON.parse(raw.trim()) as Partial<PromptVariations>;
+    return {
+      variations: Array.isArray(json.variations) ? json.variations.slice(0, 3).map(String) : [],
+    };
+  } catch {
+    return EMPTY_VARIATIONS;
+  }
+}
+
+export async function generatePromptVariations(opts: { promptText: string }): Promise<PromptVariations> {
+  if (!isTauri) return EMPTY_VARIATIONS;
+
+  const apiKey = getApiKey("anthropic");
+  requireValidApiKey("anthropic", apiKey);
+
+  const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
+    "anthropic",
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: HAIKU_MODEL,
+        max_tokens: 1024,
+        system: VARIATIONS_SYSTEM,
+        messages: [{ role: "user", content: `Base prompt:\n${opts.promptText.trim()}` }],
+      }),
+    }
+  );
+
+  const rawText = data.content.find((c) => c.type === "text")?.text ?? "";
+  return parseVariations(rawText);
+}
+
+// ─── Prompt Analysis ─────────────────────────────────────────
+
 export async function analyzePromptDraft(opts: {
   promptText: string;
   brief?: string;

@@ -120,6 +120,7 @@ export interface Token {
   use_count: number;
   quality_score: number;
   avg_rating?: number;
+  win_appearances?: number;
   is_builtin: boolean;
   is_favorite: boolean;
 }

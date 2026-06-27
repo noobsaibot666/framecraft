@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Download, Plus, Star, Trash2, ChevronRight, Layers, Wand2 } from "lucide-react";
+import { Copy, Download, Plus, Star, Trash2, ChevronRight, Layers, Wand2, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
+import { createPrompt } from "@/lib/db";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -132,6 +134,7 @@ export function RecipeLibrary() {
   const [search, setSearch] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [sort, setSort] = useState<SortOption>("recent");
+  const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
 
@@ -168,6 +171,40 @@ export function RecipeLibrary() {
     navigate(`/recipes/${id}/apply`);
   };
 
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as { version?: number; recipes?: Prompt[] };
+      if (!Array.isArray(data.recipes)) {
+        toast.error("Invalid recipe pack — missing 'recipes' array");
+        return;
+      }
+      let count = 0;
+      for (const r of data.recipes) {
+        if (!r.title || !r.prompt_text) continue;
+        await createPrompt({
+          title: r.title,
+          description: r.description,
+          provider: r.provider ?? "midjourney",
+          category: r.category,
+          prompt_text: r.prompt_text,
+          tags: r.tags,
+          rating: r.rating ?? 0,
+          is_recipe: true,
+          notes: r.notes,
+        });
+        count++;
+      }
+      await fetchPrompts();
+      toast.success(`Imported ${count} recipe${count !== 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Failed to import — file may be corrupt or invalid JSON");
+    }
+  };
+
   const handleExport = () => {
     if (!recipes.length) return;
     const data = JSON.stringify({ version: 1, exported_at: new Date().toISOString(), recipes }, null, 2);
@@ -186,6 +223,9 @@ export function RecipeLibrary() {
       subtitle={`REUSABLE PROMPT STRUCTURES${recipes.length ? ` · ${recipes.length} RECIPES` : ""}`}
       action={
         <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => importRef.current?.click()}>
+            <Upload size={10} /> Import
+          </Button>
           {recipes.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleExport}>
               <Download size={10} /> Export
@@ -194,6 +234,7 @@ export function RecipeLibrary() {
           <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>
             <Plus size={11} /> New Recipe
           </Button>
+          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         </div>
       }
     >

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check } from "lucide-react";
+import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check, Trophy } from "lucide-react";
 import { saveReferenceImage } from "@/lib/fileStore";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -14,6 +14,7 @@ import {
   getResultsForReference,
   type CreateReferenceInput,
 } from "@/lib/references";
+import { getReferenceImpactScore } from "@/lib/referenceImpact";
 import { cn } from "@/lib/utils";
 import type { Reference, ReferenceKind, ReferenceRole } from "@/types";
 
@@ -248,6 +249,8 @@ export function ReferenceDetail() {
   const [thumbData, setThumbData] = useState<string | undefined>();
   const [pendingDataUrl, setPendingDataUrl] = useState<string | undefined>();
 
+  const [impactScore, setImpactScore] = useState(0);
+
   // Linked items
   const [linkedPrompts, setLinkedPrompts] = useState<{ id: string; label: string; role: ReferenceRole }[]>([]);
   const [linkedResults, setLinkedResults] = useState<{ id: string; label: string; role: ReferenceRole }[]>([]);
@@ -256,13 +259,15 @@ export function ReferenceDetail() {
     if (isNew || !id) return;
     (async () => {
       setLoading(true);
-      const [ref, prompts, results] = await Promise.all([
+      const [ref, prompts, results, impact] = await Promise.all([
         getReferenceById(id),
         getPromptsForReference(id),
         getResultsForReference(id),
+        getReferenceImpactScore(id),
       ]);
       if (!ref) { navigate("/references"); return; }
 
+      setImpactScore(impact);
       setTitle(ref.title);
       setDescription(ref.description ?? "");
       setKind(ref.kind);
@@ -466,6 +471,15 @@ export function ReferenceDetail() {
           <div className="flex flex-col gap-3 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <FieldLabel>RATING</FieldLabel>
             <StarRating value={rating} onChange={setRating} />
+            {!isNew && impactScore > 0 && (
+              <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
+                <Trophy size={11} className="text-amber shrink-0" />
+                <span className="font-mono text-[10px] text-amber">
+                  {Math.round(impactScore * 100)}% win rate
+                </span>
+                <span className="font-mono text-[9px] text-muted ml-auto">IMPACT</span>
+              </div>
+            )}
           </div>
 
           {/* Metadata */}

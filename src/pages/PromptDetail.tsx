@@ -17,6 +17,10 @@ import { getPromptVersions, type VersionNode } from "@/lib/lineage";
 import { formatDate, cn } from "@/lib/utils";
 import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/promptFormatter";
 import { toast } from "@/lib/toast";
+import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
+
+registerShortcutLabel("e", "Edit prompt (Prompt Detail)");
+registerShortcutLabel("q", "Add to queue (Prompt Detail)");
 import type { Prompt, Result } from "@/types";
 
 function MetaRow({ label, value }: { label: string; value?: string | number }) {
@@ -76,6 +80,9 @@ export function PromptDetail() {
     getResultsForPrompt(id).then(setResults);
     getPromptVersions(id).then(setVersions).catch(() => {});
   }, [id, getById]);
+
+  useShortcut("e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
+  useShortcut("q", () => { if (prompt) handleAddToQueue(); }, !!prompt);
 
   const handleCopy = async () => {
     if (!prompt) return;
@@ -223,7 +230,7 @@ export function PromptDetail() {
               className="p-4 rounded-card"
               style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
             >
-              <pre className="prompt-text whitespace-pre-wrap break-words select-text">
+              <pre className="prompt-text whitespace-pre-wrap wrap-break-word select-text">
                 {prompt.prompt_text}
               </pre>
             </div>
@@ -237,7 +244,7 @@ export function PromptDetail() {
                 className="p-4 rounded-card"
                 style={{ border: "var(--border-dim)", background: "rgba(215,25,33,0.04)" }}
               >
-                <pre className="font-mono text-[11px] text-muted/80 whitespace-pre-wrap break-words leading-relaxed select-text">
+                <pre className="font-mono text-[11px] text-muted/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
                   {prompt.avoidance_text}
                 </pre>
               </div>

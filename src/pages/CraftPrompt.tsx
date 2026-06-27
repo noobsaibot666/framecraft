@@ -22,8 +22,11 @@ import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceIm
 import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
+import { useShortcut } from "@/lib/shortcuts";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
+
+// cmd+s label registered in ProjectWorkspace (shared context)
 
 // ─── Shared sub-components ────────────────────────────────────
 
@@ -911,6 +914,8 @@ export function CraftPrompt() {
       setTimeout(() => setFormatChanges([]), 4000);
     }
   };
+
+  useShortcut("cmd+s", () => { if (!saving && !savingNewVersion) handleSave(false); });
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">

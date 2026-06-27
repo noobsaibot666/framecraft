@@ -13,6 +13,10 @@ import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { getPreferences } from "@/lib/userPreferences";
+import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
+
+registerShortcutLabel("n", "New prompt (Prompt Library)");
+registerShortcutLabel("escape", "Exit batch mode (Prompt Library)");
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
 const PROVIDER_OPTIONS: { value: Provider | ""; label: string }[] = [
@@ -97,7 +101,7 @@ function RatingDots({ rating }: { rating: number }) {
 function LibraryStat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
     <div
-      className="flex min-w-[120px] flex-col gap-1 rounded-[6px] px-4 py-3"
+      className="flex min-w-30 flex-col gap-1 rounded-[6px] px-4 py-3"
       style={{ border: accent ? "1px solid rgba(56,183,200,0.38)" : "var(--border-default)", background: accent ? "rgba(56,183,200,0.08)" : "rgba(255,255,255,0.045)" }}
     >
       <span className="font-mono text-[18px] font-medium leading-none text-white tabular-nums">{value}</span>
@@ -121,7 +125,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
 
   return (
     <article
-      className="group flex min-h-[280px] flex-col gap-5 rounded-card p-5 cursor-pointer transition-precise hover:-translate-y-0.5 hover:border-cyan/45"
+      className="group flex min-h-70 flex-col gap-5 rounded-card p-5 cursor-pointer transition-precise hover:-translate-y-0.5 hover:border-cyan/45"
       style={{ border: selected ? "1px solid rgba(56,183,200,0.70)" : "var(--border-default)", background: selected ? "rgba(56,183,200,0.08)" : "var(--surface-card)" }}
       onClick={() => { if (!batchMode) navigate(`/library/${prompt.id}`); }}
     >
@@ -326,6 +330,9 @@ export function PromptLibrary() {
     setLastSelectedIndex(null);
   }, []);
 
+  useShortcut("n", () => navigate("/craft"), !batchMode);
+  useShortcut("escape", exitBatch, batchMode);
+
   const handleBatchQueue = useCallback(async () => {
     if (selectedIds.size === 0 || batchWorking) return;
     setBatchWorking(true);
@@ -484,7 +491,7 @@ export function PromptLibrary() {
             />
             <Input
               placeholder="Search prompts..."
-              className="pl-9 min-w-[260px]"
+              className="pl-9 min-w-65"
               value={searchVal}
               onChange={(e) => handleSearch(e.target.value)}
             />

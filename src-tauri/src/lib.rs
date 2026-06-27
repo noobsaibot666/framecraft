@@ -117,6 +117,12 @@ pub fn run() {
             sql: include_str!("../migrations/018_campaigns.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 19,
+            description: "queue_pin",
+            sql: include_str!("../migrations/019_queue_pin.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

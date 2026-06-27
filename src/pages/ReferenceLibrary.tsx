@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload } from "lucide-react";
+import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload, Trophy } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getReferences, searchReferences, deleteReference } from "@/lib/references";
+import { getHighImpactReferences } from "@/lib/referenceImpact";
 import { fileToDataUrl } from "@/lib/imageUtils";
 import { importReferenceImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -86,8 +87,9 @@ function Thumbnail({ src, title }: { src?: string; title: string }) {
   );
 }
 
-function ReferenceCard({ ref: r, onDelete, onClick }: {
+function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
   ref: Reference;
+  wins: number;
   onDelete: (id: string) => void;
   onClick: (id: string) => void;
 }) {
@@ -168,9 +170,16 @@ function ReferenceCard({ ref: r, onDelete, onClick }: {
         <div className="flex items-center justify-between pt-1.5"
           style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}>
           <StarRow value={r.rating} />
-          {r.provider && (
-            <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{r.provider}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {wins > 0 && (
+              <span className="flex items-center gap-0.5 font-mono text-[9px] text-amber">
+                <Trophy size={8} /> {wins}
+              </span>
+            )}
+            {r.provider && (
+              <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{r.provider}</span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -183,6 +192,7 @@ export function ReferenceLibrary() {
   const navigate = useNavigate();
   const [refs, setRefs] = useState<Reference[]>([]);
   const [loading, setLoading] = useState(true);
+  const [impactMap, setImpactMap] = useState<Map<string, number>>(new Map());
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("all");
   const [ratingFilter, setRatingFilter] = useState("all");
@@ -207,11 +217,12 @@ export function ReferenceLibrary() {
         ? await searchReferences(search.trim(), filters)
         : await getReferences(filters);
 
-      if (ratingFilter === "unrated") {
-        setRefs(results.filter((r) => r.rating === 0));
-      } else {
-        setRefs(results);
-      }
+      const filtered = ratingFilter === "unrated" ? results.filter((r) => r.rating === 0) : results;
+      setRefs(filtered);
+
+      getHighImpactReferences(500).then((scores) => {
+        setImpactMap(new Map(scores.map((s) => [s.id, s.winner_count])));
+      }).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -322,6 +333,7 @@ export function ReferenceLibrary() {
             <ReferenceCard
               key={r.id}
               ref={r}
+              wins={impactMap.get(r.id) ?? 0}
               onDelete={handleDelete}
               onClick={(id) => navigate(`/references/${id}`)}
             />

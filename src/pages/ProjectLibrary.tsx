@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Archive, ArchiveRestore, Trash2, X } from "lucide-react";
+import { Plus, Archive, ArchiveRestore, Trash2, X, FolderKanban } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getProjects, searchProjects, createProject, updateProject, deleteProject } from "@/lib/projects";
@@ -488,19 +488,33 @@ export function ProjectLibrary() {
           <span className="font-mono text-[11px] text-muted">Loading...</span>
         </div>
       ) : projects.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 gap-3">
-          <span className="font-mono text-[12px] text-readable">
-            {view === "archived"
-              ? "No archived projects."
-              : search || statusFilter !== "all"
-                ? "No projects match your filters."
-                : "No projects yet."}
-          </span>
-          {view === "active" && !search && statusFilter === "all" && (
-            <Button variant="ghost" size="sm" onClick={() => setShowCreate(true)}>
-              <Plus size={10} /> Create your first project
-            </Button>
-          )}
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div
+            className="flex flex-col items-center gap-3 p-8 rounded-card max-w-sm w-full"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <FolderKanban size={28} className="text-white/25" />
+            <span className="system-label">
+              {view === "archived" ? "ARCHIVE EMPTY" : "NO PROJECTS"}
+            </span>
+            <span className="font-mono text-[12px] text-readable text-center leading-relaxed">
+              {view === "archived"
+                ? "No archived projects yet."
+                : search || statusFilter !== "all"
+                  ? "No projects match your filters."
+                  : "Projects group your prompts by brief or client. Create one to get started."}
+            </span>
+            {view === "active" && !search && statusFilter === "all" && (
+              <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+                <Plus size={10} /> Create First Project
+              </Button>
+            )}
+            {(search || statusFilter !== "all") && (
+              <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setStatusFilter("all"); }}>
+                Clear Filters
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp, FolderKanban, ArrowRight, ListChecks, Wand2, Upload, CheckSquare } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -128,6 +128,77 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
   );
 }
 
+function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: () => void }) {
+  const steps = [
+    {
+      n: "01",
+      icon: <Wand2 size={16} className="text-cyan" />,
+      title: "Craft a prompt",
+      desc: "Use the Craft page to build, assemble, and version your first AI image prompt.",
+      cta: "Start Crafting",
+      onClick: onCraft,
+    },
+    {
+      n: "02",
+      icon: <ListChecks size={16} className="text-white/50" />,
+      title: "Queue and generate",
+      desc: "Send your prompt to the queue, then generate it in Midjourney, DALL·E, or any provider.",
+    },
+    {
+      n: "03",
+      icon: <CheckSquare size={16} className="text-white/50" />,
+      title: "Import and review",
+      desc: "Drop result images in — Framecraft tracks scores, winners, and version history automatically.",
+    },
+  ];
+
+  return (
+    <div
+      className="flex flex-col gap-6 p-6 rounded-card"
+      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="font-sans text-[18px] font-semibold text-white">Welcome to Framecraft</span>
+          <span className="font-mono text-[11px] text-readable">Your prompt engineering workspace is ready. Here's how to get started.</span>
+        </div>
+        <button
+          type="button"
+          onClick={onImport}
+          className="flex items-center gap-2 px-3 py-2 rounded-sm font-mono text-[10px] text-readable hover:text-white transition-precise"
+          style={{ border: "var(--border-dim)" }}
+        >
+          <Upload size={10} /> Import Prompts
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {steps.map((s) => (
+          <div
+            key={s.n}
+            className="flex flex-col gap-3 p-4 rounded-sm"
+            style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.03)" }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-ndot text-[13px] text-dim/40">{s.n}</span>
+              {s.icon}
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="font-sans text-[13px] font-semibold text-white">{s.title}</span>
+              <span className="font-mono text-[11px] text-readable leading-relaxed">{s.desc}</span>
+            </div>
+            {s.cta && s.onClick && (
+              <Button variant="primary" size="sm" onClick={s.onClick}>
+                {s.cta}
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
@@ -188,6 +259,14 @@ export function Dashboard() {
           )}
         </div>
 
+        {/* First-run onboarding */}
+        {!loading && stats.total_prompts === 0 && (
+          <FirstRunGuide
+            onCraft={() => navigate("/craft")}
+            onImport={() => navigate("/import")}
+          />
+        )}
+
         {/* Library totals */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
           <StatModule label="TOTAL PROMPTS" value={stats.total_prompts} sub="IN LIBRARY" />
@@ -213,8 +292,31 @@ export function Dashboard() {
               unit={health.pendingReviewCount === 1 ? "result" : "results"}
               alert={health.pendingReviewCount > 0}
             />
+            <HealthChip label="ACTIVE PROJECTS" value={health.activeProjectCount} unit="projects" />
+            <HealthChip label="QUEUE DEPTH" value={health.queueDepth} unit="pending" alert={health.queueDepth > 5} />
           </div>
         </div>
+
+        {/* Continue where you left off */}
+        {health.lastTouchedPrompt && (
+          <button
+            type="button"
+            onClick={() => navigate(`/library/${health.lastTouchedPrompt!.id}`)}
+            className="flex items-center justify-between gap-4 w-full px-5 py-4 rounded-card text-left transition-precise hover:bg-white/4 group"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="system-label text-dim/50">CONTINUE WHERE YOU LEFT OFF</span>
+              <span className="font-sans text-[15px] font-medium text-white truncate">{health.lastTouchedPrompt.title}</span>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{health.lastTouchedPrompt.provider}</span>
+                {health.lastTouchedPrompt.is_winner && <Star size={10} className="text-amber fill-amber/40" />}
+                <span className="font-mono text-[10px] text-dim/50">{formatDate(health.lastTouchedPrompt.updated_at)}</span>
+              </div>
+            </div>
+            <ArrowRight size={16} className="text-dim/40 group-hover:text-white transition-precise shrink-0" />
+          </button>
+        )}
 
         {/* Main grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 min-w-0">
@@ -259,6 +361,43 @@ export function Dashboard() {
 
           {/* Right column */}
           <div className="flex flex-col gap-5">
+            {/* Active Projects */}
+            {health.activeProjects.length > 0 && (
+              <Card>
+                <CardHeader
+                  label="Active Projects"
+                  count={health.activeProjectCount}
+                  action={
+                    <Button variant="muted" size="sm" onClick={() => navigate("/projects")}>
+                      View All
+                    </Button>
+                  }
+                />
+                <CardBody>
+                  <div className="flex flex-col">
+                    {health.activeProjects.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => navigate(`/projects/${p.id}`)}
+                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-white/6 rounded-sm"
+                        style={{ borderBottom: "var(--border-dim)" }}
+                      >
+                        <div className="flex flex-col gap-0.5 min-w-0">
+                          <span className="font-sans text-[12px] text-white/90 truncate">{p.title}</span>
+                          {p.client && <span className="font-mono text-[9px] text-muted truncate">{p.client}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono text-[9px] text-dim/50">{p.prompt_count}p</span>
+                          <FolderKanban size={10} className="text-dim/40" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
             {/* Needs Review */}
             {health.pendingResults.length > 0 && (
               <Card>
@@ -360,9 +499,13 @@ export function Dashboard() {
           <span className="system-label">QUICK ACTIONS</span>
           <div className="flex-1 h-px bg-white/16" />
           <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/queue")}>
+              <ListChecks size={11} />
+              Queue {health.queueDepth > 0 && <span className="font-mono text-[9px] text-cyan/80 ml-0.5">({health.queueDepth})</span>}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate("/import")}>
               <BookMarked size={11} />
-              Import Prompt
+              Import
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate("/recipes")}>
               Recipes

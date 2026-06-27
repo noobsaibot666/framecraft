@@ -11,6 +11,7 @@ import {
   Layers,
   ListChecks,
   Settings,
+  Tag,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -44,6 +45,7 @@ const NAV_GROUPS = [
     label: "LIBRARY",
     items: [
       { label: "Library", to: "/library", icon: Archive },
+      { label: "Tokens", to: "/tokens", icon: Tag },
       { label: "Results", to: "/results", icon: Film },
       { label: "References", to: "/references", icon: Image },
       { label: "SREFs", to: "/srefs", icon: BookOpen },

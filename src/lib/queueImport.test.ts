@@ -13,6 +13,7 @@ const queueItem = (overrides: Partial<QueueItem> = {}): QueueItem => ({
   project_id: undefined,
   status: "pending",
   sort_order: 0,
+  is_pinned: false,
   provider: "midjourney",
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-01T00:00:00.000Z",

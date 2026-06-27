@@ -76,7 +76,7 @@ describe("generation queue", () => {
     expect((await getQueue()).map((item) => item.id)).toEqual([pending]);
   });
 
-  it("clearDone keeps pending, sent, and failed items", async () => {
+  it("clearDone keeps pending and sent items but removes failed", async () => {
     const pending = await addToQueue("prompt-a");
     const sent = await addToQueue("prompt-b");
     const failed = await addToQueue("prompt-c");
@@ -85,7 +85,7 @@ describe("generation queue", () => {
 
     await clearDone();
 
-    expect((await getQueue()).map((item) => item.id)).toEqual([pending, sent, failed]);
+    expect((await getQueue()).map((item) => item.id)).toEqual([pending, sent]);
   });
 
   it("ignores remove requests for missing items", async () => {

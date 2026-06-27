@@ -32,7 +32,10 @@ import { getProjectShots } from "@/lib/shotSequence";
 import { getCampaigns } from "@/lib/campaigns";
 import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/lib/exportReport";
 import { toast } from "@/lib/toast";
+import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+
+registerShortcutLabel("cmd+s", "Save (Craft / Project Workspace)");
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────
@@ -556,6 +559,8 @@ export function ProjectWorkspace() {
       setSaving(false);
     }
   };
+
+  useShortcut("cmd+s", () => { if (!saving) handleSave(); });
 
   useEffect(() => {
     if (!id || loading || !hydratedRef.current || !title.trim()) return;

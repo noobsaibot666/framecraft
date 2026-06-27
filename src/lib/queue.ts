@@ -15,6 +15,7 @@ export interface QueueItem {
   project_id?: string;
   status: QueueStatus;
   sort_order: number;
+  is_pinned: boolean;
   provider?: Prompt["provider"];
   result_path?: string;
   notes?: string;
@@ -41,6 +42,7 @@ function rowToQueueItem(row: Record<string, unknown>): QueueItem {
     project_id: row.project_id as string | undefined,
     status: row.status as QueueStatus,
     sort_order: Number(row.sort_order ?? 0),
+    is_pinned: Boolean(row.is_pinned),
     provider: row.provider as Prompt["provider"] | undefined,
     result_path: row.result_path as string | undefined,
     notes: row.notes as string | undefined,
@@ -82,6 +84,7 @@ export async function addToQueue(promptId: string, projectId?: string): Promise<
     project_id: projectId,
     status: "pending",
     sort_order: _devQueue.length,
+    is_pinned: false,
     created_at: ts,
     updated_at: ts,
   });
@@ -96,7 +99,7 @@ export async function getQueue(projectId?: string): Promise<QueueItem[]> {
        FROM generation_queue q
        JOIN prompts p ON p.id = q.prompt_id
        WHERE ($1 IS NULL OR q.project_id = $1)
-       ORDER BY q.sort_order ASC, q.created_at ASC`,
+       ORDER BY q.is_pinned DESC, q.sort_order ASC, q.created_at ASC`,
       [projectId ?? null]
     )) as Record<string, unknown>[];
     return rows.map(rowToQueueItem);
@@ -104,7 +107,7 @@ export async function getQueue(projectId?: string): Promise<QueueItem[]> {
 
   return _devQueue
     .filter((item) => !projectId || item.project_id === projectId)
-    .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+    .sort((a, b) => Number(b.is_pinned) - Number(a.is_pinned) || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
 }
 
 export async function getQueueItem(id: string): Promise<QueueItem | null> {
@@ -152,14 +155,29 @@ export async function removeFromQueue(id: string): Promise<void> {
 export async function clearDone(): Promise<void> {
   if (isTauri) {
     const db = await getDb();
-    await db.execute("DELETE FROM generation_queue WHERE status IN ('done', 'skipped')");
+    await db.execute("DELETE FROM generation_queue WHERE status IN ('done', 'skipped', 'failed')");
     return;
   }
 
   for (let i = _devQueue.length - 1; i >= 0; i--) {
-    if (_devQueue[i].status === "done" || _devQueue[i].status === "skipped") {
+    if (["done", "skipped", "failed"].includes(_devQueue[i].status)) {
       _devQueue.splice(i, 1);
     }
+  }
+}
+
+export async function pinQueueItem(id: string, pinned: boolean): Promise<void> {
+  const ts = now();
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute("UPDATE generation_queue SET is_pinned = $1, updated_at = $2 WHERE id = $3", [pinned ? 1 : 0, ts, id]);
+    return;
+  }
+
+  const item = _devQueue.find((entry) => entry.id === id);
+  if (item) {
+    item.is_pinned = pinned;
+    item.updated_at = ts;
   }
 }
 

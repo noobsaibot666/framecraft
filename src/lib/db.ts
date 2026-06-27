@@ -437,6 +437,38 @@ export async function getTokenCategories(): Promise<TokenCategory[]> {
   return STATIC_CATEGORIES;
 }
 
+export async function getAllTokens(sort: "quality" | "use" | "alpha" | "rating" = "quality"): Promise<Token[]> {
+  if (!isTauri) return [];
+  const db = await getDb();
+  const orderBy = {
+    quality: "quality_score DESC, use_count DESC, text ASC",
+    use: "use_count DESC, quality_score DESC, text ASC",
+    alpha: "text ASC",
+    rating: "avg_rating DESC, use_count DESC, text ASC",
+  }[sort];
+  const rows = (await db.select(
+    `SELECT * FROM tokens ORDER BY ${orderBy}`
+  )) as Record<string, unknown>[];
+  return rows.map(rowToToken);
+}
+
+export async function searchTokens(query: string, categoryId?: string): Promise<Token[]> {
+  if (!isTauri) return [];
+  const q = query.toLowerCase().trim();
+  if (!q && !categoryId) return getAllTokens();
+  const db = await getDb();
+  const params: unknown[] = [];
+  const conditions: string[] = [];
+  if (q) { conditions.push(`lower(text) LIKE $${params.length + 1}`); params.push(`%${q}%`); }
+  if (categoryId) { conditions.push(`category_id = $${params.length + 1}`); params.push(categoryId); }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const rows = (await db.select(
+    `SELECT * FROM tokens ${where} ORDER BY quality_score DESC, use_count DESC, text ASC LIMIT 200`,
+    params
+  )) as Record<string, unknown>[];
+  return rows.map(rowToToken);
+}
+
 export async function getTokensByCategory(categoryId: string): Promise<Token[]> {
   if (isTauri) {
     const db = await getDb();

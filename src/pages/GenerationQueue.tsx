@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, Copy, ExternalLink, GripVertical, Plus, SkipForward, Upload, X } from "lucide-react";
+import { Check, Copy, ExternalLink, GripVertical, Pin, Plus, SkipForward, Upload, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Badge, ProviderBadge } from "@/components/ui/Badge";
@@ -12,6 +12,7 @@ import {
   addToQueue,
   clearDone,
   getQueue,
+  pinQueueItem,
   reorderQueue,
   updateQueueStatus,
   type QueueItem,
@@ -60,12 +61,14 @@ function QueueCard({
   onCopy,
   onStatus,
   onImport,
+  onPin,
 }: {
   item: QueueItem;
   prompt?: Prompt;
   onCopy: () => void;
   onStatus: (status: QueueStatus) => void;
   onImport: () => void;
+  onPin: (pinned: boolean) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -74,7 +77,7 @@ function QueueCard({
     <div
       ref={setNodeRef}
       style={{ ...style, border: "var(--border-default)", background: "var(--surface-card)" }}
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card"
+      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card"
     >
       <button
         type="button"
@@ -88,6 +91,9 @@ function QueueCard({
 
       <div className="flex flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
+          {item.is_pinned && (
+            <Pin size={10} className="text-amber shrink-0 fill-amber/30" />
+          )}
           <span className="font-sans text-[15px] text-white font-semibold truncate">
             {prompt?.title ?? item.prompt_title ?? item.prompt_id}
           </span>
@@ -104,6 +110,14 @@ function QueueCard({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={() => onPin(!item.is_pinned)}
+          className={cn("p-2 rounded-sm transition-precise", item.is_pinned ? "text-amber" : "text-readable hover:text-amber opacity-0 group-hover:opacity-100")}
+          title={item.is_pinned ? "Unpin" : "Pin to top"}
+        >
+          <Pin size={12} className={item.is_pinned ? "fill-amber/25" : ""} />
+        </button>
         <button type="button" onClick={onCopy} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Copy prompt">
           <Copy size={12} />
         </button>
@@ -251,7 +265,7 @@ export function GenerationQueue() {
             <Copy size={11} /> {copied ? "Copied" : "Copy Pending"}
           </Button>
           <Button variant="ghost" size="md" onClick={async () => { await clearDone(); await refresh(); }}>
-            Clear Done
+            Clear Completed
           </Button>
           <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>
             <Plus size={11} /> Add Prompts
@@ -329,6 +343,10 @@ export function GenerationQueue() {
                   onImport={async () => {
                     setSingleImportId(item.id);
                     singleFileRef.current?.click();
+                  }}
+                  onPin={async (pinned) => {
+                    await pinQueueItem(item.id, pinned);
+                    await refresh();
                   }}
                 />
               ))}

@@ -118,6 +118,7 @@ export interface Token {
   provider?: Provider;
   use_count: number;
   quality_score: number;
+  avg_rating?: number;
   is_builtin: boolean;
   is_favorite: boolean;
 }

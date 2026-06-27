@@ -16,6 +16,22 @@ export interface PendingResult {
   created_at: string;
 }
 
+export interface ActiveProject {
+  id: string;
+  title: string;
+  client?: string;
+  status: string;
+  prompt_count: number;
+}
+
+export interface LastTouchedPrompt {
+  id: string;
+  title: string;
+  provider: string;
+  updated_at: string;
+  is_winner: boolean;
+}
+
 export interface ProductionHealth {
   promptsThisWeek: number;
   resultsThisWeek: number;
@@ -23,6 +39,10 @@ export interface ProductionHealth {
   pendingReviewCount: number;
   topProvenTokens: ProvenToken[];
   pendingResults: PendingResult[];
+  activeProjectCount: number;
+  queueDepth: number;
+  activeProjects: ActiveProject[];
+  lastTouchedPrompt: LastTouchedPrompt | null;
 }
 
 export const EMPTY_HEALTH: ProductionHealth = {
@@ -32,6 +52,10 @@ export const EMPTY_HEALTH: ProductionHealth = {
   pendingReviewCount: 0,
   topProvenTokens: [],
   pendingResults: [],
+  activeProjectCount: 0,
+  queueDepth: 0,
+  activeProjects: [],
+  lastTouchedPrompt: null,
 };
 
 export async function getDashboardHealth(): Promise<ProductionHealth> {
@@ -39,7 +63,7 @@ export async function getDashboardHealth(): Promise<ProductionHealth> {
 
   const db = await getFramecraftDb();
 
-  const [weekData, ratingData, pendingData, tokenData] = await Promise.all([
+  const [weekData, ratingData, pendingData, tokenData, projectData, queueData, lastPromptData] = await Promise.all([
     db.select(
       `SELECT
         (SELECT COUNT(*) FROM prompts WHERE created_at >= datetime('now', '-7 days')) AS prompts_week,
@@ -68,10 +92,47 @@ export async function getDashboardHealth(): Promise<ProductionHealth> {
        ORDER BY quality_score DESC, use_count DESC
        LIMIT 5`
     ) as Promise<ProvenToken[]>,
+
+    db.select(
+      `SELECT p.id, p.title, p.client, p.status,
+         (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) AS prompt_count
+       FROM projects p
+       WHERE p.status NOT IN ('delivered', 'archived')
+       ORDER BY p.updated_at DESC
+       LIMIT 4`
+    ) as Promise<(ActiveProject & Record<string, unknown>)[]>,
+
+    db.select(
+      `SELECT COUNT(*) AS n FROM queue WHERE status = 'pending'`
+    ) as Promise<{ n: number }[]>,
+
+    db.select(
+      `SELECT id, title, provider, updated_at, is_winner
+       FROM prompts
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    ) as Promise<(LastTouchedPrompt & Record<string, unknown>)[]>,
   ]);
 
   const week = weekData[0] ?? { prompts_week: 0, results_week: 0 };
   const ratings = ratingData[0] ?? { winners: 0, rated: 0 };
+  const activeProjects = projectData.map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    client: r.client as string | undefined,
+    status: r.status as string,
+    prompt_count: r.prompt_count as number,
+  }));
+  const lastRaw = lastPromptData[0];
+  const lastTouchedPrompt: LastTouchedPrompt | null = lastRaw
+    ? {
+        id: lastRaw.id as string,
+        title: lastRaw.title as string,
+        provider: lastRaw.provider as string,
+        updated_at: lastRaw.updated_at as string,
+        is_winner: Boolean(lastRaw.is_winner),
+      }
+    : null;
 
   return {
     promptsThisWeek: week.prompts_week,
@@ -80,5 +141,9 @@ export async function getDashboardHealth(): Promise<ProductionHealth> {
     pendingReviewCount: pendingData.length,
     topProvenTokens: tokenData,
     pendingResults: pendingData,
+    activeProjectCount: activeProjects.length,
+    queueDepth: (queueData[0]?.n as number) ?? 0,
+    activeProjects,
+    lastTouchedPrompt,
   };
 }

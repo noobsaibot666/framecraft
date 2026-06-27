@@ -11,6 +11,7 @@ import {
   createSession,
   getSessions,
   getSessionById,
+  updateSession,
   deleteSession,
   addItemToSession,
   removeItemFromSession,
@@ -25,13 +26,25 @@ import {
   getWeakestDimension,
 } from "@/lib/comparisons";
 import { summarizeComparisonSlots } from "@/lib/comparisonSummary";
+import {
+  COMPARISON_TYPES,
+  buildComparisonOutcome,
+  formatComparisonRole,
+  getComparisonDefinition,
+  getComparisonRoles,
+} from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
-import type { ComparisonSession, ComparisonResult } from "@/types";
+import type {
+  ComparisonSession,
+  ComparisonResult,
+  ComparisonSourceRole,
+  ComparisonType,
+} from "@/types";
 
 // ─── Score bar ────────────────────────────────────────────────
 
@@ -68,6 +81,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
 interface SlotState {
   result: ComparisonResult;
   itemId?: string;
+  sourceRole: ComparisonSourceRole;
   notes: string;
   isWinner: boolean;
   isRejected: boolean;
@@ -103,16 +117,22 @@ function ComparisonSlot({
       <div className="relative w-full aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
         <SafeResultImage src={r.thumbnail_path ?? r.file_path} alt="" className="w-full h-full object-cover" />
 
+        <div className="absolute top-2 left-2 px-2 py-1 rounded-sm bg-black/75 border border-white/15">
+          <span className="font-mono text-[9px] tracking-widest uppercase text-cyan">
+            {formatComparisonRole(slot.sourceRole)}
+          </span>
+        </div>
+
         {/* Winner / Rejected badges */}
         {slot.isWinner && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-sm"
+          <div className="absolute top-10 left-2 flex items-center gap-1 px-2 py-1 rounded-sm"
             style={{ background: "rgba(0,0,0,0.75)" }}>
             <Star size={10} className="text-amber fill-amber/45" />
             <span className="font-mono text-[9px] text-white">WINNER</span>
           </div>
         )}
         {slot.isRejected && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-1 rounded-sm"
+          <div className="absolute top-10 left-2 flex items-center gap-1 px-2 py-1 rounded-sm"
             style={{ background: "rgba(0,0,0,0.75)" }}>
             <AlertTriangle size={9} className="text-red/60" />
             <span className="font-mono text-[8px] text-red/60">REJECTED</span>
@@ -249,7 +269,8 @@ function ComparisonSlot({
 
 // ─── Empty slot ───────────────────────────────────────────────
 
-function EmptySlot({ onClick, onDrop, disabled = false }: {
+function EmptySlot({ role, onClick, onDrop, disabled = false }: {
+  role: ComparisonSourceRole;
   onClick?: () => void;
   onDrop?: (files: FileList) => void;
   disabled?: boolean;
@@ -268,6 +289,9 @@ function EmptySlot({ onClick, onDrop, disabled = false }: {
         if (!disabled && e.dataTransfer.files.length) onDrop?.(e.dataTransfer.files);
       }}
     >
+      <span className="font-mono text-[10px] tracking-widest uppercase text-cyan mb-3">
+        {formatComparisonRole(role)}
+      </span>
       <Upload size={18} className="text-cyan mb-2" />
       <span className="font-mono text-[11px] text-readable">{disabled ? "Importing image..." : "Drop image or click"}</span>
       <span className="font-mono text-[10px] text-muted mt-1">Import into next slot</span>
@@ -326,6 +350,7 @@ function SessionCard({ session, onOpen, onDelete }: {
   onDelete: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const definition = getComparisonDefinition(session.comparison_type);
   return (
     <div
       className="flex flex-col gap-3 p-5 rounded-card cursor-pointer hover:bg-white/6 transition-precise"
@@ -349,6 +374,7 @@ function SessionCard({ session, onOpen, onDelete }: {
         </button>
       </div>
       <div className="flex items-center gap-3">
+        <span className="font-mono text-[10px] text-cyan">{definition.label}</span>
         <span className="font-mono text-[11px] text-readable">{session.item_count} items</span>
         {session.winner_count > 0 && (
           <div className="flex items-center gap-1">
@@ -357,6 +383,11 @@ function SessionCard({ session, onOpen, onDelete }: {
           </div>
         )}
       </div>
+      {session.outcome_summary && (
+        <p className="font-mono text-[10px] leading-relaxed text-readable line-clamp-2">
+          {session.outcome_summary}
+        </p>
+      )}
     </div>
   );
 }
@@ -372,6 +403,8 @@ export function ComparisonLab() {
   const [sessions, setSessions] = useState<ComparisonSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState("");
+  const [comparisonType, setComparisonType] = useState<ComparisonType>("result_result");
+  const [outcomeSummary, setOutcomeSummary] = useState("");
 
   // Available results to compare
   const [availableResults, setAvailableResults] = useState<ComparisonResult[]>([]);
@@ -385,6 +418,7 @@ export function ComparisonLab() {
 
   // Sync feedback
   const [synced, setSynced] = useState(false);
+  const [applyError, setApplyError] = useState("");
 
   // ── Load sessions ──────────────────────────────────────────
 
@@ -408,10 +442,20 @@ export function ComparisonLab() {
 
   const handleNewSession = async () => {
     const title = sessionTitle.trim() || (projectId ? "Project Comparison" : "New Comparison");
-    const id = await createSession({ title, project_id: projectId });
+    const id = await createSession({ title, project_id: projectId, comparison_type: comparisonType });
     setActiveSessionId(id);
+    setOutcomeSummary("");
     setSessionTitle("");
-    setSessions((prev) => [{ id, title, project_id: projectId, item_count: 0, winner_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+    setSessions((prev) => [{
+      id,
+      title,
+      project_id: projectId,
+      comparison_type: comparisonType,
+      item_count: 0,
+      winner_count: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, ...prev]);
   };
 
   const handleOpenSession = async (id: string) => {
@@ -427,6 +471,7 @@ export function ComparisonLab() {
         newSlots[pos] = {
           result,
           itemId: item.id,
+          sourceRole: item.source_role,
           notes: item.notes ?? "",
           isWinner: item.is_winner,
           isRejected: item.is_rejected,
@@ -434,6 +479,8 @@ export function ComparisonLab() {
       }
     }
     setSlots(newSlots);
+    setComparisonType(session.comparison_type);
+    setOutcomeSummary(session.outcome_summary ?? "");
     setActiveSessionId(id);
   };
 
@@ -451,12 +498,20 @@ export function ComparisonLab() {
 
     let itemId: string | undefined;
     if (activeSessionId && persist) {
-      itemId = await addItemToSession(activeSessionId, result.result_id, firstEmpty);
+      const sourceRole = getComparisonRoles(comparisonType, 4)[firstEmpty];
+      itemId = await addItemToSession(activeSessionId, result.result_id, firstEmpty, sourceRole);
     }
 
     setSlots((prev) => {
       const next = [...prev];
-      next[firstEmpty] = { result, itemId, notes: "", isWinner: false, isRejected: false };
+      next[firstEmpty] = {
+        result,
+        itemId,
+        sourceRole: getComparisonRoles(comparisonType, 4)[firstEmpty],
+        notes: "",
+        isWinner: false,
+        isRejected: false,
+      };
       return next;
     });
   };
@@ -588,11 +643,31 @@ export function ComparisonLab() {
 
   const handleApplyDecision = async () => {
     if (!activeSessionId) return;
-    await syncDecisionsToResults(activeSessionId);
-    setSynced(true);
-    setTimeout(() => setSynced(false), 2000);
-    // Reload session to reflect winner counts
-    reloadSessions();
+    const outcome = buildComparisonOutcome(
+      comparisonType,
+      slots.filter((slot): slot is SlotState => Boolean(slot)).map((slot) => ({
+        label: slot.result.prompt_title,
+        provider: slot.result.prompt_provider,
+        promptVersion: slot.result.prompt_version,
+        overallScore: slot.result.score_overall,
+        isWinner: slot.isWinner,
+        isRejected: slot.isRejected,
+        notes: slot.notes,
+      }))
+    );
+    if (!outcome) return;
+
+    setApplyError("");
+    try {
+      await syncDecisionsToResults(activeSessionId);
+      await updateSession(activeSessionId, { outcome_summary: outcome });
+      setOutcomeSummary(outcome);
+      setSynced(true);
+      setTimeout(() => setSynced(false), 2000);
+      reloadSessions();
+    } catch (error) {
+      setApplyError(error instanceof Error ? error.message : "Unable to save comparison outcome.");
+    }
   };
 
   // ── Derived ───────────────────────────────────────────────
@@ -601,6 +676,8 @@ export function ComparisonLab() {
   const selectedResultIds = new Set(slots.filter(Boolean).map((s) => s!.result.result_id));
   const displaySlots = layout === "2up" ? slots.slice(0, 2) : slots;
   const comparisonSummary = summarizeComparisonSlots(slots);
+  const comparisonDefinition = getComparisonDefinition(comparisonType);
+  const slotRoles = getComparisonRoles(comparisonType, displaySlots.length);
 
   // ── Render ────────────────────────────────────────────────
 
@@ -624,6 +701,23 @@ export function ComparisonLab() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <span className="system-label">NEW COMPARISON</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {COMPARISON_TYPES.map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => setComparisonType(type.id)}
+                  className={cn(
+                    "flex flex-col items-start gap-1 px-3 py-3 rounded-sm text-left transition-precise",
+                    comparisonType === type.id ? "bg-cyan/8 text-white" : "text-readable hover:text-white hover:bg-white/5"
+                  )}
+                  style={{ border: comparisonType === type.id ? "1px solid rgba(56,183,200,0.45)" : "var(--border-default)" }}
+                >
+                  <span className="font-sans text-[13px] font-semibold">{type.label}</span>
+                  <span className="font-mono text-[10px] leading-relaxed text-readable">{type.purpose}</span>
+                </button>
+              ))}
+            </div>
             <input
               value={sessionTitle}
               onChange={(e) => setSessionTitle(e.target.value)}
@@ -675,7 +769,7 @@ export function ComparisonLab() {
         <div className="flex items-center gap-2">
           {synced && (
             <span className="font-mono text-[10px] text-cyan flex items-center gap-1">
-              <Check size={9} /> Applied to library
+              <Check size={9} /> Outcome saved
             </span>
           )}
           {comparisonSummary.canApplyDecisions && (
@@ -718,6 +812,35 @@ export function ComparisonLab() {
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
       <div className="flex flex-col gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.25)", background: "rgba(56,183,200,0.035)" }}>
+          <div className="flex flex-col gap-1">
+            <span className="font-sans text-[15px] font-semibold text-white">{comparisonDefinition.label}</span>
+            <span className="font-mono text-[11px] text-readable">{comparisonDefinition.purpose}</span>
+          </div>
+          <span className="font-mono text-[10px] text-cyan tracking-widest uppercase">
+            Decide on cards, then apply once
+          </span>
+        </div>
+
+        {outcomeSummary && (
+          <div className="flex flex-col gap-2 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.28)", background: "rgba(223,168,58,0.05)" }}>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-amber">Saved outcome</span>
+            <p className="font-mono text-[11px] leading-relaxed text-soft-white">{outcomeSummary}</p>
+          </div>
+        )}
+
+        {applyError && (
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(applyError)}
+            className="w-full px-4 py-3 text-left font-mono text-[11px] leading-relaxed text-red rounded-sm hover:bg-red/5"
+            style={{ border: "1px solid rgba(215,25,33,0.28)" }}
+            title="Click to copy error"
+          >
+            {applyError}
+          </button>
+        )}
+
         <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
           <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Loaded</span>
@@ -813,6 +936,7 @@ export function ComparisonLab() {
               ) : (
                 <EmptySlot
                   key={i}
+                  role={slotRoles[i]}
                   onClick={() => fileInputRef.current?.click()}
                   onDrop={handleUploadFiles}
                   disabled={uploading}

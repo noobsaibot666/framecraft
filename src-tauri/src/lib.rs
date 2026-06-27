@@ -93,6 +93,12 @@ pub fn run() {
             sql: include_str!("../migrations/014_project_setup_metadata.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 15,
+            description: "comparison_workflow_metadata",
+            sql: include_str!("../migrations/015_comparison_workflow.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

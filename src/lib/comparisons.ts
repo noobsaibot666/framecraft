@@ -1,4 +1,11 @@
-import type { ComparisonSession, ComparisonItem, ComparisonResult, Provider } from "@/types";
+import type {
+  ComparisonSession,
+  ComparisonItem,
+  ComparisonResult,
+  ComparisonSourceRole,
+  ComparisonType,
+  Provider,
+} from "@/types";
 import { getFramecraftDb } from "./dbConnection";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -27,6 +34,8 @@ function rowToSession(row: Record<string, unknown>): ComparisonSession {
     title: row.title as string,
     project_id: row.project_id as string | undefined,
     notes: row.notes as string | undefined,
+    comparison_type: (row.comparison_type ?? "result_result") as ComparisonType,
+    outcome_summary: row.outcome_summary as string | undefined,
     item_count: (row.item_count as number) ?? 0,
     winner_count: (row.winner_count as number) ?? 0,
     created_at: row.created_at as string,
@@ -43,6 +52,7 @@ function rowToItem(row: Record<string, unknown>): ComparisonItem {
     is_winner: Boolean(row.is_winner),
     is_rejected: Boolean(row.is_rejected),
     notes: row.notes as string | undefined,
+    source_role: (row.source_role ?? "result") as ComparisonSourceRole,
     created_at: row.created_at as string,
   };
 }
@@ -75,6 +85,8 @@ export interface CreateSessionInput {
   title: string;
   project_id?: string;
   notes?: string;
+  comparison_type?: ComparisonType;
+  outcome_summary?: string;
 }
 
 export async function createSession(data: CreateSessionInput): Promise<string> {
@@ -84,15 +96,27 @@ export async function createSession(data: CreateSessionInput): Promise<string> {
   if (isTauri) {
     const db = await getDb();
     await db.execute(
-      `INSERT INTO comparison_sessions (id, title, project_id, notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, data.title, data.project_id ?? null, data.notes ?? null, ts, ts]
+      `INSERT INTO comparison_sessions
+         (id, title, project_id, notes, comparison_type, outcome_summary, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        id,
+        data.title,
+        data.project_id ?? null,
+        data.notes ?? null,
+        data.comparison_type ?? "result_result",
+        data.outcome_summary ?? null,
+        ts,
+        ts,
+      ]
     );
     return id;
   }
 
   _devSessions.unshift({
     id, title: data.title, project_id: data.project_id, notes: data.notes,
+    comparison_type: data.comparison_type ?? "result_result",
+    outcome_summary: data.outcome_summary,
     item_count: 0, winner_count: 0, created_at: ts, updated_at: ts,
   });
   return id;
@@ -141,6 +165,8 @@ export async function updateSession(id: string, data: Partial<CreateSessionInput
     const values: unknown[] = [ts];
     if (data.title !== undefined) { values.push(data.title); sets.push(`title = $${values.length}`); }
     if (data.notes !== undefined) { values.push(data.notes); sets.push(`notes = $${values.length}`); }
+    if (data.comparison_type !== undefined) { values.push(data.comparison_type); sets.push(`comparison_type = $${values.length}`); }
+    if (data.outcome_summary !== undefined) { values.push(data.outcome_summary); sets.push(`outcome_summary = $${values.length}`); }
     values.push(id);
     await db.execute(`UPDATE comparison_sessions SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
     return;
@@ -164,7 +190,8 @@ export async function deleteSession(id: string): Promise<void> {
 export async function addItemToSession(
   sessionId: string,
   resultId: string,
-  position = 0
+  position = 0,
+  sourceRole: ComparisonSourceRole = "result"
 ): Promise<string> {
   const id = generateId();
   const ts = now();
@@ -172,9 +199,10 @@ export async function addItemToSession(
   if (isTauri) {
     const db = await getDb();
     await db.execute(
-      `INSERT OR IGNORE INTO comparison_items (id, session_id, result_id, position, is_winner, is_rejected, created_at)
-       VALUES ($1, $2, $3, $4, 0, 0, $5)`,
-      [id, sessionId, resultId, position, ts]
+      `INSERT OR IGNORE INTO comparison_items
+         (id, session_id, result_id, position, source_role, is_winner, is_rejected, created_at)
+       VALUES ($1, $2, $3, $4, $5, 0, 0, $6)`,
+      [id, sessionId, resultId, position, sourceRole, ts]
     );
     await db.execute(
       "UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2",
@@ -184,7 +212,16 @@ export async function addItemToSession(
   }
 
   if (!_devItems.some((i) => i.session_id === sessionId && i.result_id === resultId)) {
-    _devItems.push({ id, session_id: sessionId, result_id: resultId, position, is_winner: false, is_rejected: false, created_at: ts });
+    _devItems.push({
+      id,
+      session_id: sessionId,
+      result_id: resultId,
+      position,
+      source_role: sourceRole,
+      is_winner: false,
+      is_rejected: false,
+      created_at: ts,
+    });
   }
   const si = _devSessions.findIndex((s) => s.id === sessionId);
   if (si !== -1) {

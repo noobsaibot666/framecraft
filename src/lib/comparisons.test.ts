@@ -52,11 +52,12 @@ describe("comparison sessions in-memory CRUD", () => {
   });
 
   it("getSessionById returns the created session", async () => {
-    const id = await createSession(sess({ title: "Session Alpha" }));
+    const id = await createSession(sess({ title: "Session Alpha", comparison_type: "provider_provider" }));
     const found = await getSessionById(id);
     expect(found).not.toBeNull();
     expect(found!.title).toBe("Session Alpha");
     expect(found!.id).toBe(id);
+    expect(found!.comparison_type).toBe("provider_provider");
   });
 
   it("getSessionById returns null for unknown id", async () => {
@@ -83,6 +84,12 @@ describe("comparison sessions in-memory CRUD", () => {
     expect((await getSessionById(id))!.title).toBe("After");
   });
 
+  it("updateSession stores a durable comparison outcome", async () => {
+    const id = await createSession(sess({ title: "Outcome Session" }));
+    await updateSession(id, { outcome_summary: "Winner: Result A" });
+    expect((await getSessionById(id))!.outcome_summary).toBe("Winner: Result A");
+  });
+
   it("deleteSession removes the session", async () => {
     const id = await createSession(sess({ title: "To Delete" }));
     await deleteSession(id);
@@ -97,6 +104,13 @@ describe("comparison items in-memory CRUD", () => {
     const sessionId = await createSession(sess({ title: "Item Test Session A" }));
     const itemId = await addItemToSession(sessionId, "result_001");
     expect(itemId).toBeTruthy();
+  });
+
+  it("addItemToSession stores the source role", async () => {
+    const sessionId = await createSession(sess({ title: "Reference Session" }));
+    const itemId = await addItemToSession(sessionId, "result_reference", 0, "reference");
+    const item = (await getItemsForSession(sessionId)).find((candidate) => candidate.id === itemId);
+    expect(item!.source_role).toBe("reference");
   });
 
   it("getItemsForSession returns added items", async () => {

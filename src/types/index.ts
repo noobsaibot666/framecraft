@@ -289,11 +289,31 @@ export interface ReferenceFilters {
 
 // ─── V4: Comparison Lab ───────────────────────────────────────
 
+export type ComparisonType =
+  | "result_result"
+  | "reference_result"
+  | "provider_provider"
+  | "prompt_version";
+
+export type ComparisonSourceRole =
+  | "result"
+  | "reference"
+  | "provider_a"
+  | "provider_b"
+  | "provider_c"
+  | "provider_d"
+  | "version_a"
+  | "version_b"
+  | "version_c"
+  | "version_d";
+
 export interface ComparisonSession {
   id: string;
   title: string;
   project_id?: string;
   notes?: string;
+  comparison_type: ComparisonType;
+  outcome_summary?: string;
   item_count: number;
   winner_count: number;
   created_at: string;
@@ -308,6 +328,7 @@ export interface ComparisonItem {
   is_winner: boolean;
   is_rejected: boolean;
   notes?: string;
+  source_role: ComparisonSourceRole;
   created_at: string;
 }
 

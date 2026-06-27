@@ -16,8 +16,9 @@ import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftC
 import { buildRecipeDraft } from "@/lib/craftRecipe";
 import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
+import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { cn } from "@/lib/utils";
-import type { Provider, Category, Token, Prompt, Project } from "@/types";
+import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
 // ─── Shared sub-components ────────────────────────────────────
@@ -240,7 +241,13 @@ const SD_SAMPLERS = [
   { value: "LMS", label: "LMS" },
 ];
 
-function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v: string | boolean) => void }) {
+function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref }: {
+  p: MJParams;
+  set: (k: keyof MJParams, v: string | boolean) => void;
+  selectedSrefTitle?: string | null;
+  onBrowseSref: () => void;
+  onClearSref: () => void;
+}) {
   const flag = (k: keyof MJParams, label: string) => (
     <label className="flex items-center gap-1.5 cursor-pointer">
       <input type="checkbox" checked={p[k] as boolean} onChange={(e) => set(k, e.target.checked)} className="accent-white w-3 h-3" />
@@ -261,7 +268,28 @@ function MidjourneyParams({ p, set }: { p: MJParams; set: (k: keyof MJParams, v:
       <FieldInput label="STYLE WEIGHT --sw" value={p.sw} onChange={(v) => set("sw", v)} placeholder="100" hint="0–1000" />
       <FieldInput label="STYLE VERSION --sv" value={p.sv} onChange={(v) => set("sv", v)} placeholder="4" hint="1–4" />
       {/* Reference */}
-      <FieldInput label="SREF CODE" value={p.sref_code} onChange={(v) => set("sref_code", v)} placeholder="12345" />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="system-label text-[10px] text-muted">SREF CODE</span>
+          <button
+            onClick={onBrowseSref}
+            className="font-mono text-[9px] text-readable hover:text-white uppercase tracking-widest transition-precise"
+          >
+            Browse library
+          </button>
+        </div>
+        {selectedSrefTitle && (
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill font-mono text-[10px] text-white"
+              style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}>
+              {selectedSrefTitle}
+              <button onClick={() => { onClearSref(); set("sref_code", ""); }}
+                className="text-readable hover:text-white">×</button>
+            </span>
+          </div>
+        )}
+        <FieldInput label="" value={p.sref_code} onChange={(v) => { set("sref_code", v); if (!v) onClearSref(); }} placeholder="12345" />
+      </div>
       <FieldInput label="PROFILE --profile" value={p.profile} onChange={(v) => set("profile", v)} placeholder="e.g. og9pmia" />
       {/* Output tuning */}
       <FieldInput label="SEED --seed" value={p.seed} onChange={(v) => set("seed", v)} placeholder="e.g. 4294967295" />
@@ -512,6 +540,8 @@ export function CraftPrompt() {
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
   const [provenCombos, setProvenCombos] = useState<ProvenCombo[]>([]);
   const [lowQualityDismissed, setLowQualityDismissed] = useState(false);
+  const [srefPickerOpen, setSrefPickerOpen] = useState(false);
+  const [selectedSref, setSelectedSref] = useState<Pick<SREF, "code" | "title"> | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -828,6 +858,7 @@ export function CraftPrompt() {
   ];
 
   return (
+    <>
     <PageContainer
       title={isEdit ? "Edit Prompt" : "Craft Prompt"}
       subtitle={projectContext ? `PROJECT CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
@@ -1179,7 +1210,15 @@ export function CraftPrompt() {
               <span className="system-label text-soft-white">PARAMETERS</span>
               <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{fields.provider}</span>
             </div>
-            {fields.provider === "midjourney" && <MidjourneyParams p={mjParams} set={setMJ} />}
+            {fields.provider === "midjourney" && (
+              <MidjourneyParams
+                p={mjParams}
+                set={setMJ}
+                selectedSrefTitle={selectedSref?.title ?? null}
+                onBrowseSref={() => setSrefPickerOpen(true)}
+                onClearSref={() => setSelectedSref(null)}
+              />
+            )}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
             {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
             {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (
@@ -1398,5 +1437,16 @@ export function CraftPrompt() {
         </div>
       </div>
     </PageContainer>
+    {srefPickerOpen && (
+      <SREFPickerModal
+        onSelect={(sref) => {
+          setSelectedSref({ code: sref.code, title: sref.title });
+          setMjParams((p) => ({ ...p, sref_code: sref.code }));
+          setSrefPickerOpen(false);
+        }}
+        onClose={() => setSrefPickerOpen(false)}
+      />
+    )}
+    </>
   );
 }

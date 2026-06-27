@@ -461,6 +461,7 @@ export function ProjectWorkspace() {
   const [linkedRefs, setLinkedRefs] = useState<Awaited<ReturnType<typeof getReferencesForProject>>>([]);
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
   const [shotCount, setShotCount] = useState(0);
+  const [shotComplete, setShotComplete] = useState(0);
   const [resultImporting, setResultImporting] = useState(false);
   const [resultImportError, setResultImportError] = useState("");
   const [resultImportSaved, setResultImportSaved] = useState(false);
@@ -503,6 +504,7 @@ export function ProjectWorkspace() {
       setLinkedRefs(refs);
       setLinkedResults(results);
       setShotCount(shots.length);
+      setShotComplete(shots.filter((s) => s.prompt_id && s.result_id).length);
       setLoading(false);
       hydratedRef.current = true;
     })();
@@ -789,6 +791,7 @@ export function ProjectWorkspace() {
             <StatChip label="Prompts" value={linkedPrompts.length} />
             <StatChip label="Results" value={linkedResults.length} />
             <StatChip label="Shots" value={shotCount} />
+            {shotCount > 0 && <StatChip label="Complete" value={shotComplete} />}
             <StatChip label="Winners" value={winnerCount} />
             <StatChip label="Failed" value={failedCount} alert />
           </div>

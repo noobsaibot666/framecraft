@@ -43,6 +43,19 @@ export interface ReportResult {
   created_at: string;
 }
 
+export interface ReportShot {
+  id: string;
+  sort_order: number;
+  shot_type: string;
+  label: string;
+  prompt_id?: string;
+  prompt_title?: string;
+  result_id?: string;
+  result_score?: number;
+  result_is_winner?: boolean;
+  notes?: string;
+}
+
 export interface ExportReport {
   generated_at: string;
   project: Project;
@@ -50,6 +63,7 @@ export interface ExportReport {
   results: ReportResult[];
   references: { id: string; title: string; kind: string; rating: number }[];
   deliverables: Deliverable[];
+  shots: ReportShot[];
   suggestions: string[];
 }
 
@@ -116,15 +130,45 @@ async function getFullResultsForProject(projectId: string): Promise<ReportResult
   }));
 }
 
+async function getShotsForExport(projectId: string): Promise<ReportShot[]> {
+  if (!isTauri) return [];
+  const db = await getDb();
+  const rows = (await db.select(
+    `SELECT ss.id, ss.sort_order, ss.shot_type, ss.label, ss.notes,
+            ss.prompt_id, p.title AS prompt_title,
+            ss.result_id, r.score_overall AS result_score, r.is_winner AS result_is_winner
+     FROM shot_sequence ss
+     LEFT JOIN prompts p ON ss.prompt_id = p.id
+     LEFT JOIN results r ON ss.result_id = r.id
+     WHERE ss.project_id = $1
+     ORDER BY ss.sort_order ASC`,
+    [projectId]
+  )) as Record<string, unknown>[];
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    sort_order: (r.sort_order as number) ?? 0,
+    shot_type: (r.shot_type as string) ?? "hero",
+    label: (r.label as string) ?? "",
+    prompt_id: r.prompt_id as string | undefined,
+    prompt_title: r.prompt_title as string | undefined,
+    result_id: r.result_id as string | undefined,
+    result_score: r.result_score != null ? (r.result_score as number) : undefined,
+    result_is_winner: r.result_is_winner != null ? Boolean(r.result_is_winner) : undefined,
+    notes: r.notes as string | undefined,
+  }));
+}
+
 export async function buildReport(projectId: string): Promise<ExportReport | null> {
   const project = await getProjectById(projectId);
   if (!project) return null;
 
-  const [prompts, results, references, deliverables, pack] = await Promise.all([
+  const [prompts, results, references, deliverables, shots, pack] = await Promise.all([
     getFullPromptsForProject(projectId),
     getFullResultsForProject(projectId),
     getReferencesForProject(projectId),
     getDeliverablesForProject(projectId),
+    getShotsForExport(projectId),
     buildContextPack(projectId),
   ]);
 
@@ -139,6 +183,7 @@ export async function buildReport(projectId: string): Promise<ExportReport | nul
     results,
     references: references.map((r) => ({ id: r.id, title: r.title, kind: r.kind, rating: r.rating })),
     deliverables,
+    shots,
     suggestions,
   };
 }
@@ -154,7 +199,7 @@ function score(n: number) { return `${n}/10`; }
 function date(s: string) { return new Date(s).toLocaleDateString(); }
 
 export function reportToMarkdown(report: ExportReport): string {
-  const { project: p, prompts, results, references, deliverables, suggestions } = report;
+  const { project: p, prompts, results, references, deliverables, shots, suggestions } = report;
   const lines: string[] = [];
 
   lines.push(`# ${p.title}`);
@@ -169,6 +214,28 @@ export function reportToMarkdown(report: ExportReport): string {
   if (p.brief_text)       lines.push(`\n**Brief:**\n> ${p.brief_text}`);
   if (p.production_goal)  lines.push(`\n**Production goal:**\n> ${p.production_goal}`);
   lines.push("");
+
+  // Shot Sequence
+  if (shots.length > 0) {
+    const withPrompt = shots.filter((s) => s.prompt_id).length;
+    const withResult = shots.filter((s) => s.result_id).length;
+    lines.push("## Shot Sequence");
+    lines.push(`*${shots.length} shots · ${withPrompt} linked to prompt · ${withResult} with result*`);
+    lines.push("");
+    lines.push("| # | Type | Label | Prompt | Result |");
+    lines.push("|---|---|---|---|---|");
+    for (const s of shots) {
+      const shotNum = `${s.sort_order + 1}`;
+      const promptCell = s.prompt_title ?? "—";
+      const resultCell = s.result_id
+        ? s.result_is_winner
+          ? `★ ${s.result_score ?? 0}/5`
+          : `${s.result_score ?? 0}/5`
+        : "—";
+      lines.push(`| ${shotNum} | ${s.shot_type} | ${s.label || "—"} | ${promptCell} | ${resultCell} |`);
+    }
+    lines.push("");
+  }
 
   // Deliverables
   if (deliverables.length > 0) {
@@ -267,7 +334,7 @@ export function reportToMarkdown(report: ExportReport): string {
 }
 
 export function reportToHTML(report: ExportReport): string {
-  const { project: p, prompts, results, references, deliverables, suggestions } = report;
+  const { project: p, prompts, results, references, deliverables, shots, suggestions } = report;
 
   const css = `
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -319,6 +386,27 @@ export function reportToHTML(report: ExportReport): string {
     html += `<h2>Brief</h2>`;
     if (p.brief_text) html += `<blockquote>${esc(p.brief_text)}</blockquote>`;
     if (p.production_goal) html += `<p><strong>Goal:</strong> ${esc(p.production_goal)}</p>`;
+  }
+
+  if (shots.length > 0) {
+    const withPrompt = shots.filter((s) => s.prompt_id).length;
+    const withResult = shots.filter((s) => s.result_id).length;
+    html += `<h2>Shot Sequence (${shots.length})</h2>`;
+    html += `<p style="font-size:11px;color:#888;margin-bottom:8px">${withPrompt}/${shots.length} linked to prompt &nbsp;·&nbsp; ${withResult}/${shots.length} with result</p>`;
+    html += rows(
+      ["#", "Type", "Label", "Prompt", "Result"],
+      shots.map((s) => [
+        String(s.sort_order + 1),
+        `<span style="text-transform:uppercase;font-size:10px;letter-spacing:0.06em">${esc(s.shot_type)}</span>`,
+        esc(s.label || "—"),
+        s.prompt_title ? esc(s.prompt_title) : `<span style="color:#aaa">—</span>`,
+        s.result_id
+          ? s.result_is_winner
+            ? `<span class="badge winner">★ ${s.result_score ?? 0}/5</span>`
+            : `${s.result_score ?? 0}/5`
+          : `<span style="color:#aaa">—</span>`,
+      ])
+    );
   }
 
   if (deliverables.length > 0) {

@@ -28,6 +28,7 @@ function makeReport(overrides: Partial<ExportReport> = {}): ExportReport {
     results: [],
     references: [],
     deliverables: [],
+    shots: [],
     suggestions: [],
     ...overrides,
   };
@@ -191,5 +192,46 @@ describe("reportToHTML", () => {
     }));
     expect(html).toContain("risk-high");
     expect(html).toContain("8/10");
+  });
+});
+
+describe("Shot sequence in exports", () => {
+  const shotsReport = makeReport({
+    shots: [
+      {
+        id: "s1", sort_order: 0, shot_type: "hero", label: "Hero wide",
+        prompt_id: "p1", prompt_title: "Fashion Hero",
+        result_id: "r1", result_score: 4, result_is_winner: true,
+      },
+      {
+        id: "s2", sort_order: 1, shot_type: "detail", label: "Texture close",
+        prompt_id: undefined, prompt_title: undefined,
+        result_id: undefined, result_score: undefined,
+      },
+    ],
+  });
+
+  it("includes Shot Sequence section in Markdown", () => {
+    const md = reportToMarkdown(shotsReport);
+    expect(md).toContain("## Shot Sequence");
+    expect(md).toContain("Hero wide");
+    expect(md).toContain("Fashion Hero");
+  });
+
+  it("shows completion stats in Markdown shot section", () => {
+    const md = reportToMarkdown(shotsReport);
+    expect(md).toContain("1 linked to prompt");
+  });
+
+  it("includes Shot Sequence table in HTML", () => {
+    const html = reportToHTML(shotsReport);
+    expect(html).toContain("Shot Sequence");
+    expect(html).toContain("Hero wide");
+  });
+
+  it("includes shots array in JSON export", () => {
+    const json = reportToJSON(shotsReport);
+    const parsed = JSON.parse(json) as { shots: unknown[] };
+    expect(parsed.shots).toHaveLength(2);
   });
 });

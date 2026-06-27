@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, flattenTree, diffPromptText, diffMetadata, type VersionNode } from "./lineage";
+import { buildTree, flattenTree, diffPromptText, diffMetadata, getPromptVersions, type VersionNode } from "./lineage";
 import type { Prompt } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -219,5 +219,28 @@ describe("diffMetadata", () => {
     const changed = diffMetadata(a, b);
     expect(changed).not.toContain("title");
     expect(changed).not.toContain("rating");
+  });
+});
+
+describe("getPromptVersions (dev mode)", () => {
+  it("resolves to empty array in dev/test mode", async () => {
+    await expect(getPromptVersions("any-id")).resolves.toEqual([]);
+  });
+
+  it("does not throw for an unknown prompt id", async () => {
+    await expect(getPromptVersions("unknown-id")).resolves.toBeDefined();
+  });
+});
+
+describe("flattenTree with getPromptVersions shape", () => {
+  it("returns empty array for null root", () => {
+    expect(flattenTree(null)).toEqual([]);
+  });
+
+  it("flattens a two-level tree into version order", () => {
+    const child: VersionNode = makeNode("c1", "p1", 2);
+    const root: VersionNode = { ...makeNode("p1", undefined, 1), children: [child] };
+    const flat = flattenTree(root);
+    expect(flat.map((n) => n.id)).toEqual(["p1", "c1"]);
   });
 });

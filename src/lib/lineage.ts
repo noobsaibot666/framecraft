@@ -190,6 +190,15 @@ export async function getAncestorChain(promptId: string): Promise<Prompt[]> {
   return chain;
 }
 
+/** All versions in the same family tree as promptId, sorted by version asc. */
+export async function getPromptVersions(promptId: string): Promise<VersionNode[]> {
+  if (!isTauri) return [];
+  const rootId = await findRoot(promptId);
+  const nodes = await loadFamily(rootId);
+  const tree = buildTree(nodes);
+  return flattenTree(tree);
+}
+
 /** Diff two prompt texts — returns an array of change segments. */
 export interface DiffSegment {
   type: "equal" | "removed" | "added";

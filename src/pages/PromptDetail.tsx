@@ -13,6 +13,7 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
+import { getPromptVersions, type VersionNode } from "@/lib/lineage";
 import { formatDate, cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
 
@@ -61,6 +62,8 @@ export function PromptDetail() {
   const [results, setResults] = useState<Result[]>([]);
   const [showExtractRecipe, setShowExtractRecipe] = useState(false);
   const [queued, setQueued] = useState(false);
+  const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
+  const [versions, setVersions] = useState<VersionNode[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -69,6 +72,7 @@ export function PromptDetail() {
       setLoading(false);
     });
     getResultsForPrompt(id).then(setResults);
+    getPromptVersions(id).then(setVersions).catch(() => {});
   }, [id, getById]);
 
   const handleCopy = async () => {
@@ -247,15 +251,60 @@ export function PromptDetail() {
             </div>
           )}
 
-          {/* Results Gallery */}
+          {/* Results / Versions tabs */}
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <span className="system-label">RESULTS ({results.length})</span>
-              <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
-                <Plus size={10} /> Add Result
-              </Button>
+              <div className="flex items-center gap-0">
+                <button
+                  onClick={() => setActiveTab("results")}
+                  className={`px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest rounded-sm transition-precise ${activeTab === "results" ? "text-white bg-white/8" : "text-readable hover:text-white"}`}
+                >
+                  Results ({results.length})
+                </button>
+                {versions.length > 1 && (
+                  <button
+                    onClick={() => setActiveTab("versions")}
+                    className={`px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest rounded-sm transition-precise ${activeTab === "versions" ? "text-white bg-white/8" : "text-readable hover:text-white"}`}
+                  >
+                    Versions ({versions.length})
+                  </button>
+                )}
+              </div>
+              {activeTab === "results" && (
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+                  <Plus size={10} /> Add Result
+                </Button>
+              )}
+              {activeTab === "versions" && (
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
+                  <GitBranch size={10} /> Fork
+                </Button>
+              )}
             </div>
-            {results.length === 0 ? (
+
+            {/* Version history panel */}
+            {activeTab === "versions" && (
+              <div className="flex flex-col gap-1">
+                {versions.map((v) => (
+                  <div key={v.id}
+                    className={`flex items-center gap-4 px-4 py-3 rounded-sm cursor-pointer transition-precise ${v.id === prompt.id ? "bg-white/6" : "hover:bg-white/3"}`}
+                    style={{ border: v.id === prompt.id ? "1px solid rgba(255,255,255,0.12)" : "1px solid transparent" }}
+                    onClick={() => v.id !== prompt.id && navigate(`/library/${v.id}`)}>
+                    <span className="font-mono text-[10px] text-readable shrink-0 w-8">v{v.version}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-[11px] text-white truncate block">{v.title}</span>
+                      <span className="font-mono text-[9px] text-muted">{formatDate(v.created_at)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {v.is_winner && <span className="font-mono text-[8px] text-white/50 uppercase tracking-wider">Winner</span>}
+                      {v.result_count > 0 && <span className="font-mono text-[9px] text-readable">{v.result_count} result{v.result_count !== 1 ? "s" : ""}</span>}
+                      {v.id === prompt.id && <span className="font-mono text-[8px] text-readable uppercase tracking-wider">current</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {activeTab === "results" && (results.length === 0 ? (
               <div
                 className="flex items-center justify-center py-8 rounded-card cursor-pointer hover:bg-white/3 transition-precise"
                 style={{ border: "2px dashed rgba(255,255,255,0.08)" }}
@@ -307,7 +356,7 @@ export function PromptDetail() {
                   </div>
                 ))}
               </div>
-            )}
+            ))}
           </div>
         </div>
 

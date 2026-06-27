@@ -17,6 +17,7 @@ import { buildRecipeDraft, getRecipeSuggestions, type RecipeSuggestion } from "@
 import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
+import { analyzePromptDraft, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -543,6 +544,9 @@ export function CraftPrompt() {
   const [srefPickerOpen, setSrefPickerOpen] = useState(false);
   const [selectedSref, setSelectedSref] = useState<Pick<SREF, "code" | "title"> | null>(null);
   const [recipeSuggestions, setRecipeSuggestions] = useState<RecipeSuggestion[]>([]);
+  const [advice, setAdvice] = useState<PromptAdvice>(EMPTY_ADVICE);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [adviceDismissed, setAdviceDismissed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -1424,6 +1428,63 @@ export function CraftPrompt() {
               </button>
             </div>
           )}
+
+          {/* AI Prompt Advisor */}
+          {(() => {
+            const canAnalyze = validatePromptForAnalysis(fields.prompt_text).valid;
+            const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0) && !adviceDismissed;
+            return (
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!canAnalyze || adviceLoading}
+                  title={!canAnalyze ? validatePromptForAnalysis(fields.prompt_text).message : "Analyze with Claude Haiku"}
+                  onClick={async () => {
+                    setAdviceLoading(true);
+                    setAdviceDismissed(false);
+                    try {
+                      const result = await analyzePromptDraft({
+                        promptText: fields.prompt_text,
+                        brief: projectContext?.brief_text,
+                        provenTokens: tokenSequence.filter(t => t.quality_score > 0.3).map(t => t.text).slice(0, 5),
+                      });
+                      setAdvice(result);
+                    } catch {
+                      /* silently ignore API errors */
+                    } finally {
+                      setAdviceLoading(false);
+                    }
+                  }}
+                  className="w-full justify-center"
+                >
+                  <Wand2 size={10} />
+                  {adviceLoading ? "Analyzing…" : "Analyze Draft"}
+                </Button>
+                {hasAdvice && (
+                  <div className="flex flex-col gap-2 px-3 py-2.5 rounded-sm"
+                    style={{ border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[8px] uppercase tracking-widest text-readable">AI Advice</span>
+                      <button onClick={() => setAdviceDismissed(true)} className="text-readable hover:text-white text-[10px]">×</button>
+                    </div>
+                    {advice.suggestions.map((s, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="mt-0.5 shrink-0 font-mono text-[8px] text-white/40">→</span>
+                        <span className="font-mono text-[9px] text-white/70 leading-relaxed">{s}</span>
+                      </div>
+                    ))}
+                    {advice.risks.map((r, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="mt-0.5 shrink-0 font-mono text-[8px] text-red/50">!</span>
+                        <span className="font-mono text-[9px] text-red/60 leading-relaxed">{r}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Save */}
           <div className="flex flex-col gap-2">

@@ -4,6 +4,7 @@ import {
   Archive,
   BookOpen,
   FileText,
+  Film,
   GitCompare,
   Image,
   Layers,
@@ -41,6 +42,7 @@ const NAV_GROUPS = [
     label: "LIBRARY",
     items: [
       { label: "Library", to: "/library", icon: Archive },
+      { label: "Results", to: "/results", icon: Film },
       { label: "References", to: "/references", icon: Image },
       { label: "SREFs", to: "/srefs", icon: BookOpen },
     ],

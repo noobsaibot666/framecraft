@@ -28,6 +28,7 @@ const ProjectBoard = lazy(() => import("@/pages/ProjectBoard").then((m) => ({ de
 const ProjectAssistant = lazy(() => import("@/pages/ProjectAssistant").then((m) => ({ default: m.ProjectAssistant })));
 const ProjectExport = lazy(() => import("@/pages/ProjectExport").then((m) => ({ default: m.ProjectExport })));
 const ProjectSequence = lazy(() => import("@/pages/ProjectSequence").then((m) => ({ default: m.ProjectSequence })));
+const ResultGallery = lazy(() => import("@/pages/ResultGallery").then((m) => ({ default: m.ResultGallery })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ export default function App() {
               <Route path="/queue" element={routeElement(<GenerationQueue />)} />
               <Route path="/import" element={routeElement(<ManualImport />)} />
               <Route path="/srefs" element={routeElement(<SREFLibrary />)} />
+              <Route path="/results" element={routeElement(<ResultGallery />)} />
               <Route path="/results/:promptId" element={routeElement(<ResultReview />)} />
               <Route path="/analyze" element={routeElement(<ImageAnalyzer />)} />
               <Route path="/brief" element={routeElement(<BriefAnalyzer />)} />

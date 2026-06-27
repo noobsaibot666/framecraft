@@ -13,7 +13,7 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { addPromptToProject, getProjectById } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
-import { buildRecipeDraft } from "@/lib/craftRecipe";
+import { buildRecipeDraft, getRecipeSuggestions, type RecipeSuggestion } from "@/lib/craftRecipe";
 import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
@@ -542,6 +542,7 @@ export function CraftPrompt() {
   const [lowQualityDismissed, setLowQualityDismissed] = useState(false);
   const [srefPickerOpen, setSrefPickerOpen] = useState(false);
   const [selectedSref, setSelectedSref] = useState<Pick<SREF, "code" | "title"> | null>(null);
+  const [recipeSuggestions, setRecipeSuggestions] = useState<RecipeSuggestion[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -685,10 +686,11 @@ export function CraftPrompt() {
   });
   const suppressedTokenText = buildSuppressionText(projectContext, fields.avoidance_text);
 
-  // Proven combo detection + low-quality reset — runs when selected tokens change
+  // Proven combo detection + recipe suggestions + low-quality reset
   useEffect(() => {
-    if (tokenSequence.length < 2) { setProvenCombos([]); return; }
+    if (tokenSequence.length < 2) { setProvenCombos([]); setRecipeSuggestions([]); return; }
     getProvenCombos(tokenSequence.map((t) => t.id)).then(setProvenCombos).catch(() => {});
+    getRecipeSuggestions(tokenSequence.map((t) => t.text), 2).then(setRecipeSuggestions).catch(() => {});
     setLowQualityDismissed(false);
   }, [tokenSequence]);
 
@@ -1120,6 +1122,34 @@ export function CraftPrompt() {
                           <span className="font-mono text-[8px] text-white/35 shrink-0 tabular-nums">
                             {combo.avg_rating.toFixed(1)}/5 · {combo.co_occurrence_count}×
                           </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recipeSuggestions.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="system-label text-[10px] text-muted">RECIPE SUGGESTIONS</span>
+                    <div className="flex flex-col gap-1">
+                      {recipeSuggestions.map((s) => (
+                        <div key={s.recipe.id}
+                          className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-sm"
+                          style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)" }}>
+                          <div className="flex flex-col gap-0.5 min-w-0">
+                            <span className="font-mono text-[9px] text-white/70 truncate">{s.recipe.title}</span>
+                            <span className="font-mono text-[8px] text-white/35">{s.matchedCount} token{s.matchedCount !== 1 ? "s" : ""} match · {s.matchPercent}%</span>
+                          </div>
+                          <button
+                            onClick={() => {
+                              const draft = buildRecipeDraft(s.recipe);
+                              setFields((f) => ({ ...f, prompt_text: draft.promptText }));
+                            }}
+                            className="shrink-0 font-mono text-[8px] text-readable hover:text-white uppercase tracking-widest transition-precise px-2 py-1 rounded-sm"
+                            style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+                          >
+                            Apply
+                          </button>
                         </div>
                       ))}
                     </div>

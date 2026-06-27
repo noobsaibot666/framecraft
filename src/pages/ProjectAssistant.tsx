@@ -458,8 +458,9 @@ export function ProjectAssistant() {
                   <Row label="Results" value={`${pack.results.total} (${pack.results.winners}★)`} />
                   <Row label="References" value={pack.references.total} />
                   <Row label="Deliverables" value={`${pack.deliverables.total}`} />
-                  {pack.prompts.avgRating > 0 && <Row label="Avg rating" value={`${pack.prompts.avgRating}/10`} />}
-                  {pack.results.avgScore > 0 && <Row label="Avg score" value={`${pack.results.avgScore}/10`} />}
+                  <Row label="Comparisons" value={`${pack.comparisons.decided} decided · ${pack.comparisons.pending} pending`} />
+                  {pack.prompts.avgRating > 0 && <Row label="Avg rating" value={`${pack.prompts.avgRating}/5`} />}
+                  {pack.results.avgScore > 0 && <Row label="Avg score" value={`${pack.results.avgScore}/5`} />}
                 </>
               ) : (
                 <p className="font-mono text-[11px] text-readable">No project data.</p>

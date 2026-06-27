@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   generateSuggestions,
+  serializePackToSystem,
   createThread,
   getThreadsForProject,
   getThread,
@@ -19,6 +20,7 @@ function makePack(overrides: Partial<ProjectContextPack> = {}): ProjectContextPa
     results: { total: 0, winners: 0, failed: 0, avgScore: 0 },
     references: { total: 0, kinds: [] },
     deliverables: { total: 0, byStatus: {}, missingResults: 0 },
+    comparisons: { total: 0, decided: 0, pending: 0, recentOutcomes: [] },
     ...overrides,
   };
 }
@@ -91,6 +93,35 @@ describe("generateSuggestions", () => {
       deliverables: { total: 3, byStatus: { generating: 2 }, missingResults: 2 },
     }));
     expect(s.some((x) => x.body.includes("missing") || x.body.includes("Missing"))).toBe(true);
+  });
+
+  it("directs the user to unresolved comparison sessions", () => {
+    const suggestions = generateSuggestions(makePack({
+      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [] },
+      results: { total: 2, winners: 0, failed: 0, avgScore: 3.5 },
+      comparisons: { total: 2, decided: 1, pending: 1, recentOutcomes: ["Winner: Result A"] },
+    }));
+
+    const comparison = suggestions.find((item) => item.body.includes("comparison"));
+    expect(comparison?.action?.payload).toBe("/compare/proj1");
+  });
+
+  it("serializes comparison outcomes and the five-point result scale", () => {
+    const context = serializePackToSystem(makePack({
+      prompts: { total: 2, winners: 1, failed: 0, avgRating: 4.5, top: [] },
+      results: { total: 2, winners: 1, failed: 0, avgScore: 4.5 },
+      comparisons: {
+        total: 2,
+        decided: 1,
+        pending: 1,
+        recentOutcomes: ["Result vs Result. Winner: Studio A"],
+      },
+    }));
+
+    expect(context).toContain("avg rating 4.5/5");
+    expect(context).toContain("avg score 4.5/5");
+    expect(context).toContain("COMPARISONS (2 total, 1 decided, 1 pending)");
+    expect(context).toContain("Winner: Studio A");
   });
 });
 

@@ -1,5 +1,7 @@
 import { getProjectById, getPromptsForProject, getResultsForProject, getReferencesForProject } from "./projects";
 import { getDeliverablesForProject, isMissingResult } from "./deliverables";
+import { getSessions } from "./comparisons";
+import { summarizeComparisonIntelligence } from "./comparisonIntelligence";
 import { getApiKey, AI_MODELS } from "./aiConfig";
 import { fetchProviderJson, requireValidApiKey } from "./aiClient";
 import { getFramecraftDb } from "./dbConnection";
@@ -27,11 +29,12 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
   const project = await getProjectById(projectId);
   if (!project) return null;
 
-  const [prompts, results, references, deliverables] = await Promise.all([
+  const [prompts, results, references, deliverables, comparisonSessions] = await Promise.all([
     getPromptsForProject(projectId),
     getResultsForProject(projectId),
     getReferencesForProject(projectId),
     getDeliverablesForProject(projectId),
+    getSessions(projectId),
   ]);
 
   const avgRating = prompts.length
@@ -74,6 +77,7 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
     },
     references: { total: references.length, kinds },
     deliverables: { total: deliverables.length, byStatus, missingResults },
+    comparisons: summarizeComparisonIntelligence(comparisonSessions),
   };
 }
 
@@ -166,12 +170,21 @@ export function generateSuggestions(pack: ProjectContextPack): AssistantSuggesti
     });
   }
 
+  if (pack.comparisons.pending > 0) {
+    suggestions.push({
+      kind: "next_action",
+      label: "Complete comparisons",
+      body: `${pack.comparisons.pending} comparison session${pack.comparisons.pending === 1 ? " is" : "s are"} still waiting for a saved decision. Complete the review so its winner, rejection, and notes become project intelligence.`,
+      action: { label: "Open Compare", type: "navigate", payload: `/compare/${pack.project.id}` },
+    });
+  }
+
   return suggestions;
 }
 
 // ─── AI call ──────────────────────────────────────────────────
 
-function serializePackToSystem(pack: ProjectContextPack): string {
+export function serializePackToSystem(pack: ProjectContextPack): string {
   const lines: string[] = [
     `You are a creative assistant embedded in Framecraft, a local prompt engineering workspace.`,
     `Your role: help the user make grounded decisions about their project based on the data below.`,
@@ -184,13 +197,13 @@ function serializePackToSystem(pack: ProjectContextPack): string {
     pack.project.brief_text ? `Brief: ${pack.project.brief_text}` : "",
     pack.project.production_goal ? `Production goal: ${pack.project.production_goal}` : "",
     ``,
-    `## PROMPTS (${pack.prompts.total} total, avg rating ${pack.prompts.avgRating}/10)`,
+    `## PROMPTS (${pack.prompts.total} total, avg rating ${pack.prompts.avgRating}/5)`,
     `Winners: ${pack.prompts.winners} | Failed: ${pack.prompts.failed}`,
     ...pack.prompts.top.map(
       (p) => `  - "${p.title}" rating:${p.rating}${p.is_winner ? " ★WINNER" : ""}${p.is_failed ? " ✗FAILED" : ""}`
     ),
     ``,
-    `## RESULTS (${pack.results.total} total, avg score ${pack.results.avgScore}/10)`,
+    `## RESULTS (${pack.results.total} total, avg score ${pack.results.avgScore}/5)`,
     `Winners: ${pack.results.winners} | Failed: ${pack.results.failed}`,
     ``,
     `## REFERENCES (${pack.references.total} total)`,
@@ -201,6 +214,11 @@ function serializePackToSystem(pack: ProjectContextPack): string {
     pack.deliverables.missingResults
       ? `Missing results: ${pack.deliverables.missingResults}`
       : "",
+    ``,
+    `## COMPARISONS (${pack.comparisons.total} total, ${pack.comparisons.decided} decided, ${pack.comparisons.pending} pending)`,
+    ...(pack.comparisons.recentOutcomes.length > 0
+      ? pack.comparisons.recentOutcomes.map((outcome) => `  - ${outcome}`)
+      : ["No saved comparison outcomes."]),
   ];
   return lines.filter(Boolean).join("\n");
 }

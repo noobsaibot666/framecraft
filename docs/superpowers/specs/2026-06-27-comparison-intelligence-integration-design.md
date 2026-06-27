@@ -8,7 +8,7 @@ Comparison outcomes must become project intelligence rather than remaining isola
 
 The project context pack will include comparison session totals, decided and pending counts, and a bounded list of recent saved outcomes. The Project Assistant context panel and AI system context will expose this information. Deterministic guidance will direct users to complete unresolved comparisons when appropriate.
 
-Result review scores use a five-point scale. Every Assistant label and message that describes `score_overall` will use `/5`; prompt ratings remain on their existing scale.
+Result review scores and prompt star ratings use five-point scales. Every Assistant label and message that describes either value will use `/5`.
 
 ## Data Flow
 
@@ -23,4 +23,3 @@ No database migration is required. Projects without comparison sessions receive 
 ## Testing
 
 Tests will cover comparison context summarization, unresolved-comparison guidance, and the five-point result score wording. Full frontend, TypeScript, Rust, and production-build verification remains required.
-

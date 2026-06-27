@@ -421,6 +421,12 @@ export interface ProjectContextPack {
     byStatus: Partial<Record<string, number>>;
     missingResults: number;
   };
+  comparisons: {
+    total: number;
+    decided: number;
+    pending: number;
+    recentOutcomes: string[];
+  };
 }
 
 // ─── V4: Deliverable Board ────────────────────────────────────

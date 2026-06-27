@@ -58,11 +58,25 @@ function SortablePill({
     zIndex: isDragging ? 10 : undefined,
   };
 
+  const isLowQuality = token.quality_score < -0.1;
+  const isHighQuality = token.quality_score > 0.3;
+  const pillBorder = isLowQuality
+    ? "1px solid rgba(215,25,33,0.35)"
+    : isHighQuality
+    ? "1px solid rgba(255,255,255,0.28)"
+    : "var(--border-strong)";
+  const qualityHint = isLowQuality
+    ? ` · Low quality score (${token.quality_score.toFixed(2)})`
+    : isHighQuality
+    ? ` · Proven token (${token.quality_score.toFixed(2)})`
+    : "";
+
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, border: "var(--border-strong)", background: "rgba(255,255,255,0.06)" }}
+      style={{ ...style, border: pillBorder, background: "rgba(255,255,255,0.06)" }}
       className="shrink-0 inline-flex min-h-8 items-center gap-1.5 rounded-sm"
+      title={`${displayText}${qualityHint}`}
     >
       {/* Drag handle */}
       <button
@@ -91,7 +105,6 @@ function SortablePill({
         <span
           className="font-mono text-[10.5px] tracking-wide text-white py-1 cursor-text select-none"
           onClick={() => onEditStart(token.id)}
-          title="Click to edit"
         >
           {displayText}
         </span>

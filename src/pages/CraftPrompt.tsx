@@ -511,6 +511,7 @@ export function CraftPrompt() {
   const [tokenSequence, setTokenSequence] = useState<Token[]>([]);
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
   const [provenCombos, setProvenCombos] = useState<ProvenCombo[]>([]);
+  const [lowQualityDismissed, setLowQualityDismissed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -654,10 +655,11 @@ export function CraftPrompt() {
   });
   const suppressedTokenText = buildSuppressionText(projectContext, fields.avoidance_text);
 
-  // Proven combo detection — runs when selected tokens change
+  // Proven combo detection + low-quality reset — runs when selected tokens change
   useEffect(() => {
     if (tokenSequence.length < 2) { setProvenCombos([]); return; }
     getProvenCombos(tokenSequence.map((t) => t.id)).then(setProvenCombos).catch(() => {});
+    setLowQualityDismissed(false);
   }, [tokenSequence]);
 
   // Debounced duplicate + related prompts detection (Phase 06)
@@ -681,6 +683,11 @@ export function CraftPrompt() {
     : assembled;
 
   const charCount = assembled.length;
+
+  // Tokens in the current sequence with a negative quality history (not overridden by user)
+  const lowQualityTokens = tokenSequence.filter(
+    (t) => !tokenOverrides[t.id] && t.quality_score < -0.1
+  );
   const availableRecipes = allPrompts
     .filter((prompt) => prompt.is_recipe && prompt.id !== id)
     .filter((recipe) => !fields.category || !recipe.category || recipe.category === fields.category)
@@ -1323,6 +1330,31 @@ export function CraftPrompt() {
               {copied ? "Copied!" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
             </Button>
           </div>
+
+          {/* Low-quality token advisory */}
+          {lowQualityTokens.length > 0 && !lowQualityDismissed && (
+            <div
+              className="flex items-start gap-2.5 px-3 py-2.5 rounded-sm"
+              style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}
+            >
+              <AlertCircle size={11} className="text-red/60 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60">Low-performing tokens</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {lowQualityTokens.map((t) => (
+                    <span key={t.id} className="font-mono text-[9px] text-muted/80">{t.text}</span>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLowQualityDismissed(true)}
+                className="font-mono text-[9px] text-dim/40 hover:text-white shrink-0 transition-precise"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Save */}
           <div className="flex flex-col gap-2">

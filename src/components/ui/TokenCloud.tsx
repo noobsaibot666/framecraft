@@ -243,8 +243,14 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
         <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto">
           {visibleTokens.map((token) => {
             const active = selectedSet.has(token.text);
-            const isHighQuality = token.quality_score > 0;
+            const isHighQuality = token.quality_score > 0.3;
+            const isNegativeQuality = token.quality_score < -0.05;
             const isSuppressed = Boolean(suppressedLower && suppressedLower.includes(token.text.toLowerCase()));
+            const qualityTitle = isHighQuality
+              ? `Proven token — quality score ${token.quality_score.toFixed(2)}`
+              : isNegativeQuality
+              ? `Low-performing token — quality score ${token.quality_score.toFixed(2)}`
+              : token.text;
             return (
               <div key={token.id} className="relative group/pill">
                 <button
@@ -260,20 +266,26 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
                       : isSuppressed
                       ? "1px solid rgba(255,255,255,0.06)"
                       : isHighQuality
-                      ? "1px solid rgba(255,255,255,0.14)"
+                      ? "1px solid rgba(255,255,255,0.18)"
                       : "var(--border-dim)",
                     background: active
                       ? "rgba(255,255,255,0.08)"
                       : isSuppressed
                       ? "rgba(255,255,255,0.015)"
                       : isHighQuality
-                      ? "rgba(255,255,255,0.03)"
+                      ? "rgba(255,255,255,0.04)"
                       : "transparent",
                   }}
-                  title={isSuppressed ? `${token.text} is reduced by project constraints or avoidance text.` : token.text}
+                  title={isSuppressed ? `${token.text} is reduced by project constraints or avoidance text.` : qualityTitle}
                 >
                   {active && <span className="mr-1 text-cyan text-[10px]">✓</span>}
                   {isSuppressed && !active && <span className="mr-1 text-readable text-[10px]">-</span>}
+                  {!active && !isSuppressed && isHighQuality && (
+                    <span className="inline-block w-1 h-1 rounded-full bg-white/50 mr-1.5 shrink-0" />
+                  )}
+                  {!active && !isSuppressed && isNegativeQuality && (
+                    <span className="inline-block w-1 h-1 rounded-full bg-red/50 mr-1.5 shrink-0" />
+                  )}
                   {token.text}
                 </button>
                 {/* Favorite star — always visible if favorited, hover-visible otherwise */}

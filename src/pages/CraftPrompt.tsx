@@ -15,6 +15,7 @@ import { addPromptToProject, getProjectById } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
 import { buildRecipeDraft } from "@/lib/craftRecipe";
 import { getPreferences } from "@/lib/userPreferences";
+import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -509,6 +510,7 @@ export function CraftPrompt() {
   const [includeAvoidance, setIncludeAvoidance] = useState(false);
   const [tokenSequence, setTokenSequence] = useState<Token[]>([]);
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
+  const [provenCombos, setProvenCombos] = useState<ProvenCombo[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -651,6 +653,12 @@ export function CraftPrompt() {
     promptText: assembled,
   });
   const suppressedTokenText = buildSuppressionText(projectContext, fields.avoidance_text);
+
+  // Proven combo detection — runs when selected tokens change
+  useEffect(() => {
+    if (tokenSequence.length < 2) { setProvenCombos([]); return; }
+    getProvenCombos(tokenSequence.map((t) => t.id)).then(setProvenCombos).catch(() => {});
+  }, [tokenSequence]);
 
   // Debounced duplicate + related prompts detection (Phase 06)
   useEffect(() => {
@@ -1056,6 +1064,29 @@ export function CraftPrompt() {
                     onEditCommit={handleTokenEditCommit}
                   />
                 </div>
+
+                {/* Proven combinations — shown when selected tokens have a co-occurrence history */}
+                {provenCombos.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <span className="system-label text-[10px] text-muted">PROVEN COMBINATIONS</span>
+                    <div className="flex flex-col gap-1">
+                      {provenCombos.slice(0, 3).map((combo) => (
+                        <div
+                          key={`${combo.token_a_id}|${combo.token_b_id}`}
+                          className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-sm"
+                          style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.025)" }}
+                        >
+                          <span className="font-mono text-[9px] text-white/60 truncate">
+                            {combo.token_a_text} + {combo.token_b_text}
+                          </span>
+                          <span className="font-mono text-[8px] text-white/35 shrink-0 tabular-nums">
+                            {combo.avg_rating.toFixed(1)}/5 · {combo.co_occurrence_count}×
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {projectTokenSuggestions.length > 0 && (
                   <div className="flex flex-col gap-2">

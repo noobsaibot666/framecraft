@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/Input";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
+import { updateCoOccurrences } from "@/lib/tokenPatterns";
 import { fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
 import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
 import { cn } from "@/lib/utils";
@@ -206,10 +207,11 @@ export function ResultReview() {
         });
       }
 
-      // Update token quality scores (fire-and-forget — non-blocking)
+      // Update token quality scores and co-occurrence patterns (fire-and-forget — non-blocking)
       if (prompt?.prompt_text) {
         const delta = scoreToQualityDelta(scores.overall, isFailed);
         updateTokenQualityFromResult(prompt.prompt_text, delta).catch(() => {});
+        updateCoOccurrences(prompt.prompt_text, scores.overall).catch(() => {});
       }
 
       if (!queued) await recomputePromptResultSummary(promptId);

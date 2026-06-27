@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { AppMenu } from "./AppMenu";
 
@@ -24,7 +25,7 @@ function LiveClock() {
   );
 }
 
-export function TopBar() {
+export function TopBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
   return (
     <header
       className="h-12 flex items-center justify-between px-5 shrink-0"
@@ -39,6 +40,21 @@ export function TopBar() {
           V1
         </span>
       </div>
+
+      {/* Center: Search trigger */}
+      <button
+        type="button"
+        onClick={onSearchOpen}
+        className="flex items-center gap-2 h-8 px-3 rounded-sm text-muted hover:text-white transition-precise"
+        style={{ border: "var(--border-dim)" }}
+      >
+        <Search size={11} />
+        <span className="font-mono text-[10px] text-dim/60">Search…</span>
+        <kbd className="font-mono text-[9px] text-dim/40 px-1.5 py-0.5 rounded ml-2"
+          style={{ border: "var(--border-dim)" }}>
+          ⌘K
+        </kbd>
+      </button>
 
       {/* Right: Status + Clock */}
       <div className="flex items-center gap-4">

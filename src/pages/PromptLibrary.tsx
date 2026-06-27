@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff, CheckSquare, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultSummaryMap } from "@/lib/db";
+import { getResultSummaryMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
 import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
 import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
@@ -104,7 +104,7 @@ function LibraryStat({ label, value, accent }: { label: string; value: string | 
   );
 }
 
-function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMode, selected, onSelect }: {
+function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMode, selected, onSelect, index }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   onCopy: (p: Prompt) => void;
@@ -112,7 +112,8 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
   onQueue: (p: Prompt) => void;
   batchMode: boolean;
   selected: boolean;
-  onSelect: (id: string, selected: boolean) => void;
+  onSelect: (id: string, selected: boolean, index: number, shiftHeld: boolean) => void;
+  index: number;
 }) {
   const navigate = useNavigate();
 
@@ -120,7 +121,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
     <article
       className="group flex min-h-[280px] flex-col gap-5 rounded-card p-5 cursor-pointer transition-precise hover:-translate-y-0.5 hover:border-cyan/45"
       style={{ border: selected ? "1px solid rgba(56,183,200,0.70)" : "var(--border-default)", background: selected ? "rgba(56,183,200,0.08)" : "var(--surface-card)" }}
-      onClick={() => navigate(`/library/${prompt.id}`)}
+      onClick={() => { if (!batchMode) navigate(`/library/${prompt.id}`); }}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3 min-w-0">
@@ -128,7 +129,7 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
           <input
             type="checkbox"
             checked={selected}
-            onChange={(e) => { e.stopPropagation(); onSelect(prompt.id, e.target.checked); }}
+            onChange={(e) => { e.stopPropagation(); onSelect(prompt.id, e.target.checked, index, e.nativeEvent instanceof MouseEvent && (e.nativeEvent as MouseEvent).shiftKey); }}
             onClick={(e) => e.stopPropagation()}
             className="mt-1 h-4 w-4 accent-cyan"
           />
@@ -269,6 +270,8 @@ export function PromptLibrary() {
   const [queued, setQueued] = useState<string | null>(null);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [batchWorking, setBatchWorking] = useState(false);
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
@@ -309,21 +312,101 @@ export function PromptLibrary() {
     setTimeout(() => setQueued(null), 1500);
   }, []);
 
-  const handleBatchQueue = useCallback(async () => {
-    for (const id of selectedIds) await addToQueue(id);
-    setQueued(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""}`);
-    setSelectedIds(new Set());
+  const exitBatch = useCallback(() => {
     setBatchMode(false);
-    setTimeout(() => setQueued(null), 1500);
-  }, [selectedIds]);
+    setSelectedIds(new Set());
+    setLastSelectedIndex(null);
+  }, []);
 
-  const handleSelect = useCallback((id: string, isSelected: boolean) => {
+  const handleBatchQueue = useCallback(async () => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    setBatchWorking(true);
+    try {
+      for (const id of selectedIds) await addToQueue(id);
+      setQueued(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""}`);
+      exitBatch();
+      setTimeout(() => setQueued(null), 1500);
+    } finally { setBatchWorking(false); }
+  }, [selectedIds, batchWorking, exitBatch]);
+
+  const handleSelect = useCallback((id: string, isSelected: boolean, index: number, shiftHeld: boolean) => {
     setSelectedIds((current) => {
       const next = new Set(current);
-      if (isSelected) next.add(id); else next.delete(id);
+      if (shiftHeld && lastSelectedIndex !== null) {
+        const currentPrompts = filteredAndSorted(resultMap);
+        const [lo, hi] = [Math.min(lastSelectedIndex, index), Math.max(lastSelectedIndex, index)];
+        for (let i = lo; i <= hi; i++) {
+          if (currentPrompts[i]) {
+            if (isSelected) next.add(currentPrompts[i].id); else next.delete(currentPrompts[i].id);
+          }
+        }
+      } else {
+        if (isSelected) next.add(id); else next.delete(id);
+      }
       return next;
     });
-  }, []);
+    setLastSelectedIndex(index);
+  }, [lastSelectedIndex, filteredAndSorted, resultMap]);
+
+  const handleBatchRate = useCallback(async (rating: number) => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    setBatchWorking(true);
+    try {
+      await batchUpdatePrompts([...selectedIds], { rating });
+      await fetchPrompts();
+      exitBatch();
+    } finally { setBatchWorking(false); }
+  }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
+
+  const handleBatchMarkWinner = useCallback(async () => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    setBatchWorking(true);
+    try {
+      await batchUpdatePrompts([...selectedIds], { is_winner: true });
+      await fetchPrompts();
+      exitBatch();
+    } finally { setBatchWorking(false); }
+  }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
+
+  const handleBatchMarkFailed = useCallback(async () => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    setBatchWorking(true);
+    try {
+      await batchUpdatePrompts([...selectedIds], { is_failed: true });
+      await fetchPrompts();
+      exitBatch();
+    } finally { setBatchWorking(false); }
+  }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
+
+  const handleBatchExport = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    const currentPrompts = filteredAndSorted(resultMap);
+    const selected = currentPrompts.filter((p) => selectedIds.has(p.id));
+    const text = selected.map((p) => `# ${p.title}\n${p.prompt_text}`).join("\n\n---\n\n");
+    try { await navigator.clipboard.writeText(text); } catch {}
+    setCopied("batch");
+    setTimeout(() => setCopied(null), 1500);
+  }, [selectedIds, filteredAndSorted, resultMap]);
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    if (!window.confirm(`Delete ${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} permanently?`)) return;
+    setBatchWorking(true);
+    try {
+      for (const id of selectedIds) await deletePrompt(id);
+      await fetchPrompts();
+      exitBatch();
+    } finally { setBatchWorking(false); }
+  }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
+
+  const handleSelectAll = useCallback(() => {
+    const currentPrompts = filteredAndSorted(resultMap);
+    if (selectedIds.size === currentPrompts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(currentPrompts.map((p) => p.id)));
+    }
+  }, [filteredAndSorted, resultMap, selectedIds.size]);
 
   const prompts = filteredAndSorted(resultMap);
   const metrics = getPromptLibraryMetrics(prompts, resultMap);
@@ -335,13 +418,8 @@ export function PromptLibrary() {
       subtitle="STORED PROMPT ASSETS"
       action={
         <div className="flex items-center gap-2">
-          {batchMode && (
-            <Button variant="ghost" size="md" onClick={handleBatchQueue} disabled={selectedIds.size === 0}>
-              <ListPlus size={12} /> Add {selectedIds.size} to Queue
-            </Button>
-          )}
-          <Button variant="ghost" size="md" onClick={() => { setBatchMode((v) => !v); setSelectedIds(new Set()); }}>
-            {batchMode ? "Cancel Batch" : "Batch Queue"}
+          <Button variant="ghost" size="md" onClick={() => { batchMode ? exitBatch() : setBatchMode(true); }}>
+            <CheckSquare size={11} /> {batchMode ? "Exit Select" : "Select"}
           </Button>
           <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
             <Plus size={12} />
@@ -401,6 +479,69 @@ export function PromptLibrary() {
           />
         </div>
       </div>
+
+      {/* Batch toolbar */}
+      {batchMode && (
+        <div className="mb-5 flex items-center gap-2 flex-wrap px-4 py-3 rounded-sm"
+          style={{ border: "1px solid rgba(56,183,200,0.28)", background: "rgba(56,183,200,0.06)" }}>
+          <button type="button" onClick={handleSelectAll}
+            className="font-mono text-[9px] tracking-widest uppercase text-cyan hover:text-white transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "1px solid rgba(56,183,200,0.32)" }}>
+            {selectedIds.size === prompts.length ? "Deselect All" : "Select All"}
+          </button>
+          <span className="font-mono text-[10px] text-readable">
+            {selectedIds.size} selected
+          </span>
+          <span className="w-px h-4 bg-white/10 mx-1" />
+          {/* Rate */}
+          <span className="font-mono text-[9px] text-muted uppercase tracking-widest">Rate:</span>
+          {[1, 2, 3, 4, 5].map((r) => (
+            <button key={r} type="button"
+              onClick={() => handleBatchRate(r)}
+              disabled={selectedIds.size === 0 || batchWorking}
+              className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-amber disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+              style={{ border: "var(--border-dim)" }}>
+              {"★".repeat(r)}
+            </button>
+          ))}
+          <span className="w-px h-4 bg-white/10 mx-1" />
+          <button type="button" onClick={handleBatchMarkWinner}
+            disabled={selectedIds.size === 0 || batchWorking}
+            className="font-mono text-[9px] tracking-widest uppercase text-amber hover:text-white disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "1px solid rgba(255,193,7,0.32)" }}>
+            Mark Winner
+          </button>
+          <button type="button" onClick={handleBatchMarkFailed}
+            disabled={selectedIds.size === 0 || batchWorking}
+            className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-red disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "var(--border-dim)" }}>
+            Mark Failed
+          </button>
+          <button type="button" onClick={() => handleBatchQueue()}
+            disabled={selectedIds.size === 0 || batchWorking}
+            className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-cyan disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "var(--border-dim)" }}>
+            <ListPlus size={9} className="inline mr-1" /> Queue
+          </button>
+          <button type="button" onClick={handleBatchExport}
+            disabled={selectedIds.size === 0}
+            className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-white disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "var(--border-dim)" }}>
+            <Copy size={9} className="inline mr-1" /> Copy Text
+          </button>
+          <button type="button" onClick={handleBatchDelete}
+            disabled={selectedIds.size === 0 || batchWorking}
+            className="font-mono text-[9px] tracking-widest uppercase text-red/70 hover:text-red disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "1px solid rgba(215,25,33,0.28)" }}>
+            <Trash2 size={9} className="inline mr-1" /> Delete
+          </button>
+          <div className="flex-1" />
+          <button type="button" onClick={exitBatch}
+            className="text-muted hover:text-white transition-precise">
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Copy feedback */}
       {copied && (
@@ -475,7 +616,7 @@ export function PromptLibrary() {
             </span>
           </div>
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
-            {prompts.map((p) => (
+            {prompts.map((p, i) => (
               <PromptCard
                 key={p.id}
                 prompt={p}
@@ -486,6 +627,7 @@ export function PromptLibrary() {
                 batchMode={batchMode}
                 selected={selectedIds.has(p.id)}
                 onSelect={handleSelect}
+                index={i}
               />
             ))}
           </div>

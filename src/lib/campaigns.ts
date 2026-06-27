@@ -143,6 +143,20 @@ export async function getProjectsForCampaign(campaignId: string): Promise<Projec
   }));
 }
 
+export async function searchCampaigns(query: string): Promise<Campaign[]> {
+  if (!isTauri) return [];
+  const q = query.toLowerCase().trim();
+  if (!q) return getCampaigns();
+  const db = await getFramecraftDb();
+  const rows = (await db.select(
+    `SELECT * FROM campaigns
+     WHERE lower(title) LIKE $1 OR lower(client) LIKE $1
+     ORDER BY created_at DESC LIMIT 10`,
+    [`%${q}%`]
+  )) as Record<string, unknown>[];
+  return rows.map(rowToCampaign);
+}
+
 export async function setProjectCampaign(
   projectId: string,
   campaignId: string | null

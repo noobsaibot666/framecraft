@@ -15,6 +15,7 @@ import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
 import { getPromptVersions, type VersionNode } from "@/lib/lineage";
 import { formatDate, cn } from "@/lib/utils";
+import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/promptFormatter";
 import type { Prompt, Result } from "@/types";
 
 function MetaRow({ label, value }: { label: string; value?: string | number }) {
@@ -58,6 +59,7 @@ export function PromptDetail() {
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [copiedFormatted, setCopiedFormatted] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [showExtractRecipe, setShowExtractRecipe] = useState(false);
@@ -80,6 +82,14 @@ export function PromptDetail() {
     await navigator.clipboard.writeText(prompt.prompt_text);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleCopyFormatted = async () => {
+    if (!prompt) return;
+    const { text } = formatPromptForProvider(prompt.prompt_text, prompt.provider);
+    await navigator.clipboard.writeText(text);
+    setCopiedFormatted(true);
+    setTimeout(() => setCopiedFormatted(false), 1500);
   };
 
   const handleDelete = async () => {
@@ -188,10 +198,18 @@ export function PromptDetail() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="system-label">PROMPT TEXT</span>
-              <Button variant="ghost" size="sm" onClick={handleCopy}>
-                <Copy size={10} />
-                {copied ? "Copied!" : "Copy"}
-              </Button>
+              <div className="flex items-center gap-1.5">
+                {getSupportedFormatterProviders().includes(prompt.provider) && (
+                  <Button variant="ghost" size="sm" onClick={handleCopyFormatted}>
+                    <Copy size={10} />
+                    {copiedFormatted ? "Copied!" : `Copy for ${prompt.provider}`}
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={handleCopy}>
+                  <Copy size={10} />
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
             </div>
             <div
               className="p-4 rounded-card"

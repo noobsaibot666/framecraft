@@ -286,6 +286,11 @@ export async function deletePrompt(id: string): Promise<void> {
   saveMemStore(store);
 }
 
+export async function batchUpdatePrompts(ids: string[], patch: Partial<Pick<CreatePromptInput, "rating" | "is_winner" | "is_failed" | "tags">>): Promise<void> {
+  if (ids.length === 0) return;
+  for (const id of ids) await updatePrompt(id, patch);
+}
+
 export async function searchPrompts(query: string): Promise<Prompt[]> {
   const q = query.toLowerCase().trim();
   if (!q) return getPrompts();

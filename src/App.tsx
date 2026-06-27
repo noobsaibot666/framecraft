@@ -31,6 +31,7 @@ const ProjectSequence = lazy(() => import("@/pages/ProjectSequence").then((m) =>
 const ResultGallery = lazy(() => import("@/pages/ResultGallery").then((m) => ({ default: m.ResultGallery })));
 const CampaignLibrary = lazy(() => import("@/pages/CampaignLibrary").then((m) => ({ default: m.CampaignLibrary })));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => ({ default: m.CampaignDetail })));
+const TokenDetail = lazy(() => import("@/pages/TokenDetail").then((m) => ({ default: m.TokenDetail })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="/references/:id" element={routeElement(<ReferenceDetail />)} />
               <Route path="/campaigns" element={routeElement(<CampaignLibrary />)} />
               <Route path="/campaigns/:id" element={routeElement(<CampaignDetail />)} />
+              <Route path="/tokens/:id" element={routeElement(<TokenDetail />)} />
               <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
               <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
               <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />

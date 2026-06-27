@@ -18,6 +18,9 @@ import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
+import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
+import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -493,6 +496,37 @@ interface CraftPromptLocationState {
   prefillRecipeId?: string;
 }
 
+// ─── Impact Ref Row ───────────────────────────────────────────
+
+function ImpactRefThumb({ src }: { src?: string }) {
+  const image = useImageDisplaySrc(src ?? "");
+  if (!image.src) return (
+    <div className="w-9 h-9 rounded-sm shrink-0 flex items-center justify-center"
+      style={{ background: "rgba(255,255,255,0.05)", border: "var(--border-dim)" }}>
+      <span className="font-mono text-[8px] text-dim/40">REF</span>
+    </div>
+  );
+  return <img src={image.src} onError={image.onError} className="w-9 h-9 rounded-sm object-cover shrink-0" />;
+}
+
+function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(`/references/${ref_.id}`)}
+      className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-white/3 transition-precise text-left w-full group">
+      <ImpactRefThumb src={ref_.thumbnail_data} />
+      <div className="flex-1 min-w-0">
+        <span className="font-sans text-[12px] text-soft-white truncate block">{ref_.title}</span>
+        <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{ref_.kind}</span>
+      </div>
+      <div className="flex flex-col items-end shrink-0 gap-0.5">
+        <span className="font-mono text-[10px] text-amber">{ref_.winner_count}★</span>
+        <span className="font-mono text-[8px] text-muted">{ref_.project_count} proj</span>
+      </div>
+    </button>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────
 
 export function CraftPrompt() {
@@ -547,6 +581,7 @@ export function CraftPrompt() {
   const [advice, setAdvice] = useState<PromptAdvice>(EMPTY_ADVICE);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceDismissed, setAdviceDismissed] = useState(false);
+  const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -600,6 +635,7 @@ export function CraftPrompt() {
       return;
     }
     getProjectById(projectId).then((project) => setProjectContext(project));
+    getHighImpactReferences(4, projectId).then(setImpactRefs).catch(() => {});
   }, [projectId]);
 
   useEffect(() => {
@@ -847,6 +883,17 @@ export function CraftPrompt() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const [formatChanges, setFormatChanges] = useState<string[]>([]);
+  const handleFormatPrompt = () => {
+    if (!assembled) return;
+    const { text, changes } = formatPromptForProvider(assembled, fields.provider);
+    if (text !== assembled) {
+      setOutputOverride(text);
+      setFormatChanges(changes);
+      setTimeout(() => setFormatChanges([]), 4000);
+    }
+  };
+
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
       <span className="system-label text-[12px] text-soft-white">{label}</span>
@@ -876,6 +923,9 @@ export function CraftPrompt() {
           <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled}>
             {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? "Copied!" : "Copy"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleFormatPrompt} disabled={!assembled}>
+            Format
           </Button>
           {!isEdit && (
             <Button variant="ghost" size="sm" onClick={() => handleSave(true)} disabled={saving}>
@@ -1317,6 +1367,22 @@ export function CraftPrompt() {
             </div>
           )}
 
+          {/* High-impact references */}
+          {impactRefs.length > 0 && (
+            <div className="flex flex-col gap-3 p-5 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="system-label text-soft-white">IMPACT REFS</span>
+                <span className="font-mono text-[9px] text-muted">linked to winners</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {impactRefs.map((ref) => (
+                  <ImpactRefRow key={ref.id} ref_={ref} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Recommendations */}
           <div
             className="flex flex-col gap-4 p-5 rounded-card"
@@ -1365,6 +1431,20 @@ export function CraftPrompt() {
               </span>
             </div>
 
+            {/* Provider formatting hints */}
+            {(() => {
+              const hints = getProviderHints(fields.provider);
+              if (!hints.length) return null;
+              return (
+                <div className="flex flex-col gap-1">
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
+                  {hints.map((h) => (
+                    <span key={h} className="font-mono text-[9px] text-dim/60">· {h}</span>
+                  ))}
+                </div>
+              );
+            })()}
+
             {/* Editable textarea */}
             <textarea
               value={assembled}
@@ -1383,6 +1463,23 @@ export function CraftPrompt() {
               >
                 ↺ Reset to assembled
               </button>
+            )}
+
+            {formatChanges.length > 0 && (
+              <div
+                className="flex items-start gap-2 px-2.5 py-2 rounded-sm"
+                style={{ background: "rgba(0,255,200,0.05)", border: "1px solid rgba(0,255,200,0.15)" }}
+              >
+                <Check size={9} className="text-cyan shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/70">Formatted</span>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {formatChanges.map((c) => (
+                      <li key={c} className="font-mono text-[9px] text-soft-white/70">· {c}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             )}
 
             {/* Avoidance toggle */}

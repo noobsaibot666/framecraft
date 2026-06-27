@@ -13,6 +13,7 @@ import {
   HardDrive,
   Info,
   RotateCcw,
+  Settings2,
   Upload,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -41,6 +42,17 @@ import {
   type LibrarySettingsState,
 } from "@/lib/librarySettings";
 import type { SharedIngestStatus } from "@/lib/sharedIngest";
+import {
+  getPreferences,
+  PREF_ASPECT_RATIOS,
+  PREF_CATEGORIES,
+  resetPreferences,
+  setDefaultAspectRatio,
+  setDefaultCategory,
+  setDefaultProvider,
+  type UserPreferences,
+} from "@/lib/userPreferences";
+import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
 import type { Prompt } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -161,6 +173,8 @@ export function Settings() {
   const [clearing, setClearing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
+  const [prefsSaved, setPrefsSaved] = useState(false);
   const [importStatus, setImportStatus] = useState<{ done: number; total: number; finished: boolean } | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticResult | null>(null);
   const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
@@ -398,9 +412,96 @@ export function Settings() {
     }
   };
 
+  const savePrefs = (next: UserPreferences) => {
+    setDefaultProvider(next.defaultProvider);
+    setDefaultAspectRatio(next.defaultAspectRatio);
+    setDefaultCategory(next.defaultCategory);
+    setPrefs(next);
+    setPrefsSaved(true);
+    setTimeout(() => setPrefsSaved(false), 2000);
+  };
+
+  const handleResetPrefs = () => {
+    resetPreferences();
+    setPrefs(getPreferences());
+  };
+
   return (
     <PageContainer title="Settings" subtitle="APP CONFIGURATION">
       <div className="flex flex-col gap-14 max-w-5xl">
+
+        {/* Preferences */}
+        <Section label="PREFERENCES" className="order-05">
+          <div className="flex flex-col gap-6 p-7 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <div className="flex items-center gap-3">
+              <Settings2 size={15} className="text-readable" />
+              <span className="font-sans text-[14px] font-semibold text-white tracking-wide">CRAFT DEFAULTS</span>
+            </div>
+            <p className="font-mono text-[12px] text-readable leading-relaxed -mt-2">
+              Applied when starting a new prompt with no project context.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Default provider */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] tracking-widest uppercase text-readable">Default Provider</span>
+                <select
+                  value={prefs.defaultProvider}
+                  onChange={(e) => savePrefs({ ...prefs, defaultProvider: e.target.value })}
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
+                    <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")}>{p}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Default aspect ratio */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] tracking-widest uppercase text-readable">Default Aspect Ratio</span>
+                <select
+                  value={prefs.defaultAspectRatio}
+                  onChange={(e) => savePrefs({ ...prefs, defaultAspectRatio: e.target.value })}
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  {PREF_ASPECT_RATIOS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Default category */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] tracking-widest uppercase text-readable">Default Category</span>
+                <select
+                  value={prefs.defaultCategory}
+                  onChange={(e) => savePrefs({ ...prefs, defaultCategory: e.target.value })}
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  {PREF_CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {prefsSaved && (
+                <span className="flex items-center gap-1.5 font-mono text-[10px] text-white/40">
+                  <Check size={10} /> Saved
+                </span>
+              )}
+              <Button variant="ghost" size="sm" onClick={handleResetPrefs} className="ml-auto">
+                <RotateCcw size={10} />
+                Reset to Defaults
+              </Button>
+            </div>
+          </div>
+        </Section>
 
         {/* App Info */}
         <Section label="APPLICATION" className="order-50">
@@ -413,7 +514,7 @@ export function Settings() {
               <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="V1 · All Phases Complete" />
+            <InfoRow label="BUILD" value="Sprint 2 · Phase 55–56 Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>

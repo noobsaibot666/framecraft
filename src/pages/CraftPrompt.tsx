@@ -14,6 +14,7 @@ import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/li
 import { addPromptToProject, getProjectById } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
 import { buildRecipeDraft } from "@/lib/craftRecipe";
+import { getPreferences } from "@/lib/userPreferences";
 import { cn } from "@/lib/utils";
 import type { Provider, Category, Token, Prompt, Project } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
@@ -475,8 +476,18 @@ export function CraftPrompt() {
 
   const isEdit = Boolean(id);
 
-  const [fields, setFields] = useState<Fields>(EMPTY);
-  const [mjParams, setMjParams] = useState<MJParams>(EMPTY_MJ);
+  const [fields, setFields] = useState<Fields>(() => {
+    const prefs = getPreferences();
+    return {
+      ...EMPTY,
+      provider: (prefs.defaultProvider as Provider) || EMPTY.provider,
+      category: prefs.defaultCategory || EMPTY.category,
+    };
+  });
+  const [mjParams, setMjParams] = useState<MJParams>(() => {
+    const prefs = getPreferences();
+    return { ...EMPTY_MJ, aspect_ratio: prefs.defaultAspectRatio || EMPTY_MJ.aspect_ratio };
+  });
   const [dalleParams, setDalleParams] = useState<DalleParams>(EMPTY_DALLE);
   const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});

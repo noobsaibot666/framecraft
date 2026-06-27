@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Info, MonitorCog, MoreHorizontal, Settings, X } from "lucide-react";
+import { Check, Info, MonitorCog, MoreHorizontal, Settings, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import {
   APP_MENU_ITEMS,
@@ -8,6 +8,15 @@ import {
   SUPPORTED_CREATIVE_PROVIDERS,
   SUPPORTED_SYSTEM_PROVIDERS,
 } from "@/lib/appInfo";
+import {
+  getPreferences,
+  PREF_ASPECT_RATIOS,
+  PREF_CATEGORIES,
+  setDefaultAspectRatio,
+  setDefaultCategory,
+  setDefaultProvider,
+  type UserPreferences,
+} from "@/lib/userPreferences";
 import { cn } from "@/lib/utils";
 
 function NativeModal({
@@ -42,7 +51,7 @@ function NativeModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 w-full max-w-[560px] rounded-card border border-white/14 bg-[#121212] shadow-2xl"
+        className="relative z-10 w-full max-w-140 rounded-card border border-white/14 bg-[#121212] shadow-2xl"
       >
         <header className="flex items-start justify-between gap-5 border-b border-white/8 px-6 py-5">
           <div className="flex flex-col gap-1.5">
@@ -65,28 +74,87 @@ function NativeModal({
 }
 
 function PreferencesModal({ onClose }: { onClose: () => void }) {
+  const [prefs, setPrefs] = useState<UserPreferences>(() => getPreferences());
+  const [saved, setSaved] = useState(false);
+
+  const save = (next: UserPreferences) => {
+    setDefaultProvider(next.defaultProvider);
+    setDefaultAspectRatio(next.defaultAspectRatio);
+    setDefaultCategory(next.defaultCategory);
+    setPrefs(next);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  };
+
   return (
-    <NativeModal title="Preferences" eyebrow="Native app" onClose={onClose}>
-      <div className="grid gap-4">
-        <div className="rounded-card border border-white/10 bg-white/4 p-4">
-          <div className="flex items-start gap-3">
-            <MonitorCog size={18} className="mt-0.5 shrink-0 text-cyan" />
-            <div className="flex flex-col gap-2">
-              <h3 className="font-sans text-[15px] font-semibold text-white">Workspace defaults</h3>
-              <p className="font-mono text-[12px] leading-relaxed text-readable">
-                Configure library storage, API keys, diagnostics, and native file behavior from the full Settings page.
-              </p>
-            </div>
-          </div>
+    <NativeModal title="Preferences" eyebrow="Craft defaults" onClose={onClose}>
+      <div className="flex flex-col gap-5">
+        <div className="flex items-start gap-3">
+          <MonitorCog size={16} className="mt-0.5 shrink-0 text-cyan" />
+          <p className="font-mono text-[12px] leading-relaxed text-readable">
+            Applied when starting a new prompt with no project context.
+          </p>
         </div>
-        <Link
-          to="/settings"
-          onClick={onClose}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-[6px] border border-red/60 bg-red/14 px-4 font-mono text-[11px] uppercase tracking-[0.10em] text-white transition-precise hover:border-red/80 hover:bg-red/22"
-        >
-          <Settings size={14} />
-          Open Settings
-        </Link>
+
+        {/* Default provider */}
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Provider</span>
+          <select
+            value={prefs.defaultProvider}
+            onChange={(e) => save({ ...prefs, defaultProvider: e.target.value })}
+            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+          >
+            {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
+              <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")}>{p}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Default aspect ratio */}
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Aspect Ratio</span>
+          <select
+            value={prefs.defaultAspectRatio}
+            onChange={(e) => save({ ...prefs, defaultAspectRatio: e.target.value })}
+            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+          >
+            {PREF_ASPECT_RATIOS.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Default category */}
+        <div className="flex flex-col gap-1.5">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Category</span>
+          <select
+            value={prefs.defaultCategory}
+            onChange={(e) => save({ ...prefs, defaultCategory: e.target.value })}
+            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+          >
+            {PREF_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 pt-1">
+          {saved ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] text-white/40">
+              <Check size={10} /> Saved
+            </span>
+          ) : <span />}
+          <Link
+            to="/settings"
+            onClick={onClose}
+            className="font-mono text-[11px] uppercase tracking-widest text-readable hover:text-cyan transition-precise"
+          >
+            Full Settings →
+          </Link>
+        </div>
       </div>
     </NativeModal>
   );
@@ -184,7 +252,7 @@ export function AppMenu() {
               key={item.id}
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[11px] uppercase tracking-[0.10em] text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
+              className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
               onClick={() => openModal(item.id)}
             >
               {item.id === "preferences" ? <Settings size={14} /> : <Info size={14} />}

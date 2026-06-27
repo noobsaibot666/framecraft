@@ -231,6 +231,22 @@ export interface ProjectFilters {
   status?: ProjectStatus;
 }
 
+export interface CreativeDirection {
+  id: string;
+  project_id: string;
+  title: string;
+  campaign_idea: string;
+  rationale: string;
+  visual_aesthetic: string;
+  brand_connection: string;
+  product_message: string;
+  tone: string;
+  prompt_direction: string;
+  is_selected: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ReferenceKind =
   | "image"
   | "frame"

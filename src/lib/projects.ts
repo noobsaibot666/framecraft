@@ -403,6 +403,7 @@ async function executeProjectResetTransaction(db: {
     DELETE FROM project_deliverables WHERE project_id = ${quotedProjectId};
     DELETE FROM assistant_threads WHERE project_id = ${quotedProjectId};
     DELETE FROM comparison_sessions WHERE project_id = ${quotedProjectId};
+    DELETE FROM creative_directions WHERE project_id = ${quotedProjectId};
     DELETE FROM export_presets WHERE project_id = ${quotedProjectId};
     UPDATE projects
        SET brief_text = NULL,
@@ -428,6 +429,7 @@ async function executeProjectResetTransaction(db: {
     await db.execute("DELETE FROM project_deliverables WHERE project_id = $1", [projectId]);
     await db.execute("DELETE FROM assistant_threads WHERE project_id = $1", [projectId]);
     await db.execute("DELETE FROM comparison_sessions WHERE project_id = $1", [projectId]);
+    await db.execute("DELETE FROM creative_directions WHERE project_id = $1", [projectId]);
     await db.execute("DELETE FROM export_presets WHERE project_id = $1", [projectId]);
     await db.execute(
       `UPDATE projects

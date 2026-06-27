@@ -302,13 +302,14 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 26] = [
+const REQUIRED_RELEASE_TABLES: [&str; 27] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
     "avoidance_patterns",
     "comparison_items",
     "comparison_sessions",
+    "creative_directions",
     "deliverable_references",
     "export_presets",
     "generation_queue",
@@ -977,6 +978,11 @@ fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationRes
         return Ok(validate_library_package(&paths.base_dir));
     }
 
+    if has_previous_release_schema(&paths.db_path)? {
+        upgrade_previous_release_schema(&paths.db_path)?;
+        return Ok(validate_library_package(&paths.base_dir));
+    }
+
     let user_tables = database_user_tables(&paths.db_path)?;
     if !user_tables.is_empty() {
         return Err(format!(
@@ -1020,17 +1026,78 @@ fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
 
 fn has_required_database_schema(db_path: &str) -> Result<bool, String> {
     let conn = open_portable_database(db_path)?;
-    Ok(REQUIRED_RELEASE_TABLES.iter().all(|table| {
+    let has_tables = REQUIRED_RELEASE_TABLES.iter().all(|table| {
         conn.query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
             [table],
             |_| Ok(()),
         )
         .is_ok()
-    }))
+    });
+    Ok(has_tables
+        && connection_column_exists(&conn, "comparison_sessions", "comparison_type")?
+        && connection_column_exists(&conn, "comparison_sessions", "outcome_summary")?
+        && connection_column_exists(&conn, "comparison_items", "source_role")?)
 }
 
-fn migration_sql() -> [&'static str; 14] {
+fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
+    let conn = open_portable_database(db_path)?;
+    Ok(REQUIRED_RELEASE_TABLES
+        .iter()
+        .filter(|table| **table != "creative_directions")
+        .all(|table| {
+            conn.query_row(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+                [table],
+                |_| Ok(()),
+            )
+            .is_ok()
+        }))
+}
+
+fn connection_column_exists(
+    conn: &rusqlite::Connection,
+    table: &str,
+    column: &str,
+) -> Result<bool, String> {
+    let mut statement = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| error.to_string())?;
+    for row in rows {
+        if row.map_err(|error| error.to_string())? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
+    let conn = open_portable_database(db_path)?;
+    if !connection_column_exists(&conn, "comparison_sessions", "comparison_type")? {
+        conn.execute_batch(
+            "ALTER TABLE comparison_sessions ADD COLUMN comparison_type TEXT NOT NULL DEFAULT 'result_result';",
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    if !connection_column_exists(&conn, "comparison_sessions", "outcome_summary")? {
+        conn.execute_batch("ALTER TABLE comparison_sessions ADD COLUMN outcome_summary TEXT;")
+            .map_err(|error| error.to_string())?;
+    }
+    if !connection_column_exists(&conn, "comparison_items", "source_role")? {
+        conn.execute_batch(
+            "ALTER TABLE comparison_items ADD COLUMN source_role TEXT NOT NULL DEFAULT 'result';",
+        )
+        .map_err(|error| error.to_string())?;
+    }
+    conn.execute_batch(include_str!("../migrations/016_creative_directions.sql"))
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn migration_sql() -> [&'static str; 16] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1046,6 +1113,8 @@ fn migration_sql() -> [&'static str; 14] {
         include_str!("../migrations/012_deliverable_align.sql"),
         include_str!("../migrations/013_generation_queue.sql"),
         include_str!("../migrations/014_project_setup_metadata.sql"),
+        include_str!("../migrations/015_comparison_workflow.sql"),
+        include_str!("../migrations/016_creative_directions.sql"),
     ]
 }
 
@@ -1181,6 +1250,28 @@ mod tests {
     }
 
     #[test]
+    fn created_package_includes_recent_workflow_schema() {
+        let root = test_root("create-recent-workflow-schema");
+        let package = root.join("RecentWorkflow.framecraftlib");
+
+        let result = create_library_package(package.to_str().unwrap(), true).unwrap();
+
+        assert!(sqlite_column_exists(
+            &result.db_path,
+            "comparison_sessions",
+            "comparison_type"
+        ));
+        assert!(sqlite_column_exists(
+            &result.db_path,
+            "comparison_items",
+            "source_role"
+        ));
+        assert!(sqlite_table_exists(&result.db_path, "creative_directions"));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn migrates_without_precreating_destination_db() {
         let root = test_root("migrate");
         let source = root.join("source");
@@ -1275,6 +1366,40 @@ mod tests {
         assert!(sqlite_table_exists(
             package.join("framecraft.db").to_str().unwrap(),
             "generation_queue"
+        ));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn repair_upgrades_previous_release_schema() {
+        let root = test_root("repair-previous-release-schema");
+        let package = root.join("PreviousRelease.framecraftlib");
+        fs::create_dir_all(package.join("results")).unwrap();
+        fs::create_dir_all(package.join("references")).unwrap();
+        fs::write(
+            package.join("library.json"),
+            r#"{"format_version":1,"db_filename":"framecraft.db","results_dir":"results","references_dir":"references"}"#,
+        )
+        .unwrap();
+        let db_path = package.join("framecraft.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        for sql in migration_sql().iter().take(14) {
+            conn.execute_batch(sql).unwrap();
+        }
+        drop(conn);
+
+        let validation = repair_library_database_schema(package.to_str().unwrap()).unwrap();
+
+        assert!(validation.ok, "{:?}", validation.errors);
+        assert!(sqlite_column_exists(
+            db_path.to_str().unwrap(),
+            "comparison_sessions",
+            "comparison_type"
+        ));
+        assert!(sqlite_table_exists(
+            db_path.to_str().unwrap(),
+            "creative_directions"
         ));
 
         let _ = fs::remove_dir_all(root);

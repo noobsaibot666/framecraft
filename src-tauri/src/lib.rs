@@ -99,6 +99,12 @@ pub fn run() {
             sql: include_str!("../migrations/015_comparison_workflow.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 16,
+            description: "creative_directions",
+            sql: include_str!("../migrations/016_creative_directions.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

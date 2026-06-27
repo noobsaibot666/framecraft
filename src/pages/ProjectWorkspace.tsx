@@ -28,6 +28,7 @@ import { fileToDataUrl } from "@/lib/imageUtils";
 import { importProjectResultImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
+import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
@@ -841,6 +842,36 @@ export function ProjectWorkspace() {
             <FieldLabel>PRODUCTION GOAL</FieldLabel>
             <FieldTextarea value={productionGoal} onChange={setProductionGoal} placeholder="What does success look like for this production?" rows={3} />
           </div>
+
+          <DirectionStudio
+            project={{
+              id: id!,
+              title,
+              client: client || undefined,
+              campaign: campaign || undefined,
+              status,
+              project_type: projectType || undefined,
+              intended_output: intendedOutput || undefined,
+              image_needs: imageNeeds || undefined,
+              video_needs: videoNeeds || undefined,
+              aspect_ratios: aspectRatios,
+              provider_targets: providerTargets,
+              visual_direction: visualDirection || undefined,
+              constraints: constraints || undefined,
+              creative_goals: creativeGoals || undefined,
+              brief_text: briefText || undefined,
+              production_goal: productionGoal || undefined,
+              category: (category || undefined) as Project["category"] | undefined,
+              tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+              notes: notes || undefined,
+              created_at: "",
+              updated_at: "",
+            }}
+            onApplied={(fields) => {
+              setVisualDirection(fields.visual_direction ?? "");
+              setCreativeGoals(fields.creative_goals ?? "");
+            }}
+          />
 
           <Panel
             title="CRAFT"

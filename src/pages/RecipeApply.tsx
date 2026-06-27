@@ -5,6 +5,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { extractSlots, reconstructPrompt, slotKey, type ExtractedRecipeSlot } from "@/lib/recipeExtract";
+import { incrementRecipeUseCount } from "@/lib/db";
 import type { Prompt } from "@/types";
 
 export function RecipeApply() {
@@ -44,6 +45,7 @@ export function RecipeApply() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0 || !recipe) return;
 
+    incrementRecipeUseCount(recipe.id).catch(() => {});
     navigate("/craft", {
       state: {
         prefillPromptText: preview,

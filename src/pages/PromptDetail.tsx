@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
-  ListPlus,
+  Layers, ListPlus,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -121,6 +121,14 @@ export function PromptDetail() {
     setPrompt((p) => p ? { ...p, is_winner: !p.is_winner } : p);
   };
 
+  const handlePromoteToRecipe = async () => {
+    if (!prompt) return;
+    await update(prompt.id, { is_recipe: true });
+    setPrompt((p) => p ? { ...p, is_recipe: true } : p);
+    toast.success("Promoted to recipe — opening editor");
+    navigate(`/recipes/${prompt.id}/edit`);
+  };
+
   const handleAddToQueue = async () => {
     if (!prompt) return;
     try {
@@ -180,6 +188,15 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
           </Button>
+          {prompt.is_recipe ? (
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/recipes/${prompt.id}/edit`)}>
+              <Layers size={11} /> Edit Recipe
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" onClick={handlePromoteToRecipe}>
+              <Layers size={11} /> Save as Recipe
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
             <Plus size={11} /> Add Result
           </Button>
@@ -205,7 +222,7 @@ export function PromptDetail() {
             <ExtractRecipePanel
               prompt={prompt}
               onCancel={() => setShowExtractRecipe(false)}
-              onSaved={(recipeId) => navigate(`/library/${recipeId}`)}
+              onSaved={(recipeId) => navigate(`/recipes/${recipeId}/edit`)}
             />
           )}
 
@@ -447,7 +464,14 @@ export function PromptDetail() {
               )}
               {prompt.is_recipe && (
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-[10px] text-muted">RECIPE</span>
+                  <Layers size={10} className="text-cyan/60" />
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/recipes/${prompt.id}/edit`)}
+                    className="font-mono text-[10px] text-cyan/70 hover:text-cyan transition-precise"
+                  >
+                    RECIPE — Edit template
+                  </button>
                 </div>
               )}
               {!prompt.is_winner && !prompt.is_failed && !prompt.is_recipe && (

@@ -14,6 +14,7 @@ const ResultReview = lazy(() => import("@/pages/ResultReview").then((m) => ({ de
 const SREFLibrary = lazy(() => import("@/pages/SREFLibrary").then((m) => ({ default: m.SREFLibrary })));
 const RecipeLibrary = lazy(() => import("@/pages/RecipeLibrary").then((m) => ({ default: m.RecipeLibrary })));
 const RecipeApply = lazy(() => import("@/pages/RecipeApply").then((m) => ({ default: m.RecipeApply })));
+const RecipeEditor = lazy(() => import("@/pages/RecipeEditor").then((m) => ({ default: m.RecipeEditor })));
 const GenerationQueue = lazy(() => import("@/pages/GenerationQueue").then((m) => ({ default: m.GenerationQueue })));
 const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.Settings })));
 const ImageAnalyzer = lazy(() => import("@/pages/ImageAnalyzer").then((m) => ({ default: m.ImageAnalyzer })));
@@ -74,6 +75,8 @@ export default function App() {
               <Route path="/craft" element={routeElement(<CraftPrompt />)} />
               <Route path="/craft/:id" element={routeElement(<CraftPrompt />)} />
               <Route path="/recipes" element={routeElement(<RecipeLibrary />)} />
+              <Route path="/recipes/new" element={routeElement(<RecipeEditor />)} />
+              <Route path="/recipes/:id/edit" element={routeElement(<RecipeEditor />)} />
               <Route path="/recipes/:id/apply" element={routeElement(<RecipeApply />)} />
               <Route path="/queue" element={routeElement(<GenerationQueue />)} />
               <Route path="/import" element={routeElement(<ManualImport />)} />

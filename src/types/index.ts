@@ -50,6 +50,7 @@ export interface Prompt {
   ai_look_risk: number;
   reuse_potential: number;
   is_recipe: boolean;
+  recipe_use_count?: number;
   is_winner: boolean;
   is_failed: boolean;
   failure_notes?: string;

@@ -123,6 +123,12 @@ pub fn run() {
             sql: include_str!("../migrations/019_queue_pin.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 20,
+            description: "recipe_use_count",
+            sql: include_str!("../migrations/020_recipe_use_count.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

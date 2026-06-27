@@ -70,6 +70,15 @@ function RecipeCard({ recipe, onCopy, onDelete, onOpen, onApply }: {
         </p>
       )}
 
+      {/* Slot count + use count row */}
+      <div className="flex items-center gap-3">
+        {(recipe.recipe_use_count ?? 0) > 0 && (
+          <span className="font-mono text-[8px] tracking-widest uppercase text-cyan/60">
+            {recipe.recipe_use_count}× applied
+          </span>
+        )}
+      </div>
+
       {/* Tags */}
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -152,7 +161,7 @@ export function RecipeLibrary() {
   };
 
   const handleOpen = (id: string) => {
-    navigate(`/library/${id}`);
+    navigate(`/recipes/${id}/edit`);
   };
 
   const handleApply = (id: string) => {
@@ -164,7 +173,7 @@ export function RecipeLibrary() {
       title="Recipes"
       subtitle="REUSABLE PROMPT STRUCTURES"
       action={
-        <Button variant="ghost" size="sm" onClick={() => navigate("/craft")}>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>
           <Plus size={11} /> New Recipe
         </Button>
       }
@@ -222,7 +231,7 @@ export function RecipeLibrary() {
             <span className="font-mono text-[11px] text-dim/50">No recipes yet.</span>
             <span className="font-mono text-[9px] text-dim/30">Save any prompt as a Recipe to build your reusable library.</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate("/craft")}>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>
             <Plus size={10} /> Build your first recipe
           </Button>
         </div>

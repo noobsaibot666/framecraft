@@ -61,6 +61,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     ai_look_risk: (row.ai_look_risk as number) ?? 0,
     reuse_potential: (row.reuse_potential as number) ?? 0,
     is_recipe: Boolean(row.is_recipe),
+    recipe_use_count: (row.recipe_use_count as number) ?? 0,
     is_winner: Boolean(row.is_winner),
     is_failed: Boolean(row.is_failed),
     failure_notes: row.failure_notes as string | undefined,
@@ -213,6 +214,7 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
     ai_look_risk: data.ai_look_risk ?? 0,
     reuse_potential: 0,
     is_recipe: data.is_recipe ?? false,
+    recipe_use_count: 0,
     is_winner: data.is_winner ?? false,
     is_failed: data.is_failed ?? false,
     failure_notes: data.failure_notes,
@@ -229,6 +231,20 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
 
 export async function createRecipe(data: CreateRecipeInput): Promise<string> {
   return createPrompt({ ...data, is_recipe: true });
+}
+
+export async function incrementRecipeUseCount(recipeId: string): Promise<void> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute(
+      "UPDATE prompts SET recipe_use_count = recipe_use_count + 1, updated_at = $1 WHERE id = $2",
+      [now(), recipeId]
+    );
+    return;
+  }
+  const store = loadMemStore();
+  const p = store.prompts.find((x) => x.id === recipeId);
+  if (p) { p.recipe_use_count = (p.recipe_use_count ?? 0) + 1; saveMemStore(store); }
 }
 
 export async function updatePrompt(

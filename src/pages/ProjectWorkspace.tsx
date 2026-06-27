@@ -22,15 +22,15 @@ import {
   resetProjectContent,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { getPrompts, getRecentResults, recomputePromptResultSummary, searchPrompts } from "@/lib/db";
+import { getPrompts, getRecentResults, searchPrompts } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
-import { fileToDataUrl } from "@/lib/imageUtils";
-import { importProjectResultImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
+import { BatchImportZone } from "@/components/ui/BatchImportZone";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { getProjectShots } from "@/lib/shotSequence";
 import { getCampaigns } from "@/lib/campaigns";
+import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/lib/exportReport";
 import { cn } from "@/lib/utils";
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
@@ -430,13 +430,14 @@ function StatChip({ label, value, alert = false }: { label: string; value: numbe
 export function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const resultInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmDeliver, setConfirmDeliver] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const hydratedRef = useRef(false);
   const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
 
@@ -467,9 +468,7 @@ export function ProjectWorkspace() {
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
   const [shotCount, setShotCount] = useState(0);
   const [shotComplete, setShotComplete] = useState(0);
-  const [resultImporting, setResultImporting] = useState(false);
-  const [resultImportError, setResultImportError] = useState("");
-  const [resultImportSaved, setResultImportSaved] = useState(false);
+  const [batchImportOpen, setBatchImportOpen] = useState(false);
 
   // Picker
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
@@ -601,6 +600,25 @@ export function ProjectWorkspace() {
     setConfirmReset(false);
   };
 
+  const handleMarkDelivered = async () => {
+    if (!confirmDeliver) { setConfirmDeliver(true); return; }
+    if (!id || delivering) return;
+    setDelivering(true);
+    try {
+      await updateProject(id, { ...buildInput(), status: "delivered" });
+      setStatus("delivered");
+      const report = await buildReport(id);
+      if (report) {
+        const deliveredAt = new Date().toISOString().slice(0, 10);
+        const receipt = generateDeliveryReceipt(report, deliveredAt);
+        downloadText(receipt, `delivery-${slugify(title)}-${deliveredAt}.md`, "text/markdown");
+      }
+    } finally {
+      setDelivering(false);
+      setConfirmDeliver(false);
+    }
+  };
+
   const handleRemovePrompt = async (promptId: string) => {
     await removePromptFromProject(id!, promptId);
     setLinkedPrompts((prev) => prev.filter((p) => p.id !== promptId));
@@ -626,52 +644,6 @@ export function ProjectWorkspace() {
     setLinkedPrompts(prompts);
     setLinkedRefs(refs);
     setLinkedResults(results);
-  };
-
-  const handleImportProjectResult = async (files: FileList | null) => {
-    const file = files?.[0];
-    if (!id || !file || resultImporting) return;
-
-    const prompt = linkedPrompts[0];
-    if (!prompt) {
-      setResultImportError("Link a prompt before importing a result.");
-      return;
-    }
-    if (!file.type.startsWith("image/")) {
-      setResultImportError("Choose an image file.");
-      return;
-    }
-
-    setResultImporting(true);
-    setResultImportError("");
-    setResultImportSaved(false);
-    try {
-      const resultId = crypto.randomUUID().replace(/-/g, "");
-      const dataUrl = await fileToDataUrl(file);
-      const result = await importProjectResultImage({
-        resultId,
-        projectId: id,
-        promptId: prompt.id,
-        dataUrl,
-        originalName: file.name,
-        result: {
-          provider: prompt.provider,
-          notes: `Imported from project workspace: ${file.name}`,
-        },
-      });
-      if (!result.queued) {
-        await recomputePromptResultSummary(prompt.id);
-        await reloadLinks();
-      }
-      setPickerMode(null);
-      setResultImportSaved(true);
-      setTimeout(() => setResultImportSaved(false), 1800);
-    } catch (error) {
-      setResultImportError(error instanceof Error ? error.message : "Result import failed.");
-    } finally {
-      setResultImporting(false);
-      if (resultInputRef.current) resultInputRef.current.value = "";
-    }
   };
 
   const winnerCount = linkedPrompts.filter((p) => p.is_winner).length;
@@ -732,13 +704,6 @@ export function ProjectWorkspace() {
         </div>
       }
     >
-      <input
-        ref={resultInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(event) => handleImportProjectResult(event.target.files)}
-      />
       <div className="flex flex-col gap-5 p-5 rounded-card mb-7"
         style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
         <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-5">
@@ -998,24 +963,24 @@ export function ProjectWorkspace() {
                   <Plus size={10} /> Add Existing
                 </button>
                 <button type="button"
-                  onClick={() => resultInputRef.current?.click()}
-                  disabled={resultImporting || linkedPrompts.length === 0}
-                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white disabled:opacity-35 disabled:hover:text-red/70 transition-precise px-2.5 py-1.5 rounded-sm"
+                  onClick={() => setBatchImportOpen((v) => !v)}
+                  disabled={linkedPrompts.length === 0}
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white disabled:opacity-35 transition-precise px-2.5 py-1.5 rounded-sm"
                   style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                  <Upload size={10} /> {resultImporting ? "Importing" : "Import Image"}
+                  <Upload size={10} /> Import
                 </button>
               </div>
             }
           >
-            {(resultImportError || resultImportSaved) && (
-              <div
-                className={cn(
-                  "mb-3 px-3 py-2 rounded-sm font-mono text-[11px]",
-                  resultImportError ? "text-red/70" : "text-white/50"
-                )}
-                style={{ border: resultImportError ? "1px solid rgba(215,25,33,0.30)" : "var(--border-dim)", background: resultImportError ? "rgba(215,25,33,0.08)" : "rgba(255,255,255,0.04)" }}
-              >
-                {resultImportError || "Result imported and linked."}
+            {batchImportOpen && linkedPrompts[0] && (
+              <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
+                <BatchImportZone
+                  projectId={id!}
+                  promptId={linkedPrompts[0].id}
+                  promptProvider={linkedPrompts[0].provider}
+                  onComplete={() => { setBatchImportOpen(false); reloadLinks(); }}
+                  onCancel={() => setBatchImportOpen(false)}
+                />
               </div>
             )}
             {pickerMode === "results" && (
@@ -1027,22 +992,21 @@ export function ProjectWorkspace() {
                 />
               </div>
             )}
-            {linkedResults.length === 0 && pickerMode !== "results" ? (
+            {linkedResults.length === 0 && pickerMode !== "results" && !batchImportOpen ? (
               <div className="flex flex-col gap-2">
                 <span className="font-mono text-[11px] text-muted">
                   {linkedPrompts.length === 0
-                    ? "No results linked yet. Link a prompt first, then import an image result."
-                    : "No results linked yet. Import an image result or add an existing result."}
+                    ? "No results linked yet. Link a prompt first, then import images."
+                    : "No results linked yet. Use Import to add image results."}
                 </span>
                 {linkedPrompts.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => resultInputRef.current?.click()}
-                    disabled={resultImporting}
-                    className="self-start flex items-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-white hover:text-cyan disabled:opacity-50 transition-precise"
+                    onClick={() => setBatchImportOpen(true)}
+                    className="self-start flex items-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-white hover:text-cyan transition-precise"
                     style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}
                   >
-                    <Upload size={9} /> {resultImporting ? "Importing..." : "Import Image Result"}
+                    <Upload size={9} /> Import Image Results
                   </button>
                 )}
               </div>
@@ -1144,6 +1108,23 @@ export function ProjectWorkspace() {
           </div>
 
           {/* Quick actions */}
+          {status !== "delivered" && (
+            <button
+              type="button"
+              onClick={handleMarkDelivered}
+              onBlur={() => setConfirmDeliver(false)}
+              disabled={delivering}
+              className={cn(
+                "w-full font-mono text-[9px] tracking-widest uppercase px-3 py-2 rounded-sm transition-precise disabled:opacity-50",
+                confirmDeliver
+                  ? "text-white bg-cyan/10 border-cyan/40"
+                  : "text-readable hover:text-white"
+              )}
+              style={{ border: confirmDeliver ? "1px solid" : "var(--border-dim)" }}
+            >
+              {delivering ? "Delivering…" : confirmDeliver ? "Confirm — Downloads Receipt" : "Mark Delivered"}
+            </button>
+          )}
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/projects/${id}/export`)}
             className="w-full justify-center">

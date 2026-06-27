@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, ChevronDown, Archive, ArchiveRestore, Trash2, X } from "lucide-react";
+import { Plus, Archive, ArchiveRestore, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getProjects, searchProjects, createProject, updateProject, deleteProject } from "@/lib/projects";
@@ -25,11 +25,12 @@ const STATUS_DOT: Record<ProjectStatus, string> = {
   delivered: "bg-white",
 };
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: "all",      label: "All statuses" },
-  { value: "active",   label: "Active" },
-  { value: "draft",    label: "Draft" },
-  { value: "review",   label: "Review" },
+const STATUS_TABS: { value: string; label: string }[] = [
+  { value: "all",       label: "All" },
+  { value: "active",    label: "Active" },
+  { value: "draft",     label: "Draft" },
+  { value: "review",    label: "Review" },
+  { value: "delivered", label: "Delivered" },
 ];
 
 const PROJECT_TYPE_OPTIONS = [
@@ -45,27 +46,6 @@ const ASPECT_RATIO_OPTIONS = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
 const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
 
 // ─── Sub-components ───────────────────────────────────────────
-
-function FilterSelect({ label, value, onChange, options }: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="font-mono text-[10px] text-muted uppercase tracking-widest">{label}</span>
-      <div className="relative">
-        <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="appearance-none pr-7 h-9 pl-3 font-mono text-[10.5px] text-readable bg-transparent focus:outline-none cursor-pointer rounded-sm"
-          style={{ border: "var(--border-default)" }}>
-          {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
-        </select>
-        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
-      </div>
-    </div>
-  );
-}
 
 function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   project: Project;
@@ -463,21 +443,40 @@ export function ProjectLibrary() {
       }
     >
       {/* Toolbar */}
-      <div className="flex items-center gap-4 mb-7 flex-wrap">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title, client, campaign…"
-          className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
-          style={{ border: "var(--border-default)" }}
-        />
+      <div className="flex flex-col gap-3 mb-7">
+        <div className="flex items-center gap-4 flex-wrap">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by title, client, campaign…"
+            className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
+            style={{ border: "var(--border-default)" }}
+          />
+          <div className="flex-1" />
+          <span className="font-mono text-[11px] text-readable">
+            {projects.length} {view === "archived" ? "archived" : "active"} projects
+          </span>
+        </div>
         {view === "active" && (
-          <FilterSelect label="STATUS" value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} />
+          <div className="flex items-center gap-1.5">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setStatusFilter(tab.value)}
+                className={cn(
+                  "h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise",
+                  statusFilter === tab.value
+                    ? "text-black bg-cyan"
+                    : "text-readable hover:text-white"
+                )}
+                style={statusFilter === tab.value ? undefined : { border: "var(--border-dim)" }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         )}
-        <div className="flex-1" />
-        <span className="font-mono text-[11px] text-readable">
-          {projects.length} {view === "archived" ? "archived" : "active"} projects
-        </span>
       </div>
 
       {/* Create form */}

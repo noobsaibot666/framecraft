@@ -540,13 +540,14 @@ export function Settings() {
                 <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Top Performing Tokens</span>
                 <div className="flex flex-wrap gap-2">
                   {health.topTokens.map((t) => (
-                    <span key={t.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill font-mono text-[11px] text-white"
+                    <button key={t.id} type="button"
+                      onClick={() => navigate(`/tokens/${t.id}`)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill font-mono text-[11px] text-white hover:bg-white/15 transition-precise"
                       style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)" }}>
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/50 shrink-0" />
                       {t.text}
                       <span className="text-white/40">{t.quality_score.toFixed(2)}</span>
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -599,7 +600,7 @@ export function Settings() {
               <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="Sprint 3 · Phase 57–62 Complete" />
+            <InfoRow label="BUILD" value="Sprint 5 · Phase 71–77 Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>
@@ -694,7 +695,7 @@ export function Settings() {
                 </div>
                 <div className="flex flex-col gap-1 min-w-0">
                   <span className="system-label">LAST SYNC</span>
-                  <span className="font-mono text-[11px] text-readable break-words">
+                  <span className="font-mono text-[11px] text-readable wrap-break-word">
                     {sharedIngestStatus.lastAppliedAt ? new Date(sharedIngestStatus.lastAppliedAt).toLocaleString() : "No jobs applied"}
                   </span>
                 </div>
@@ -843,7 +844,7 @@ export function Settings() {
                   Checks runtime, SQLite schema, file storage, dialogs, active library, and shared-library folders.
                 </span>
               </div>
-              <Button variant="accent" size="md" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-[150px]">
+              <Button variant="accent" size="md" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-37.5">
                 {diagnosticsRunning ? "Running..." : "Run Checks"}
               </Button>
             </div>

@@ -4,6 +4,7 @@ import {
   reportToJSON,
   reportToHTML,
   slugify,
+  generateDeliveryReceipt,
   type ExportReport,
 } from "./exportReport";
 import type { Project } from "@/types";
@@ -233,5 +234,41 @@ describe("Shot sequence in exports", () => {
     const json = reportToJSON(shotsReport);
     const parsed = JSON.parse(json) as { shots: unknown[] };
     expect(parsed.shots).toHaveLength(2);
+  });
+});
+
+describe("generateDeliveryReceipt", () => {
+  const deliveryReport = makeReport({
+    prompts: [{
+      id: "p1", title: "Hero Shot", provider: "midjourney",
+      rating: 5, is_winner: true, is_failed: false,
+      prompt_text: "product on white cinematic --ar 16:9", ai_look_risk: 2,
+      version: 1, created_at: "2026-01-01T00:00:00.000Z",
+    }],
+    shots: [{
+      id: "s1", sort_order: 0, shot_type: "hero", label: "Hero wide",
+      prompt_id: "p1", prompt_title: "Hero Shot",
+      result_id: "r1", result_score: 5, result_is_winner: true,
+    }],
+  });
+
+  it("includes project title and client in receipt", () => {
+    const receipt = generateDeliveryReceipt(deliveryReport, "2026-06-27");
+    expect(receipt).toContain("Spring Campaign");
+    expect(receipt).toContain("Acme Co");
+    expect(receipt).toContain("2026-06-27");
+  });
+
+  it("includes winning prompt text", () => {
+    const receipt = generateDeliveryReceipt(deliveryReport, "2026-06-27");
+    expect(receipt).toContain("product on white cinematic --ar 16:9");
+    expect(receipt).toContain("1 winning prompt");
+  });
+
+  it("includes shot sequence table", () => {
+    const receipt = generateDeliveryReceipt(deliveryReport, "2026-06-27");
+    expect(receipt).toContain("Shot Sequence");
+    expect(receipt).toContain("Hero wide");
+    expect(receipt).toContain("★ Winner");
   });
 });

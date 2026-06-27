@@ -53,6 +53,8 @@ import {
   type UserPreferences,
 } from "@/lib/userPreferences";
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
+import { getLibraryHealth, EMPTY_LIBRARY_HEALTH, type LibraryHealth } from "@/lib/libraryHealth";
+import { useNavigate } from "react-router-dom";
 import type { Prompt } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -183,6 +185,8 @@ export function Settings() {
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [sharedIngestStatus, setSharedIngestStatus] = useState<SharedIngestStatus | null>(null);
+  const [health, setHealth] = useState<LibraryHealth>(EMPTY_LIBRARY_HEALTH);
+  const navigate = useNavigate();
 
   const canRepairLibraryPackage =
     libraryState?.selection.mode === "portable" &&
@@ -191,6 +195,7 @@ export function Settings() {
   useEffect(() => {
     fetchStats();
     refreshLibraryState();
+    getLibraryHealth().then(setHealth).catch(() => {});
   }, [fetchStats]);
 
   const refreshLibraryState = async () => {
@@ -503,6 +508,86 @@ export function Settings() {
           </div>
         </Section>
 
+        {/* Library Health */}
+        <Section label="LIBRARY HEALTH" className="order-06">
+          <div className="flex flex-col gap-5 p-7 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <div className="flex items-center gap-3">
+              <Database size={15} className="text-readable" />
+              <span className="font-sans text-[14px] font-semibold text-white tracking-wide">PRODUCTION QUALITY</span>
+            </div>
+
+            {/* Stats grid */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[
+                { label: "PROMPTS", value: health.totalPrompts },
+                { label: "RATED", value: `${health.ratedCount} (${health.ratedPercent}%)` },
+                { label: "WINNERS", value: health.winnerCount },
+                { label: "FAILED", value: health.failedCount },
+                { label: "UNREVIEWED", value: health.unreviewedResults },
+              ].map((s) => (
+                <div key={s.label} className="flex flex-col gap-1 p-3 rounded-sm"
+                  style={{ background: "rgba(255,255,255,0.04)", border: "var(--border-default)" }}>
+                  <span className="font-mono text-[9px] tracking-widest uppercase text-readable">{s.label}</span>
+                  <span className="font-mono text-[16px] text-white">{s.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Top tokens */}
+            {health.topTokens.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Top Performing Tokens</span>
+                <div className="flex flex-wrap gap-2">
+                  {health.topTokens.map((t) => (
+                    <span key={t.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill font-mono text-[11px] text-white"
+                      style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)" }}>
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/50 shrink-0" />
+                      {t.text}
+                      <span className="text-white/40">{t.quality_score.toFixed(2)}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Negative tokens */}
+            {health.negativeTokens.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Flagged Tokens</span>
+                <div className="flex flex-wrap gap-2">
+                  {health.negativeTokens.map((t) => (
+                    <span key={t.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill font-mono text-[11px] text-white"
+                      style={{ background: "rgba(215,25,33,0.1)", border: "1px solid rgba(215,25,33,0.3)" }}>
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red/60 shrink-0" />
+                      {t.text}
+                      <span className="text-white/40">{t.quality_score.toFixed(2)}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-3 pt-1">
+              {health.unreviewedResults > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => navigate("/results?filter=unreviewed")}>
+                  <Eye size={11} />
+                  Review {health.unreviewedResults} Pending
+                </Button>
+              )}
+              {health.failedCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => navigate("/library?filter=failed")}>
+                  <AlertTriangle size={11} />
+                  {health.failedCount} Failed Prompts
+                </Button>
+              )}
+            </div>
+          </div>
+        </Section>
+
         {/* App Info */}
         <Section label="APPLICATION" className="order-50">
           <div
@@ -514,7 +599,7 @@ export function Settings() {
               <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="Sprint 2 · Phase 55–56 Complete" />
+            <InfoRow label="BUILD" value="Sprint 3 · Phase 57–62 Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>

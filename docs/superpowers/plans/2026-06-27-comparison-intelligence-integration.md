@@ -54,4 +54,4 @@
 - [x] Run the production build.
 - [x] Run `git diff --check` and review the implementation.
 - [x] Update the Sprint 2 checklist.
-- [ ] Commit, merge, push, and clean the feature worktree.
+- [x] Commit, merge, push, and clean the feature worktree.

@@ -59,4 +59,4 @@
 - [x] Verify desktop and narrow-window layouts in Playwright.
 - [x] Update package initialization through migrations 15-16, validate the release schema, and safely upgrade complete migration-14 libraries.
 - [x] Update the Sprint 2 checklist.
-- [ ] Commit, merge, push, and clean the feature worktree.
+- [x] Commit, merge, push, and clean the feature worktree.

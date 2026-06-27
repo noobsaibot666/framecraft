@@ -1,22 +1,18 @@
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Outlet } from "react-router-dom";
 import { TopBar } from "./TopBar";
 import { Sidebar } from "./Sidebar";
 import { CommandSearch } from "@/components/ui/CommandSearch";
+import { ToastContainer } from "@/components/ui/ToastContainer";
+import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
+
+registerShortcutLabel("cmd+k", "Open command search");
 
 export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setSearchOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
+  const openSearch = useCallback(() => setSearchOpen((open) => !open), []);
+  useShortcut("cmd+k", openSearch);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-black">
@@ -28,6 +24,7 @@ export function AppShell() {
         </main>
       </div>
       {searchOpen && <CommandSearch onClose={() => setSearchOpen(false)} />}
+      <ToastContainer />
     </div>
   );
 }

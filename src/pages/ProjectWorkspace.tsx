@@ -31,6 +31,7 @@ import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { getProjectShots } from "@/lib/shotSequence";
 import { getCampaigns } from "@/lib/campaigns";
 import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/lib/exportReport";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
@@ -548,6 +549,9 @@ export function ProjectWorkspace() {
       await updateProject(id, buildInput());
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
+      toast.success("Project saved");
+    } catch {
+      toast.error("Failed to save project");
     } finally {
       setSaving(false);
     }
@@ -612,7 +616,12 @@ export function ProjectWorkspace() {
         const deliveredAt = new Date().toISOString().slice(0, 10);
         const receipt = generateDeliveryReceipt(report, deliveredAt);
         downloadText(receipt, `delivery-${slugify(title)}-${deliveredAt}.md`, "text/markdown");
+        toast.success("Project delivered — receipt downloaded");
+      } else {
+        toast.success("Project marked as delivered");
       }
+    } catch {
+      toast.error("Failed to mark project as delivered");
     } finally {
       setDelivering(false);
       setConfirmDeliver(false);

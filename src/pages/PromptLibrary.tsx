@@ -11,6 +11,8 @@ import { getResultSummaryMap, batchUpdatePrompts, deletePrompt } from "@/lib/db"
 import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
 import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
+import { toast } from "@/lib/toast";
+import { getPreferences } from "@/lib/userPreferences";
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
 const PROVIDER_OPTIONS: { value: Provider | ""; label: string }[] = [
@@ -263,18 +265,20 @@ export function PromptLibrary() {
     filteredAndSorted,
   } = usePromptStore();
 
+  const PAGE_SIZE = getPreferences().libraryPageSize;
+
   const [searchVal, setSearchVal] = useState("");
-  const [copied, setCopied] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Prompt | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
-  const [queued, setQueued] = useState<string | null>(null);
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [batchWorking, setBatchWorking] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy]);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -291,9 +295,10 @@ export function PromptLibrary() {
   const handleCopy = useCallback(async (prompt: Prompt) => {
     try {
       await navigator.clipboard.writeText(prompt.prompt_text);
-      setCopied(prompt.id);
-      setTimeout(() => setCopied(null), 1500);
-    } catch {}
+      toast.info("Copied to clipboard");
+    } catch {
+      toast.error("Failed to copy");
+    }
   }, []);
 
   const handleDelete = useCallback(async (prompt: Prompt) => {
@@ -307,9 +312,12 @@ export function PromptLibrary() {
   }, [confirmDelete, remove]);
 
   const handleQueue = useCallback(async (prompt: Prompt) => {
-    await addToQueue(prompt.id);
-    setQueued(prompt.title);
-    setTimeout(() => setQueued(null), 1500);
+    try {
+      await addToQueue(prompt.id);
+      toast.success("Added to queue");
+    } catch {
+      toast.error("Failed to add to queue");
+    }
   }, []);
 
   const exitBatch = useCallback(() => {
@@ -323,9 +331,10 @@ export function PromptLibrary() {
     setBatchWorking(true);
     try {
       for (const id of selectedIds) await addToQueue(id);
-      setQueued(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""}`);
+      toast.success(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} added to queue`);
       exitBatch();
-      setTimeout(() => setQueued(null), 1500);
+    } catch {
+      toast.error("Failed to add to queue");
     } finally { setBatchWorking(false); }
   }, [selectedIds, batchWorking, exitBatch]);
 
@@ -354,7 +363,10 @@ export function PromptLibrary() {
     try {
       await batchUpdatePrompts([...selectedIds], { rating });
       await fetchPrompts();
+      toast.success(`Rated ${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} — ${rating}/5`);
       exitBatch();
+    } catch {
+      toast.error("Failed to rate prompts");
     } finally { setBatchWorking(false); }
   }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
 
@@ -364,7 +376,10 @@ export function PromptLibrary() {
     try {
       await batchUpdatePrompts([...selectedIds], { is_winner: true });
       await fetchPrompts();
+      toast.success(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} marked as winner`);
       exitBatch();
+    } catch {
+      toast.error("Failed to mark winners");
     } finally { setBatchWorking(false); }
   }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
 
@@ -374,7 +389,10 @@ export function PromptLibrary() {
     try {
       await batchUpdatePrompts([...selectedIds], { is_failed: true });
       await fetchPrompts();
+      toast.success(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} marked as failed`);
       exitBatch();
+    } catch {
+      toast.error("Failed to mark prompts");
     } finally { setBatchWorking(false); }
   }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
 
@@ -383,9 +401,12 @@ export function PromptLibrary() {
     const currentPrompts = filteredAndSorted(resultMap);
     const selected = currentPrompts.filter((p) => selectedIds.has(p.id));
     const text = selected.map((p) => `# ${p.title}\n${p.prompt_text}`).join("\n\n---\n\n");
-    try { await navigator.clipboard.writeText(text); } catch {}
-    setCopied("batch");
-    setTimeout(() => setCopied(null), 1500);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.info(`${selected.length} prompt${selected.length !== 1 ? "s" : ""} copied to clipboard`);
+    } catch {
+      toast.error("Failed to copy prompts");
+    }
   }, [selectedIds, filteredAndSorted, resultMap]);
 
   const handleBatchDelete = useCallback(async () => {
@@ -395,7 +416,10 @@ export function PromptLibrary() {
     try {
       for (const id of selectedIds) await deletePrompt(id);
       await fetchPrompts();
+      toast.success(`${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} deleted`);
       exitBatch();
+    } catch {
+      toast.error("Failed to delete prompts");
     } finally { setBatchWorking(false); }
   }, [selectedIds, batchWorking, fetchPrompts, exitBatch]);
 
@@ -408,8 +432,10 @@ export function PromptLibrary() {
     }
   }, [filteredAndSorted, resultMap, selectedIds.size]);
 
-  const prompts = filteredAndSorted(resultMap);
-  const metrics = getPromptLibraryMetrics(prompts, resultMap);
+  const allPrompts = filteredAndSorted(resultMap);
+  const prompts = allPrompts.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < allPrompts.length;
+  const metrics = getPromptLibraryMetrics(allPrompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
   return (
@@ -543,23 +569,6 @@ export function PromptLibrary() {
         </div>
       )}
 
-      {/* Copy feedback */}
-      {copied && (
-        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
-          style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
-          <Copy size={12} className="text-cyan" />
-          Prompt copied to clipboard
-        </div>
-      )}
-
-      {queued && (
-        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-readable flex items-center gap-2"
-          style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
-          <ListPlus size={12} className="text-cyan" />
-          Added to queue: {queued}
-        </div>
-      )}
-
       {/* Delete confirmation */}
       {confirmDelete && (
         <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-red flex items-center justify-between"
@@ -631,6 +640,22 @@ export function PromptLibrary() {
               />
             ))}
           </div>
+
+          {hasMoreVisible && (
+            <div className="flex flex-col items-center gap-2 py-6">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                className="font-mono text-[10px] uppercase tracking-widest text-readable hover:text-white transition-precise px-4 py-2 rounded-sm"
+                style={{ border: "var(--border-dim)" }}
+              >
+                Load more
+              </button>
+              <span className="font-mono text-[9px] text-dim/50">
+                Showing {prompts.length} of {allPrompts.length}
+              </span>
+            </div>
+          )}
         </>
       )}
     </PageContainer>

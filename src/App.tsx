@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
 import { LibraryLockGuard } from "@/components/LibraryLockGuard";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 const Dashboard = lazy(() => import("@/pages/Dashboard").then((m) => ({ default: m.Dashboard })));
 const PromptLibrary = lazy(() => import("@/pages/PromptLibrary").then((m) => ({ default: m.PromptLibrary })));
@@ -51,7 +52,11 @@ function RouteFallback() {
 }
 
 function routeElement(element: ReactNode) {
-  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<RouteFallback />}>{element}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 export default function App() {

@@ -16,6 +16,7 @@ import { addToQueue } from "@/lib/queue";
 import { getPromptVersions, type VersionNode } from "@/lib/lineage";
 import { formatDate, cn } from "@/lib/utils";
 import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/promptFormatter";
+import { toast } from "@/lib/toast";
 import type { Prompt, Result } from "@/types";
 
 function MetaRow({ label, value }: { label: string; value?: string | number }) {
@@ -63,7 +64,6 @@ export function PromptDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [showExtractRecipe, setShowExtractRecipe] = useState(false);
-  const [queued, setQueued] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
   const [versions, setVersions] = useState<VersionNode[]>([]);
 
@@ -99,8 +99,13 @@ export function PromptDetail() {
       setTimeout(() => setConfirmDelete(false), 3000);
       return;
     }
-    await remove(prompt.id);
-    navigate("/library");
+    try {
+      await remove(prompt.id);
+      navigate("/library");
+    } catch {
+      toast.error("Failed to delete prompt");
+      setConfirmDelete(false);
+    }
   };
 
   const toggleWinner = async () => {
@@ -111,9 +116,12 @@ export function PromptDetail() {
 
   const handleAddToQueue = async () => {
     if (!prompt) return;
-    await addToQueue(prompt.id);
-    setQueued(true);
-    setTimeout(() => setQueued(false), 1500);
+    try {
+      await addToQueue(prompt.id);
+      toast.success("Added to queue");
+    } catch {
+      toast.error("Failed to add to queue");
+    }
   };
 
   if (loading) {
@@ -169,7 +177,7 @@ export function PromptDetail() {
             <Plus size={11} /> Add Result
           </Button>
           <Button variant="ghost" size="sm" onClick={handleAddToQueue}>
-            <ListPlus size={11} /> {queued ? "Queued" : "Add to Queue"}
+            <ListPlus size={11} /> Add to Queue
           </Button>
           <Button
             variant={confirmDelete ? "primary" : "ghost"}

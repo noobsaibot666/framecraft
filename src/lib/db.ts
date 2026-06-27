@@ -1,6 +1,7 @@
 import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Result, SREF, Profile } from "@/types";
 import { summarizePromptFromResults } from "@/lib/resultMemory";
 import { getFramecraftDb } from "./dbConnection";
+import { selectPaged, type PageResult, type PageOptions } from "./pagination";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -114,6 +115,17 @@ export async function getPrompts(): Promise<Prompt[]> {
   }
   return loadMemStore().prompts.sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+}
+
+export async function getPromptsPaged(opts: PageOptions = {}): Promise<PageResult<Prompt>> {
+  return selectPaged(
+    "SELECT * FROM prompts ORDER BY created_at DESC",
+    [],
+    rowToPrompt,
+    "SELECT COUNT(*) as n FROM prompts",
+    [],
+    opts
   );
 }
 

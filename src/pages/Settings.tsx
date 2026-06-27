@@ -46,10 +46,13 @@ import {
   getPreferences,
   PREF_ASPECT_RATIOS,
   PREF_CATEGORIES,
+  PREF_LIBRARY_PAGE_SIZES,
   resetPreferences,
   setDefaultAspectRatio,
   setDefaultCategory,
   setDefaultProvider,
+  setAutoAnalyzeDraft,
+  setLibraryPageSize,
   type UserPreferences,
 } from "@/lib/userPreferences";
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
@@ -57,6 +60,8 @@ import { getLibraryHealth, EMPTY_LIBRARY_HEALTH, type LibraryHealth } from "@/li
 import { useNavigate } from "react-router-dom";
 import type { Prompt } from "@/types";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast";
+import { getRegisteredShortcuts, formatShortcutKeys } from "@/lib/shortcuts";
 
 function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
   return (
@@ -74,7 +79,7 @@ function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="grid grid-cols-[180px_minmax(0,1fr)] items-baseline gap-7">
       <span className="system-label text-[11.5px] text-readable">{label}</span>
-      <span className="font-mono text-[13.5px] leading-relaxed text-white break-words">{value}</span>
+      <span className="font-mono text-[13.5px] leading-relaxed text-white wrap-break-word">{value}</span>
     </div>
   );
 }
@@ -97,7 +102,7 @@ function CopyableError({ message }: { message: string }) {
       style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.045)" }}
     >
       <AlertTriangle size={13} className="mt-0.5 shrink-0 text-red/80" />
-      <span className="min-w-0 flex-1 font-mono text-[12px] leading-relaxed text-red/85 break-words">
+      <span className="min-w-0 flex-1 font-mono text-[12px] leading-relaxed text-red/85 wrap-break-word">
         {message}
       </span>
       <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-readable group-hover:text-white">
@@ -125,6 +130,7 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
     else localStorage.removeItem(storageKey);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    toast.success(`${label} saved`);
   };
 
   return (
@@ -421,6 +427,8 @@ export function Settings() {
     setDefaultProvider(next.defaultProvider);
     setDefaultAspectRatio(next.defaultAspectRatio);
     setDefaultCategory(next.defaultCategory);
+    setAutoAnalyzeDraft(next.autoAnalyzeDraft);
+    setLibraryPageSize(next.libraryPageSize);
     setPrefs(next);
     setPrefsSaved(true);
     setTimeout(() => setPrefsSaved(false), 2000);
@@ -491,6 +499,43 @@ export function Settings() {
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Library page size */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] tracking-widest uppercase text-readable">Prompts per Page</span>
+                <select
+                  value={prefs.libraryPageSize}
+                  onChange={(e) => savePrefs({ ...prefs, libraryPageSize: parseInt(e.target.value, 10) })}
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  {PREF_LIBRARY_PAGE_SIZES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                <span className="font-mono text-[9px] text-dim/50">Applies to Prompt Library pagination</span>
+              </div>
+
+              {/* Auto-analyze */}
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[11px] tracking-widest uppercase text-readable">Auto-Analyze Draft</span>
+                <label className="flex items-center gap-3 cursor-pointer h-10">
+                  <div
+                    onClick={() => savePrefs({ ...prefs, autoAnalyzeDraft: !prefs.autoAnalyzeDraft })}
+                    className={`relative w-10 h-5 rounded-pill transition-precise cursor-pointer ${prefs.autoAnalyzeDraft ? "bg-cyan/30" : "bg-white/10"}`}
+                    style={{ border: prefs.autoAnalyzeDraft ? "1px solid rgba(0,255,200,0.4)" : "var(--border-dim)" }}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-4 h-4 rounded-full transition-all ${prefs.autoAnalyzeDraft ? "left-5 bg-cyan" : "left-0.5 bg-white/30"}`}
+                    />
+                  </div>
+                  <span className="font-mono text-[11px] text-readable">
+                    {prefs.autoAnalyzeDraft ? "On — runs on draft assembly" : "Off — manual only"}
+                  </span>
+                </label>
               </div>
             </div>
 
@@ -589,6 +634,28 @@ export function Settings() {
           </div>
         </Section>
 
+        {/* Keyboard Shortcuts */}
+        <Section label="KEYBOARD SHORTCUTS" className="order-45">
+          <div
+            className="flex flex-col gap-0 rounded-card overflow-hidden"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            {getRegisteredShortcuts().map(({ keys, description }) => (
+              <div
+                key={keys}
+                className="flex items-center justify-between px-5 py-3"
+                style={{ borderBottom: "var(--border-dim)" }}
+              >
+                <span className="font-mono text-[11px] text-readable">{description}</span>
+                <kbd className="font-mono text-[11px] text-cyan/80 px-2 py-0.5 rounded-sm"
+                  style={{ background: "rgba(0,255,200,0.06)", border: "1px solid rgba(0,255,200,0.18)" }}>
+                  {formatShortcutKeys(keys)}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </Section>
+
         {/* App Info */}
         <Section label="APPLICATION" className="order-50">
           <div
@@ -600,7 +667,7 @@ export function Settings() {
               <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="Sprint 5 · Phase 71–77 Complete" />
+            <InfoRow label="BUILD" value="Sprint 6 · Phase 78–84 Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>
@@ -646,6 +713,43 @@ export function Settings() {
                 </span>
               )}
             </div>
+
+            {/* Connection state banner */}
+            {libraryState?.selection.mode === "portable" ? (
+              <div
+                className="flex items-center gap-3 px-4 py-3 rounded-sm"
+                style={{ background: "rgba(0,255,200,0.05)", border: "1px solid rgba(0,255,200,0.2)" }}
+              >
+                <span className="w-2 h-2 rounded-full bg-cyan shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-cyan/80">Portable Library Connected</span>
+                  <p className="font-mono text-[10px] text-readable/70 mt-0.5 truncate">{libraryState.paths.baseDir}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                  <FolderOpen size={10} /> Reveal
+                </Button>
+              </div>
+            ) : libraryState?.nativeAvailable ? (
+              <div
+                className="flex items-start gap-3 px-4 py-4 rounded-sm"
+                style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-readable/60">No Library Connected</span>
+                  <p className="font-mono text-[10px] text-dim/50 mt-1 leading-relaxed">
+                    Create a new package or open an existing one from a NAS or shared folder.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <Button variant="primary" size="sm" onClick={handleOpenLibrary} disabled={!!libraryBusy}>
+                    <FolderOpen size={10} /> Connect Library
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleCreateLibrary} disabled={!!libraryBusy}>
+                    <FolderPlus size={10} /> Create Package
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex flex-col gap-4">
               <InfoRow label="MODE" value={libraryState?.selection.mode === "portable" ? "Portable library" : "Local app data"} />

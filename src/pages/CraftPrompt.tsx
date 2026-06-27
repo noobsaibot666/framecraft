@@ -750,6 +750,24 @@ export function CraftPrompt() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assembled, fields.category, fields.provider, allPrompts.length]);
 
+  // Auto-analyze when preference is enabled and draft is long enough
+  useEffect(() => {
+    if (!getPreferences().autoAnalyzeDraft) return;
+    if (!validatePromptForAnalysis(assembled).valid) return;
+    const timer = setTimeout(async () => {
+      setAdviceLoading(true);
+      setAdviceDismissed(false);
+      try {
+        const result = await analyzePromptDraft({ promptText: assembled });
+        setAdvice(result);
+      } finally {
+        setAdviceLoading(false);
+      }
+    }, 1800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assembled]);
+
   const fullCopyText = includeAvoidance && fields.avoidance_text
     ? `${assembled}\n\n${fields.avoidance_text}`
     : assembled;

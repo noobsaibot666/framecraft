@@ -29,6 +29,8 @@ const ProjectAssistant = lazy(() => import("@/pages/ProjectAssistant").then((m) 
 const ProjectExport = lazy(() => import("@/pages/ProjectExport").then((m) => ({ default: m.ProjectExport })));
 const ProjectSequence = lazy(() => import("@/pages/ProjectSequence").then((m) => ({ default: m.ProjectSequence })));
 const ResultGallery = lazy(() => import("@/pages/ResultGallery").then((m) => ({ default: m.ResultGallery })));
+const CampaignLibrary = lazy(() => import("@/pages/CampaignLibrary").then((m) => ({ default: m.CampaignLibrary })));
+const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => ({ default: m.CampaignDetail })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +77,8 @@ export default function App() {
               <Route path="/frames" element={routeElement(<VideoFrames />)} />
               <Route path="/references" element={routeElement(<ReferenceLibrary />)} />
               <Route path="/references/:id" element={routeElement(<ReferenceDetail />)} />
+              <Route path="/campaigns" element={routeElement(<CampaignLibrary />)} />
+              <Route path="/campaigns/:id" element={routeElement(<CampaignDetail />)} />
               <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
               <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
               <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />

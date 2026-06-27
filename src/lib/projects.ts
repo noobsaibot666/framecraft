@@ -59,6 +59,7 @@ export interface CreateProjectInput {
   title: string;
   client?: string;
   campaign?: string;
+  campaign_id?: string;
   status?: ProjectStatus;
   project_type?: string;
   intended_output?: string;
@@ -84,16 +85,17 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
     const db = await getDb();
     await db.execute(
       `INSERT INTO projects
-        (id, title, client, campaign, status, project_type, intended_output,
+        (id, title, client, campaign, campaign_id, status, project_type, intended_output,
          image_needs, video_needs, aspect_ratios, provider_targets,
          visual_direction, constraints, creative_goals, brief_text,
          production_goal, category, tags, notes, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
       [
         id,
         data.title,
         data.client ?? null,
         data.campaign ?? null,
+        data.campaign_id ?? null,
         data.status ?? "draft",
         data.project_type ?? null,
         data.intended_output ?? null,

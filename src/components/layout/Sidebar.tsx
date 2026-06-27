@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import {
   Archive,
   BookOpen,
+  Briefcase,
   FileText,
   Film,
   GitCompare,
@@ -26,6 +27,7 @@ const NAV_GROUPS = [
   {
     label: "PROJECTS",
     items: [
+      { label: "Campaigns", to: "/campaigns", icon: Briefcase },
       { label: "Projects", to: "/projects", icon: Archive },
       { label: "Queue", to: "/queue", icon: ListChecks },
     ],

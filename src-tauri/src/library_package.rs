@@ -1097,10 +1097,12 @@ fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
     conn.execute_batch(include_str!("../migrations/017_shot_sequence.sql"))
         .map_err(|error| error.to_string())?;
+    conn.execute_batch(include_str!("../migrations/018_campaigns.sql"))
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 17] {
+fn migration_sql() -> [&'static str; 18] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1119,6 +1121,7 @@ fn migration_sql() -> [&'static str; 17] {
         include_str!("../migrations/015_comparison_workflow.sql"),
         include_str!("../migrations/016_creative_directions.sql"),
         include_str!("../migrations/017_shot_sequence.sql"),
+        include_str!("../migrations/018_campaigns.sql"),
     ]
 }
 

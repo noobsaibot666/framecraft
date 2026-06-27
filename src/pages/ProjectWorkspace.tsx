@@ -30,23 +30,26 @@ import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { getProjectShots } from "@/lib/shotSequence";
+import { getCampaigns } from "@/lib/campaigns";
 import { cn } from "@/lib/utils";
-import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
+import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
-  { value: "draft",    label: "Draft" },
-  { value: "active",   label: "Active" },
-  { value: "review",   label: "Review" },
-  { value: "archived", label: "Archived" },
+  { value: "draft",     label: "Draft" },
+  { value: "active",    label: "Active" },
+  { value: "review",    label: "Review" },
+  { value: "delivered", label: "Delivered" },
+  { value: "archived",  label: "Archived" },
 ];
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
-  draft:    "bg-readable",
-  active:   "bg-cyan",
-  review:   "bg-amber",
-  archived: "bg-white/10",
+  draft:     "bg-readable",
+  active:    "bg-cyan",
+  review:    "bg-amber",
+  archived:  "bg-white/10",
+  delivered: "bg-white",
 };
 
 const CATEGORY_OPTIONS: Category[] = [
@@ -435,11 +438,13 @@ export function ProjectWorkspace() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const hydratedRef = useRef(false);
+  const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
 
   // Form state
   const [title, setTitle] = useState("");
   const [client, setClient] = useState("");
   const [campaign, setCampaign] = useState("");
+  const [campaignId, setCampaignId] = useState<string>("");
   const [status, setStatus] = useState<ProjectStatus>("draft");
   const [projectType, setProjectType] = useState("");
   const [intendedOutput, setIntendedOutput] = useState("");
@@ -470,6 +475,10 @@ export function ProjectWorkspace() {
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
 
   useEffect(() => {
+    getCampaigns().then(setAllCampaigns).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (!id) return;
     (async () => {
       setLoading(true);
@@ -485,6 +494,7 @@ export function ProjectWorkspace() {
       setTitle(proj.title);
       setClient(proj.client ?? "");
       setCampaign(proj.campaign ?? "");
+      setCampaignId(proj.campaign_id ?? "");
       setStatus(proj.status);
       setProjectType(proj.project_type ?? "");
       setIntendedOutput(proj.intended_output ?? "");
@@ -514,6 +524,7 @@ export function ProjectWorkspace() {
     title: title.trim(),
     client: client.trim() || undefined,
     campaign: campaign.trim() || undefined,
+    campaign_id: campaignId || undefined,
     status,
     project_type: projectType || undefined,
     intended_output: intendedOutput.trim() || undefined,
@@ -808,7 +819,21 @@ export function ProjectWorkspace() {
             </div>
             <div className="flex flex-col gap-1.5">
               <FieldLabel>CAMPAIGN</FieldLabel>
-              <FieldInput value={campaign} onChange={setCampaign} placeholder="Campaign…" mono />
+              {allCampaigns.length > 0 ? (
+                <select
+                  value={campaignId}
+                  onChange={(e) => setCampaignId(e.target.value)}
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  <option value="">— no campaign —</option>
+                  {allCampaigns.map((c) => (
+                    <option key={c.id} value={c.id}>{c.title}</option>
+                  ))}
+                </select>
+              ) : (
+                <FieldInput value={campaign} onChange={setCampaign} placeholder="Campaign…" mono />
+              )}
             </div>
           </div>
 

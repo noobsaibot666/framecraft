@@ -111,6 +111,12 @@ pub fn run() {
             sql: include_str!("../migrations/017_shot_sequence.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 18,
+            description: "campaigns",
+            sql: include_str!("../migrations/018_campaigns.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

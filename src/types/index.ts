@@ -196,13 +196,29 @@ export interface LibraryFilters {
 
 export type SortOption = "newest" | "oldest" | "rating_desc" | "rating_asc" | "most_used" | "ai_risk_desc" | "ai_risk_asc";
 
-export type ProjectStatus = "draft" | "active" | "review" | "archived";
+export type ProjectStatus = "draft" | "active" | "review" | "archived" | "delivered";
+
+export type CampaignStatus = "active" | "archived";
+
+export interface Campaign {
+  id: string;
+  title: string;
+  client?: string;
+  brief?: string;
+  status: CampaignStatus;
+  created_at: string;
+  updated_at: string;
+  // Counts populated on query
+  project_count?: number;
+  winner_count?: number;
+}
 
 export interface Project {
   id: string;
   title: string;
   client?: string;
   campaign?: string;
+  campaign_id?: string;
   status: ProjectStatus;
   project_type?: string;
   intended_output?: string;

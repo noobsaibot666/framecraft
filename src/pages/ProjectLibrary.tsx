@@ -10,17 +10,19 @@ import type { Project, ProjectStatus, ProjectFilters } from "@/types";
 // ─── Constants ────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<ProjectStatus, string> = {
-  draft:    "text-readable",
-  active:   "text-white",
-  review:   "text-amber",
-  archived: "text-muted",
+  draft:     "text-readable",
+  active:    "text-white",
+  review:    "text-amber",
+  archived:  "text-muted",
+  delivered: "text-white",
 };
 
 const STATUS_DOT: Record<ProjectStatus, string> = {
-  draft:    "bg-readable",
-  active:   "bg-cyan",
-  review:   "bg-amber",
-  archived: "bg-white/20",
+  draft:     "bg-readable",
+  active:    "bg-cyan",
+  review:    "bg-amber",
+  archived:  "bg-white/20",
+  delivered: "bg-white",
 };
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [

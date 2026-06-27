@@ -1,0 +1,209 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Briefcase, Archive, Trash2 } from "lucide-react";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { Button } from "@/components/ui/Button";
+import { getCampaigns, createCampaign, updateCampaign, deleteCampaign } from "@/lib/campaigns";
+import type { Campaign } from "@/types";
+
+export function CampaignLibrary() {
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newClient, setNewClient] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    setCampaigns(await getCampaigns());
+  }
+
+  async function handleCreate() {
+    if (!newTitle.trim()) return;
+    setCreating(true);
+    const c = await createCampaign({ title: newTitle.trim(), client: newClient.trim() || undefined });
+    setNewTitle("");
+    setNewClient("");
+    setShowCreate(false);
+    setCreating(false);
+    navigate(`/campaigns/${c.id}`);
+  }
+
+  async function handleArchive(c: Campaign) {
+    await updateCampaign(c.id, { status: c.status === "archived" ? "active" : "archived" });
+    load();
+  }
+
+  async function handleDelete(c: Campaign) {
+    await deleteCampaign(c.id);
+    load();
+  }
+
+  const active = campaigns.filter((c) => c.status === "active");
+  const archived = campaigns.filter((c) => c.status === "archived");
+
+  return (
+    <PageContainer title="Campaigns" subtitle="JOB ORGANIZATION">
+      <div className="flex flex-col gap-8 max-w-5xl">
+
+        {/* Header action */}
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] text-readable tracking-widest uppercase">
+            {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""}
+          </span>
+          <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+            <Plus size={11} /> New Campaign
+          </Button>
+        </div>
+
+        {/* Create form */}
+        {showCreate && (
+          <div className="flex flex-col gap-4 p-6 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <span className="font-sans text-[13px] font-semibold text-white tracking-wide">NEW CAMPAIGN</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Title</span>
+                <input
+                  autoFocus
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  placeholder="e.g. Summer 2026 Campaign"
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Client</span>
+                <input
+                  value={newClient}
+                  onChange={(e) => setNewClient(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                  placeholder="e.g. Acme Co"
+                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="primary" size="sm" onClick={handleCreate} disabled={!newTitle.trim() || creating}>
+                Create
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => { setShowCreate(false); setNewTitle(""); setNewClient(""); }}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Active campaigns */}
+        {active.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {active.map((c) => (
+              <CampaignCard key={c.id} campaign={c}
+                onClick={() => navigate(`/campaigns/${c.id}`)}
+                onArchive={() => handleArchive(c)}
+                onDelete={() => handleDelete(c)} />
+            ))}
+          </div>
+        )}
+
+        {campaigns.length === 0 && !showCreate && (
+          <div className="flex flex-col items-center gap-4 py-20 text-center">
+            <Briefcase size={28} className="text-readable" />
+            <p className="font-mono text-[12px] text-readable leading-relaxed max-w-xs">
+              Campaigns group projects under a single client job. Create one to get started.
+            </p>
+            <Button variant="ghost" size="sm" onClick={() => setShowCreate(true)}>
+              <Plus size={11} /> Create First Campaign
+            </Button>
+          </div>
+        )}
+
+        {/* Archived */}
+        {archived.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <span className="font-mono text-[10px] text-muted tracking-widest uppercase">Archived</span>
+            {archived.map((c) => (
+              <CampaignCard key={c.id} campaign={c} dimmed
+                onClick={() => navigate(`/campaigns/${c.id}`)}
+                onArchive={() => handleArchive(c)}
+                onDelete={() => handleDelete(c)} />
+            ))}
+          </div>
+        )}
+
+      </div>
+    </PageContainer>
+  );
+}
+
+function CampaignCard({
+  campaign, dimmed, onClick, onArchive, onDelete,
+}: {
+  campaign: Campaign;
+  dimmed?: boolean;
+  onClick: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  return (
+    <div
+      className={`flex items-center gap-5 p-5 rounded-card cursor-pointer group transition-precise ${dimmed ? "opacity-50 hover:opacity-75" : "hover:opacity-90"}`}
+      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+      onClick={onClick}
+    >
+      <Briefcase size={15} className="text-readable shrink-0" />
+
+      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+        <span className="font-sans text-[14px] font-semibold text-white truncate">{campaign.title}</span>
+        {campaign.client && (
+          <span className="font-mono text-[11px] text-readable">{campaign.client}</span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-5 shrink-0">
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-[16px] text-white">{campaign.project_count ?? 0}</span>
+          <span className="font-mono text-[9px] text-muted tracking-widest uppercase">projects</span>
+        </div>
+
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise"
+          onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onArchive}
+            className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-white transition-precise"
+            title={campaign.status === "archived" ? "Restore" : "Archive"}
+          >
+            <Archive size={12} />
+          </button>
+          {confirmDelete ? (
+            <>
+              <button
+                onClick={() => { onDelete(); setConfirmDelete(false); }}
+                className="flex items-center justify-center px-2 h-7 rounded-sm font-mono text-[10px] text-red hover:bg-red/10 transition-precise"
+              >Delete</button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="flex items-center justify-center px-2 h-7 rounded-sm font-mono text-[10px] text-readable hover:text-white transition-precise"
+              >Cancel</button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-red transition-precise"
+              title="Delete campaign"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

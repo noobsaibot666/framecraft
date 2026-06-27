@@ -30,6 +30,7 @@ const ProjectAssistant = lazy(() => import("@/pages/ProjectAssistant").then((m) 
 const ProjectExport = lazy(() => import("@/pages/ProjectExport").then((m) => ({ default: m.ProjectExport })));
 const ProjectSequence = lazy(() => import("@/pages/ProjectSequence").then((m) => ({ default: m.ProjectSequence })));
 const ResultGallery = lazy(() => import("@/pages/ResultGallery").then((m) => ({ default: m.ResultGallery })));
+const ResultDetail = lazy(() => import("@/pages/ResultDetail").then((m) => ({ default: m.ResultDetail })));
 const CampaignLibrary = lazy(() => import("@/pages/CampaignLibrary").then((m) => ({ default: m.CampaignLibrary })));
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => ({ default: m.CampaignDetail })));
 const TokenDetail = lazy(() => import("@/pages/TokenDetail").then((m) => ({ default: m.TokenDetail })));
@@ -78,6 +79,7 @@ export default function App() {
               <Route path="/import" element={routeElement(<ManualImport />)} />
               <Route path="/srefs" element={routeElement(<SREFLibrary />)} />
               <Route path="/results" element={routeElement(<ResultGallery />)} />
+              <Route path="/results/view/:id" element={routeElement(<ResultDetail />)} />
               <Route path="/results/:promptId" element={routeElement(<ResultReview />)} />
               <Route path="/analyze" element={routeElement(<ImageAnalyzer />)} />
               <Route path="/brief" element={routeElement(<BriefAnalyzer />)} />

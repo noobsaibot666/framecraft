@@ -698,6 +698,18 @@ export async function createResult(data: CreateResultInput): Promise<string> {
   return id;
 }
 
+export async function getResultById(id: string): Promise<Result | null> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM results WHERE id = $1 LIMIT 1",
+      [id]
+    )) as Record<string, unknown>[];
+    return rows[0] ? rowToResult(rows[0]) : null;
+  }
+  return _devResults.find((r) => r.id === id) ?? null;
+}
+
 export async function getResultsForPrompt(promptId: string): Promise<Result[]> {
   if (isTauri) {
     const db = await getDb();

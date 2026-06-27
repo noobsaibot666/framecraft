@@ -10,7 +10,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultsForPrompt, deleteResult, recomputePromptResultSummary } from "@/lib/db";
+import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary } from "@/lib/db";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
 import { getPromptVersions, type VersionNode } from "@/lib/lineage";
@@ -356,19 +356,47 @@ export function PromptDetail() {
                     {/* Thumbnail */}
                     <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
                       <ResultImage src={r.thumbnail_path} />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await deleteResult(r.id);
-                          await recomputePromptResultSummary(prompt.id);
-                          setResults((prev) => prev.filter((x) => x.id !== r.id));
-                        }}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-sm opacity-0 group-hover:opacity-100 transition-precise text-dim/60 hover:text-red"
-                        style={{ background: "rgba(0,0,0,0.6)" }}
-                        title="Delete result"
-                      >
-                        <Trash2 size={10} />
-                      </button>
+                      {/* Overlay actions */}
+                      <div className="absolute inset-0 flex items-start justify-between p-1.5 opacity-0 group-hover:opacity-100 transition-precise">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const next = !r.is_winner;
+                            await updateResult(r.id, { is_winner: next, is_failed: next ? false : r.is_failed });
+                            await recomputePromptResultSummary(prompt.id);
+                            setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, is_winner: next, is_failed: next ? false : x.is_failed } : x));
+                          }}
+                          className={cn("p-1 rounded-sm transition-precise", r.is_winner ? "text-amber" : "text-white/50 hover:text-amber")}
+                          style={{ background: "rgba(0,0,0,0.6)" }}
+                          title={r.is_winner ? "Remove winner" : "Mark winner"}
+                        >
+                          <Star size={10} className={r.is_winner ? "fill-amber/40" : ""} />
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/results/view/${r.id}`)}
+                            className="p-1 rounded-sm text-white/50 hover:text-cyan transition-precise"
+                            style={{ background: "rgba(0,0,0,0.6)" }}
+                            title="Edit result"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await deleteResult(r.id);
+                              await recomputePromptResultSummary(prompt.id);
+                              setResults((prev) => prev.filter((x) => x.id !== r.id));
+                            }}
+                            className="p-1 rounded-sm text-white/50 hover:text-red transition-precise"
+                            style={{ background: "rgba(0,0,0,0.6)" }}
+                            title="Delete result"
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                     {/* Meta */}
                     <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
@@ -378,8 +406,10 @@ export function PromptDetail() {
                             <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < r.score_overall ? "bg-white/60" : "bg-white/10")} />
                           ))}
                         </div>
-                        {r.is_winner && <Star size={9} className="text-white/50" />}
-                        {r.is_failed && <AlertTriangle size={9} className="text-red/50" />}
+                        <div className="flex items-center gap-1">
+                          {r.is_winner && <Star size={9} className="text-amber fill-amber/40" />}
+                          {r.is_failed && <AlertTriangle size={9} className="text-red/50" />}
+                        </div>
                       </div>
                       <span className="font-mono text-[8px] text-dim/50">{formatDate(r.created_at)}</span>
                       {r.artifacts && r.artifacts.length > 0 && (

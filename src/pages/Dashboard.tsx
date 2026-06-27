@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked, ImageOff, Search } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults } from "@/lib/db";
+import { getDashboardHealth, type ProductionHealth, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
@@ -22,6 +23,26 @@ function StatModule({ label, value, sub }: { label: string; value: number | stri
       <span className="system-label">{label}</span>
       <DotMatrix value={value} size="lg" />
       {sub && <span className="system-label text-[10px] text-muted">{sub}</span>}
+    </div>
+  );
+}
+
+function HealthChip({ label, value, unit, alert }: { label: string; value: number | string; unit?: string; alert?: boolean }) {
+  return (
+    <div
+      className="flex flex-col gap-2 px-4 py-3.5 rounded-sm flex-1"
+      style={{
+        border: alert ? "1px solid rgba(215,25,33,0.25)" : "var(--border-dim)",
+        background: alert ? "rgba(215,25,33,0.04)" : "var(--surface-card)",
+      }}
+    >
+      <span className={`system-label text-[9px] ${alert ? "text-red/60" : "text-muted"}`}>{label}</span>
+      <div className="flex items-baseline gap-1">
+        <span className={`font-ndot text-[22px] leading-none ${alert ? "text-red/80" : "text-white/70"}`}>
+          {value}
+        </span>
+        {unit && <span className="font-mono text-[9px] text-muted">{unit}</span>}
+      </div>
     </div>
   );
 }
@@ -111,10 +132,13 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
+  const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [search, setSearch] = useState("");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
+  useEffect(() => { getDashboardHealth().then(setHealth); }, []);
+
   const q = search.trim().toLowerCase();
   const recentPrompts = q
     ? stats.recent_prompts.filter((p) =>
@@ -163,12 +187,33 @@ export function Dashboard() {
             </button>
           )}
         </div>
-        {/* Stats row */}
+
+        {/* Library totals */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
           <StatModule label="TOTAL PROMPTS" value={stats.total_prompts} sub="IN LIBRARY" />
           <StatModule label="TOTAL RESULTS" value={stats.total_results} sub="GENERATED" />
           <StatModule label="WINNERS" value={stats.total_winners} sub="FLAGGED" />
           <StatModule label="RECIPES" value={stats.total_recipes} sub="STORED" />
+        </div>
+
+        {/* Production health — activity this week */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="system-label flex items-center gap-1.5"><TrendingUp size={10} /> PRODUCTION HEALTH</span>
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="font-mono text-[8px] text-dim/40 uppercase tracking-widest">THIS WEEK</span>
+          </div>
+          <div className="flex gap-3">
+            <HealthChip label="PROMPTS CRAFTED" value={health.promptsThisWeek} unit="prompts" />
+            <HealthChip label="RESULTS REVIEWED" value={health.resultsThisWeek} unit="results" />
+            <HealthChip label="WIN RATE" value={`${health.winRate}%`} />
+            <HealthChip
+              label="NEEDS REVIEW"
+              value={health.pendingReviewCount}
+              unit={health.pendingReviewCount === 1 ? "result" : "results"}
+              alert={health.pendingReviewCount > 0}
+            />
+          </div>
         </div>
 
         {/* Main grid */}
@@ -214,6 +259,56 @@ export function Dashboard() {
 
           {/* Right column */}
           <div className="flex flex-col gap-5">
+            {/* Needs Review */}
+            {health.pendingResults.length > 0 && (
+              <Card>
+                <CardHeader
+                  label="Needs Review"
+                  action={<AlertCircle size={12} className="text-red/60" />}
+                />
+                <CardBody>
+                  <div className="flex flex-col">
+                    {health.pendingResults.map((r) => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => navigate(`/results/${r.prompt_id}`)}
+                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-white/6 rounded-sm"
+                        style={{ borderBottom: "var(--border-dim)" }}
+                      >
+                        <span className="font-sans text-[12px] text-white/80 truncate">{r.prompt_title}</span>
+                        <span className="font-mono text-[9px] text-muted shrink-0">Rate →</span>
+                      </button>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
+            {/* Top Proven Tokens */}
+            {health.topProvenTokens.length > 0 && (
+              <Card>
+                <CardHeader label="Proven Tokens" action={<Zap size={11} className="text-white/40" />} />
+                <CardBody>
+                  <div className="flex flex-col gap-0">
+                    {health.topProvenTokens.map((t) => (
+                      <div
+                        key={t.id}
+                        className="flex items-center justify-between gap-3 px-4 py-2.5"
+                        style={{ borderBottom: "var(--border-dim)" }}
+                      >
+                        <span className="font-mono text-[11px] text-white/80 truncate">{t.text}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/50" />
+                          <span className="font-mono text-[9px] text-dim tabular-nums">{t.quality_score.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
             {/* Top Rated */}
             <Card>
               <CardHeader label="Top Rated" action={<Star size={13} className="text-amber" />} />
@@ -238,9 +333,7 @@ export function Dashboard() {
             <Card>
               <CardHeader
                 label="Recent Results"
-                action={
-                  <StatusDot active={recentResults.length > 0} />
-                }
+                action={<StatusDot active={recentResults.length > 0} />}
               />
               <CardBody>
                 {filteredResults.length > 0 ? (

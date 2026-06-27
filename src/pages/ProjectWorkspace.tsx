@@ -29,6 +29,7 @@ import { importProjectResultImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
+import { getProjectShots } from "@/lib/shotSequence";
 import { cn } from "@/lib/utils";
 import type { Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
 
@@ -459,6 +460,7 @@ export function ProjectWorkspace() {
   const [linkedPrompts, setLinkedPrompts] = useState<Awaited<ReturnType<typeof getPromptsForProject>>>([]);
   const [linkedRefs, setLinkedRefs] = useState<Awaited<ReturnType<typeof getReferencesForProject>>>([]);
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
+  const [shotCount, setShotCount] = useState(0);
   const [resultImporting, setResultImporting] = useState(false);
   const [resultImportError, setResultImportError] = useState("");
   const [resultImportSaved, setResultImportSaved] = useState(false);
@@ -470,11 +472,12 @@ export function ProjectWorkspace() {
     if (!id) return;
     (async () => {
       setLoading(true);
-      const [proj, prompts, refs, results] = await Promise.all([
+      const [proj, prompts, refs, results, shots] = await Promise.all([
         getProjectById(id),
         getPromptsForProject(id),
         getReferencesForProject(id),
         getResultsForProject(id),
+        getProjectShots(id),
       ]);
       if (!proj) { navigate("/projects"); return; }
 
@@ -499,6 +502,7 @@ export function ProjectWorkspace() {
       setLinkedPrompts(prompts);
       setLinkedRefs(refs);
       setLinkedResults(results);
+      setShotCount(shots.length);
       setLoading(false);
       hydratedRef.current = true;
     })();
@@ -763,6 +767,9 @@ export function ProjectWorkspace() {
             <Button variant="primary" size="sm" onClick={() => navigate(`/craft?projectId=${id}`)}>
               <Plus size={10} /> Craft Prompt
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}/sequence`)}>
+              Sequence
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}/board`)}>
               Pipeline
             </Button>
@@ -778,9 +785,10 @@ export function ProjectWorkspace() {
         <div className="flex flex-col gap-6">
 
           {/* Stats row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <StatChip label="Prompts" value={linkedPrompts.length} />
             <StatChip label="Results" value={linkedResults.length} />
+            <StatChip label="Shots" value={shotCount} />
             <StatChip label="Winners" value={winnerCount} />
             <StatChip label="Failed" value={failedCount} alert />
           </div>
@@ -1117,6 +1125,11 @@ export function ProjectWorkspace() {
             onClick={() => navigate(`/projects/${id}/assistant`)}
             className="w-full justify-center">
             Assistant
+          </Button>
+          <Button variant="ghost" size="sm"
+            onClick={() => navigate(`/projects/${id}/sequence`)}
+            className="w-full justify-center">
+            Shot Sequence
           </Button>
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/projects/${id}/board`)}

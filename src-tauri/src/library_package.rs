@@ -302,7 +302,7 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 27] = [
+const REQUIRED_RELEASE_TABLES: [&str; 28] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
@@ -326,6 +326,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 27] = [
     "references",
     "result_references",
     "results",
+    "shot_sequence",
     "srefs",
     "token_categories",
     "token_patterns",
@@ -1044,7 +1045,7 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
     let conn = open_portable_database(db_path)?;
     Ok(REQUIRED_RELEASE_TABLES
         .iter()
-        .filter(|table| **table != "creative_directions")
+        .filter(|table| **table != "creative_directions" && **table != "shot_sequence")
         .all(|table| {
             conn.query_row(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
@@ -1094,10 +1095,12 @@ fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
     }
     conn.execute_batch(include_str!("../migrations/016_creative_directions.sql"))
         .map_err(|error| error.to_string())?;
+    conn.execute_batch(include_str!("../migrations/017_shot_sequence.sql"))
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 16] {
+fn migration_sql() -> [&'static str; 17] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1115,6 +1118,7 @@ fn migration_sql() -> [&'static str; 16] {
         include_str!("../migrations/014_project_setup_metadata.sql"),
         include_str!("../migrations/015_comparison_workflow.sql"),
         include_str!("../migrations/016_creative_directions.sql"),
+        include_str!("../migrations/017_shot_sequence.sql"),
     ]
 }
 
@@ -1267,6 +1271,7 @@ mod tests {
             "source_role"
         ));
         assert!(sqlite_table_exists(&result.db_path, "creative_directions"));
+        assert!(sqlite_table_exists(&result.db_path, "shot_sequence"));
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1400,6 +1405,10 @@ mod tests {
         assert!(sqlite_table_exists(
             db_path.to_str().unwrap(),
             "creative_directions"
+        ));
+        assert!(sqlite_table_exists(
+            db_path.to_str().unwrap(),
+            "shot_sequence"
         ));
 
         let _ = fs::remove_dir_all(root);

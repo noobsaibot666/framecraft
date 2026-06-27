@@ -470,3 +470,44 @@ export interface Deliverable {
   created_at: string;
   updated_at: string;
 }
+
+export type ShotType =
+  | "establishing"
+  | "wide"
+  | "medium"
+  | "close_up"
+  | "detail"
+  | "cutaway"
+  | "hero"
+  | "product";
+
+export interface Shot {
+  id: string;
+  project_id: string;
+  sort_order: number;
+  shot_type: ShotType;
+  label: string;
+  prompt_id?: string;
+  result_id?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface CreateShotInput {
+  project_id: string;
+  sort_order: number;
+  shot_type: ShotType;
+  label: string;
+  prompt_id?: string;
+  result_id?: string;
+  notes?: string;
+}
+
+export interface UpdateShotInput {
+  shot_type?: ShotType;
+  label?: string;
+  prompt_id?: string | null;
+  result_id?: string | null;
+  notes?: string | null;
+  sort_order?: number;
+}

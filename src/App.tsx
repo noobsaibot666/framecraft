@@ -27,6 +27,7 @@ const ComparisonLab = lazy(() => import("@/pages/ComparisonLab").then((m) => ({ 
 const ProjectBoard = lazy(() => import("@/pages/ProjectBoard").then((m) => ({ default: m.ProjectBoard })));
 const ProjectAssistant = lazy(() => import("@/pages/ProjectAssistant").then((m) => ({ default: m.ProjectAssistant })));
 const ProjectExport = lazy(() => import("@/pages/ProjectExport").then((m) => ({ default: m.ProjectExport })));
+const ProjectSequence = lazy(() => import("@/pages/ProjectSequence").then((m) => ({ default: m.ProjectSequence })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +81,7 @@ export default function App() {
               <Route path="/projects/:id/board" element={routeElement(<ProjectBoard />)} />
               <Route path="/projects/:id/assistant" element={routeElement(<ProjectAssistant />)} />
               <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
+              <Route path="/projects/:id/sequence" element={routeElement(<ProjectSequence />)} />
               <Route path="/settings" element={routeElement(<Settings />)} />
             </Route>
           </Routes>

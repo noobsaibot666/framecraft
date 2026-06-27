@@ -105,6 +105,12 @@ pub fn run() {
             sql: include_str!("../migrations/016_creative_directions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 17,
+            description: "shot_sequence",
+            sql: include_str!("../migrations/017_shot_sequence.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

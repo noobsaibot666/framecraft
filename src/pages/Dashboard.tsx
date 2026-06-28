@@ -8,7 +8,7 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { getRecentResults, getRecentWins, getResultStats } from "@/lib/db";
+import { getRecentResults, getRecentWins, getResultStats, getTopTags } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
@@ -262,6 +262,7 @@ export function Dashboard() {
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
   const [recentWins, setRecentWins] = useState<(Result & { prompt_title: string })[]>([]);
   const [resultStats, setResultStats] = useState<{ total: number; winners: number }>({ total: 0, winners: 0 });
+  const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([]);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
@@ -270,6 +271,7 @@ export function Dashboard() {
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
   useEffect(() => { getRecentWins(4).then(setRecentWins); }, []);
   useEffect(() => { getResultStats().then(setResultStats); }, []);
+  useEffect(() => { getTopTags(12).then(setTopTags); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
@@ -368,6 +370,34 @@ export function Dashboard() {
                       <span className="font-mono text-[9px] text-amber">{r.score_overall}/5</span>
                     )}
                   </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Top tags */}
+        {topTags.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="system-label">TOP TAGS</span>
+              <div className="flex-1 h-px bg-white/10" />
+              <button type="button" onClick={() => navigate("/library")}
+                className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-white flex items-center gap-1 transition-precise">
+                Browse <ArrowRight size={8} />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {topTags.map(({ tag, count }) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => navigate(`/library?tag=${encodeURIComponent(tag)}`)}
+                  className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-white transition-precise"
+                  style={{ border: "var(--border-dim)" }}
+                >
+                  {tag}
+                  <span className="text-dim/40 text-[8px]">{count}</span>
                 </button>
               ))}
             </div>

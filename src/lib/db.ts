@@ -870,6 +870,22 @@ export async function getRecentWins(limit = 4): Promise<(Result & { prompt_title
   return [];
 }
 
+export async function getTopTags(limit = 12): Promise<{ tag: string; count: number }[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT t.value as tag, COUNT(*) as count
+       FROM prompts p, json_each(p.tags) t
+       WHERE p.tags IS NOT NULL AND p.tags != '[]'
+       GROUP BY t.value
+       ORDER BY count DESC LIMIT $1`,
+      [limit]
+    )) as Record<string, unknown>[];
+    return rows.map((r) => ({ tag: r.tag as string, count: (r.count as number) ?? 0 }));
+  }
+  return [];
+}
+
 export async function getResultStats(): Promise<{ total: number; winners: number }> {
   if (isTauri) {
     const db = await getDb();

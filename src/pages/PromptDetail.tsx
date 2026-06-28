@@ -703,9 +703,18 @@ export function PromptDetail() {
                     {/* Meta */}
                     <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-0.5" title="Click to score">
                           {Array.from({ length: 5 }).map((_, i) => (
-                            <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < r.score_overall ? "bg-white/60" : "bg-white/10")} />
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={async () => {
+                                const next = i + 1 === r.score_overall ? 0 : i + 1;
+                                await updateResult(r.id, { score_overall: next });
+                                setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, score_overall: next } : x));
+                              }}
+                              className={cn("w-1.5 h-1.5 rounded-full transition-precise hover:scale-125", i < r.score_overall ? "bg-white/60 hover:bg-amber/70" : "bg-white/10 hover:bg-white/30")}
+                            />
                           ))}
                         </div>
                         <div className="flex items-center gap-1">

@@ -77,23 +77,23 @@ function TopShotCard({ result, onClick }: { result: GalleryResult; onClick: () =
 // ─── Card ─────────────────────────────────────────────────────
 
 function GalleryCard({
-  result, onClick, batchMode, selected, onSelect,
+  result, onClick, batchMode, selected, onSelect, onToggleWinner,
 }: {
   result: GalleryResult;
   onClick: () => void;
   batchMode: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
+  onToggleWinner?: (id: string) => void;
 }) {
   const thumb = useImageDisplaySrc(result.thumbnail_path);
   const hasDims = result.score_realism > 0 || result.score_composition > 0 || result.score_lighting > 0;
 
   return (
-    <button
-      type="button"
+    <div
       onClick={batchMode ? () => onSelect(result.id) : onClick}
       className={cn(
-        "flex flex-col gap-0 rounded-card overflow-hidden group transition-precise",
+        "flex flex-col gap-0 rounded-card overflow-hidden group transition-precise cursor-pointer",
         selected ? "ring-2 ring-cyan/60 border-cyan/40" : "hover:border-white/20"
       )}
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
@@ -125,16 +125,24 @@ function GalleryCard({
             />
           ))}
         </div>
-        {/* Winner / Failed badge */}
-        {result.is_winner && (
-          <div className="absolute top-2 right-2">
-            <Star size={12} className="text-amber fill-amber/60" />
-          </div>
-        )}
-        {result.is_failed && (
+        {/* Winner toggle / Failed badge */}
+        {result.is_failed && !result.is_winner ? (
           <div className="absolute top-2 right-2 font-mono text-[7px] uppercase tracking-widest text-red/80 px-1.5 py-0.5 rounded-sm" style={{ background: "rgba(215,25,33,0.15)", border: "1px solid rgba(215,25,33,0.3)" }}>
             Failed
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleWinner?.(result.id); }}
+            className={cn(
+              "absolute top-2 right-2 p-0.5 rounded-sm transition-precise",
+              result.is_winner ? "text-amber opacity-100" : "text-white/30 opacity-0 group-hover:opacity-100 hover:text-amber"
+            )}
+            style={{ background: result.is_winner ? "transparent" : "rgba(0,0,0,0.55)" }}
+            title={result.is_winner ? "Remove winner" : "Mark as winner"}
+          >
+            <Star size={12} className={result.is_winner ? "fill-amber/60" : ""} />
+          </button>
         )}
       </div>
 
@@ -157,7 +165,7 @@ function GalleryCard({
           <DimBars result={result} />
         </div>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -238,6 +246,14 @@ export function ResultGallery() {
     } finally {
       setBatchWorking(false);
     }
+  };
+
+  const handleToggleWinner = async (id: string) => {
+    const result = results.find((r) => r.id === id);
+    if (!result) return;
+    const next = !result.is_winner;
+    await updateResult(id, { is_winner: next, is_failed: next ? false : result.is_failed });
+    setResults((prev) => prev.map((r) => r.id === id ? { ...r, is_winner: next, is_failed: next ? false : r.is_failed } : r));
   };
 
   const handleBatchScore = async (score: number) => {
@@ -552,7 +568,8 @@ export function ResultGallery() {
                       {g.results.map((r) => (
                         <GalleryCard key={r.id} result={r}
                           onClick={() => navigate(`/results/view/${r.id}`)}
-                          batchMode={batchMode} selected={selectedIds.has(r.id)} onSelect={toggleSelect} />
+                          batchMode={batchMode} selected={selectedIds.has(r.id)} onSelect={toggleSelect}
+                          onToggleWinner={handleToggleWinner} />
                       ))}
                     </div>
                   </div>
@@ -570,6 +587,7 @@ export function ResultGallery() {
                 batchMode={batchMode}
                 selected={selectedIds.has(r.id)}
                 onSelect={toggleSelect}
+                onToggleWinner={handleToggleWinner}
               />
             ))}
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -262,6 +262,7 @@ function NativeSelect({
 
 export function PromptLibrary() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const {
     loading,
     fetchPrompts,
@@ -285,7 +286,7 @@ export function PromptLibrary() {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [batchWorking, setBatchWorking] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [tagFilter, setTagFilter] = useState<string>("");
+  const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "");
   const [noResultsOnly, setNoResultsOnly] = useState(false);
   const [originalsOnly, setOriginalsOnly] = useState(false);
 

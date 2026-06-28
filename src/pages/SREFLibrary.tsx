@@ -254,6 +254,7 @@ function AddForm({ type, onSave, onClose }: {
 // ─── Filter helpers ───────────────────────────────────────────
 
 type RatingFilter = "all" | "rated" | "unrated";
+type SREFSort = "newest" | "oldest" | "rating" | "name";
 
 function FilterSelect({ label, value, onChange, options }: {
   label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[];
@@ -282,6 +283,7 @@ export function SREFLibrary() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
+  const [srefSort, setSrefSort] = useState<SREFSort>("newest");
   const [showAdd, setShowAdd] = useState(false);
 
   const loadData = async () => {
@@ -330,8 +332,17 @@ export function SREFLibrary() {
     });
   };
 
-  const filteredSREFs = filterItems(srefs);
-  const filteredProfiles = filterItems(profiles);
+  const sortItems = <T extends SREF | Profile>(items: T[]): T[] => {
+    return [...items].sort((a, b) => {
+      if (srefSort === "rating") return b.rating - a.rating;
+      if (srefSort === "name") return (a.title ?? a.code).localeCompare(b.title ?? b.code);
+      if (srefSort === "oldest") return a.created_at.localeCompare(b.created_at);
+      return b.created_at.localeCompare(a.created_at); // newest
+    });
+  };
+
+  const filteredSREFs = sortItems(filterItems(srefs));
+  const filteredProfiles = sortItems(filterItems(profiles));
 
   const totalShown = tab === "srefs" ? filteredSREFs.length : filteredProfiles.length;
   const totalAll = tab === "srefs" ? srefs.length : profiles.length;
@@ -372,6 +383,10 @@ export function SREFLibrary() {
         {/* Rating filter */}
         <FilterSelect label="RATING" value={ratingFilter} onChange={(v) => setRatingFilter(v as RatingFilter)}
           options={[{ value: "all", label: "All" }, { value: "rated", label: "Rated" }, { value: "unrated", label: "Unrated" }]} />
+
+        {/* Sort */}
+        <FilterSelect label="SORT" value={srefSort} onChange={(v) => setSrefSort(v as SREFSort)}
+          options={[{ value: "newest", label: "Newest" }, { value: "oldest", label: "Oldest" }, { value: "rating", label: "Rating" }, { value: "name", label: "Name" }]} />
 
         {/* Count */}
         <span className="font-mono text-[9px] text-dim/50">{totalShown === totalAll ? totalAll : `${totalShown}/${totalAll}`}</span>

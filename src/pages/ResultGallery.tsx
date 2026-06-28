@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckSquare, Download, ImageOff, Search, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CheckSquare, Download, ImageOff, Layers, Search, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -189,6 +189,7 @@ export function ResultGallery() {
   const [batchWorking, setBatchWorking] = useState(false);
   const [minScore, setMinScore] = useState<number>(0);
   const [searchText, setSearchText] = useState("");
+  const [groupByPrompt, setGroupByPrompt] = useState(false);
 
   const filter = (searchParams.get("filter") as GalleryFilter) ?? "all";
   const sort = (searchParams.get("sort") as GallerySort) ?? "newest";
@@ -311,6 +312,14 @@ export function ResultGallery() {
             onClick={() => batchMode ? exitBatch() : setBatchMode(true)}
           >
             {batchMode ? <><X size={10} /> Cancel</> : "Select"}
+          </Button>
+          <Button
+            variant={groupByPrompt ? "primary" : "ghost"}
+            size="sm"
+            onClick={() => setGroupByPrompt((v) => !v)}
+            className={groupByPrompt ? "bg-white/8 text-white" : ""}
+          >
+            <Layers size={11} /> {groupByPrompt ? "Grouped" : "Group"}
           </Button>
           <Button variant="ghost" size="sm" onClick={handleExportResultsCSV} disabled={displayResults.length === 0}>
             <Download size={11} /> CSV
@@ -506,6 +515,43 @@ export function ResultGallery() {
               )}
             </div>
           </div>
+        ) : groupByPrompt ? (
+          (() => {
+            const groups: { promptTitle: string; promptId: string; results: GalleryResult[] }[] = [];
+            const seen = new Map<string, number>();
+            for (const r of displayResults) {
+              const key = r.prompt_id ?? r.prompt_title;
+              if (seen.has(key)) {
+                groups[seen.get(key)!].results.push(r);
+              } else {
+                seen.set(key, groups.length);
+                groups.push({ promptTitle: r.prompt_title ?? "Untitled", promptId: r.prompt_id, results: [r] });
+              }
+            }
+            return (
+              <div className="flex flex-col gap-8">
+                {groups.map((g) => (
+                  <div key={g.promptId} className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => navigate(`/library/${g.promptId}`)}
+                        className="font-mono text-[11px] text-soft-white hover:text-cyan transition-precise truncate max-w-sm text-left">
+                        {g.promptTitle}
+                      </button>
+                      <span className="font-mono text-[9px] text-dim/40 shrink-0">{g.results.length} result{g.results.length !== 1 ? "s" : ""}</span>
+                      <div className="flex-1 h-px bg-white/8" />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {g.results.map((r) => (
+                        <GalleryCard key={r.id} result={r}
+                          onClick={() => navigate(`/results/view/${r.id}`)}
+                          batchMode={batchMode} selected={selectedIds.has(r.id)} onSelect={toggleSelect} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
             {displayResults.map((r) => (

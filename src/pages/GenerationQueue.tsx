@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, Copy, ExternalLink, GripVertical, Pin, Plus, SkipForward, Upload, X } from "lucide-react";
+import { Check, ChevronsUp, Copy, ExternalLink, GripVertical, Pin, Plus, SkipForward, Upload, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { ProviderBadge } from "@/components/ui/Badge";
@@ -58,17 +58,21 @@ function statusClass(status: QueueStatus): string {
 function QueueCard({
   item,
   prompt,
+  isFirst,
   onCopy,
   onStatus,
   onImport,
   onPin,
+  onMoveToTop,
 }: {
   item: QueueItem;
   prompt?: Prompt;
+  isFirst: boolean;
   onCopy: () => void;
   onStatus: (status: QueueStatus) => void;
   onImport: () => void;
   onPin: (pinned: boolean) => void;
+  onMoveToTop: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -110,6 +114,15 @@ function QueueCard({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
+        <button
+          type="button"
+          onClick={onMoveToTop}
+          disabled={isFirst}
+          className="p-2 rounded-sm text-readable hover:text-cyan transition-precise opacity-0 group-hover:opacity-100 disabled:opacity-0"
+          title="Move to top"
+        >
+          <ChevronsUp size={12} />
+        </button>
         <button
           type="button"
           onClick={() => onPin(!item.is_pinned)}
@@ -198,6 +211,14 @@ export function GenerationQueue() {
     if (sentItems.length === 0) return;
     for (const item of sentItems) await updateQueueStatus(item.id, "done");
     await refresh();
+  };
+
+  const handleMoveToTop = async (itemId: string) => {
+    const idx = items.findIndex((i) => i.id === itemId);
+    if (idx <= 0) return;
+    const next = [items[idx], ...items.slice(0, idx), ...items.slice(idx + 1)];
+    setItems(next);
+    await reorderQueue(next.map((i) => i.id));
   };
 
   const withPromptData = (item: QueueItem): QueueItem => {
@@ -357,11 +378,12 @@ export function GenerationQueue() {
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={visibleItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-3">
-              {visibleItems.map((item) => (
+              {visibleItems.map((item, idx) => (
                 <QueueCard
                   key={item.id}
                   item={item}
                   prompt={promptMap.get(item.prompt_id)}
+                  isFirst={idx === 0}
                   onCopy={async () => {
                     await navigator.clipboard.writeText(promptMap.get(item.prompt_id)?.prompt_text ?? item.prompt_text ?? "");
                     setCopied(true);
@@ -379,6 +401,7 @@ export function GenerationQueue() {
                     await pinQueueItem(item.id, pinned);
                     await refresh();
                   }}
+                  onMoveToTop={() => handleMoveToTop(item.id)}
                 />
               ))}
             </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, CopyPlus, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ArrowLeft, Copy, CopyPlus, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
   Layers, ListPlus, Shuffle, X,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -23,6 +23,23 @@ import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analy
 registerShortcutLabel("e", "Edit prompt (Prompt Detail)");
 registerShortcutLabel("q", "Add to queue (Prompt Detail)");
 import type { Prompt, Result } from "@/types";
+
+function providerUrl(provider: string): string {
+  switch (provider) {
+    case "midjourney": return "https://www.midjourney.com/imagine";
+    case "dalle": return "https://chatgpt.com/";
+    case "firefly": return "https://firefly.adobe.com/";
+    case "ideogram": return "https://ideogram.ai/";
+    case "flux": return "https://fal.ai/models/flux";
+    case "nano_banana": return "https://chatgpt.com/";
+    case "gpt_image": return "https://chatgpt.com/";
+    case "seedance": return "https://www.volcengine.com/product/seedance";
+    case "kling": return "https://klingai.com/";
+    case "runway": return "https://runwayml.com/";
+    case "higgsfield": return "https://higgsfield.ai/";
+    default: return "";
+  }
+}
 
 function MetaRow({ label, value }: { label: string; value?: string | number }) {
   if (!value && value !== 0) return null;
@@ -316,6 +333,15 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={handleAddToQueue}>
             <ListPlus size={11} /> Add to Queue
           </Button>
+          {providerUrl(prompt.provider) && (
+            <Button variant="ghost" size="sm" onClick={() => {
+              navigator.clipboard.writeText(prompt.prompt_text);
+              window.open(providerUrl(prompt.provider), "_blank");
+              toast.info("Prompt copied — paste in the generator");
+            }}>
+              <ExternalLink size={11} /> Open in {prompt.provider.replace(/_/g, " ")}
+            </Button>
+          )}
           <Button
             variant={confirmDelete ? "primary" : "ghost"}
             size="sm"

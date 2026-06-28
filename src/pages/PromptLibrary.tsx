@@ -173,10 +173,14 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, onRate, 
             ))}
           </div>
           {prompt.ai_look_risk > 0 && <RiskBadge score={prompt.ai_look_risk} />}
-          {resultSummary && resultSummary.count > 0 && (
+          {resultSummary && resultSummary.count > 0 ? (
             <span className="font-mono text-[10.5px] text-readable">
               {resultSummary.count} result{resultSummary.count !== 1 ? "s" : ""}
               {resultSummary.avg_score > 0 && ` · ${resultSummary.avg_score.toFixed(1)} avg`}
+            </span>
+          ) : (
+            <span className="font-mono text-[9px] text-dim/35 flex items-center gap-1">
+              <ImageOff size={8} /> no results
             </span>
           )}
         </div>
@@ -276,10 +280,11 @@ export function PromptLibrary() {
   const [batchWorking, setBatchWorking] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [tagFilter, setTagFilter] = useState<string>("");
+  const [noResultsOnly, setNoResultsOnly] = useState(false);
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly]);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -298,6 +303,7 @@ export function PromptLibrary() {
     setFilters({ provider: undefined, category: undefined, minRating: undefined, maxAiRisk: undefined, isWinner: undefined, isFailed: undefined });
     setSortBy("newest");
     setTagFilter("");
+    setNoResultsOnly(false);
   }, [handleSearch, setFilters, setSortBy]);
 
   const handleCopy = useCallback(async (prompt: Prompt) => {
@@ -482,8 +488,11 @@ export function PromptLibrary() {
   const allPrompts = filteredAndSorted(resultMap);
   const uniqueTags = [...new Set(allPrompts.flatMap((p) => p.tags ?? []))].sort();
   const tagFilteredPrompts = tagFilter ? allPrompts.filter((p) => (p.tags ?? []).includes(tagFilter)) : allPrompts;
-  const prompts = tagFilteredPrompts.slice(0, visibleCount);
-  const hasMoreVisible = visibleCount < tagFilteredPrompts.length;
+  const noResultsFiltered = noResultsOnly
+    ? tagFilteredPrompts.filter((p) => !resultMap[p.id] || resultMap[p.id].count === 0)
+    : tagFilteredPrompts;
+  const prompts = noResultsFiltered.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < noResultsFiltered.length;
   const metrics = getPromptLibraryMetrics(allPrompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
@@ -555,7 +564,7 @@ export function PromptLibrary() {
         </div>
 
         {/* Clear All Filters */}
-        {(searchVal || filters.provider || filters.category || filters.minRating != null || filters.maxAiRisk != null || statusFilter || tagFilter || sortBy !== "newest") && (
+        {(searchVal || filters.provider || filters.category || filters.minRating != null || filters.maxAiRisk != null || statusFilter || tagFilter || noResultsOnly || sortBy !== "newest") && (
           <div className="flex justify-end">
             <button type="button" onClick={handleClearAllFilters}
               className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
@@ -566,8 +575,14 @@ export function PromptLibrary() {
         )}
 
         {/* Tag filter chips */}
-        {uniqueTags.length > 0 && (
+        {(uniqueTags.length > 0 || noResultsOnly) && (
           <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setNoResultsOnly(!noResultsOnly)}
+              className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+                noResultsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
+              style={{ border: noResultsOnly ? "1px solid rgba(215,25,33,0.40)" : "var(--border-dim)" }}>
+              <ImageOff size={8} /> No Results
+            </button>
             {tagFilter && (
               <button type="button" onClick={() => setTagFilter("")}
                 className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"

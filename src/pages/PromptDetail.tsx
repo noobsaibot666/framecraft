@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
-  Layers, ListPlus, Shuffle, X,
+  Layers, ListPlus, Shuffle, X, FolderOpen,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +11,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary, getChildPrompts } from "@/lib/db";
+import { getProjectsForPrompt, addPromptToProject, removePromptFromProject, getProjects } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
 import { getPromptVersions, type VersionNode } from "@/lib/lineage";
@@ -19,6 +20,7 @@ import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/p
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analyzePrompt";
+import type { Project } from "@/types";
 
 registerShortcutLabel("e", "Edit prompt (Prompt Detail)");
 registerShortcutLabel("q", "Add to queue (Prompt Detail)");
@@ -51,22 +53,6 @@ function MetaRow({ label, value }: { label: string; value?: string | number }) {
   );
 }
 
-function RatingDots({ rating, label }: { rating: number; label?: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      {label && <span className="system-label">{label}</span>}
-      <div className="flex items-center gap-1">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div
-            key={i}
-            className={`w-2 h-2 rounded-full transition-precise ${i < rating ? "bg-white/70" : "bg-white/12"}`}
-          />
-        ))}
-      </div>
-      <span className="font-mono text-[10px] text-dim">{rating}/5</span>
-    </div>
-  );
-}
 
 function ResultImage({ src }: { src?: string }) {
   const image = useImageDisplaySrc(src);
@@ -96,6 +82,13 @@ export function PromptDetail() {
   const [editingFailureNotes, setEditingFailureNotes] = useState(false);
   const [failureNotesValue, setFailureNotesValue] = useState("");
   const [childPrompts, setChildPrompts] = useState<{ id: string; title: string; is_winner: boolean; rating: number }[]>([]);
+  const [editingBestUse, setEditingBestUse] = useState(false);
+  const [bestUseValue, setBestUseValue] = useState("");
+  const [editingRiskNotes, setEditingRiskNotes] = useState(false);
+  const [riskNotesValue, setRiskNotesValue] = useState("");
+  const [linkedProjects, setLinkedProjects] = useState<{ id: string; title: string }[]>([]);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [showProjectLinker, setShowProjectLinker] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -106,6 +99,8 @@ export function PromptDetail() {
     getResultsForPrompt(id).then(setResults);
     getPromptVersions(id).then(setVersions).catch(() => {});
     getChildPrompts(id).then(setChildPrompts).catch(() => {});
+    getProjectsForPrompt(id).then(setLinkedProjects).catch(() => {});
+    getProjects({ excludeArchived: true }).then(setAllProjects).catch(() => {});
   }, [id, getById]);
 
   useShortcut("e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
@@ -198,6 +193,63 @@ export function PromptDetail() {
       toast.error("Failed to save notes");
     }
     setEditingNotes(false);
+  };
+
+  const handleSaveBestUse = async () => {
+    if (!prompt) return;
+    const trimmed = bestUseValue.trim();
+    try {
+      await update(prompt.id, { best_use: trimmed || undefined });
+      setPrompt((p) => p ? { ...p, best_use: trimmed || undefined } : p);
+    } catch {
+      toast.error("Failed to save best use");
+    }
+    setEditingBestUse(false);
+  };
+
+  const handleSaveRiskNotes = async () => {
+    if (!prompt) return;
+    const trimmed = riskNotesValue.trim();
+    try {
+      await update(prompt.id, { risk_notes: trimmed || undefined });
+      setPrompt((p) => p ? { ...p, risk_notes: trimmed || undefined } : p);
+    } catch {
+      toast.error("Failed to save risk notes");
+    }
+    setEditingRiskNotes(false);
+  };
+
+  const handleSetRating = async (newRating: number) => {
+    if (!prompt) return;
+    const next = newRating === prompt.rating ? 0 : newRating;
+    try {
+      await update(prompt.id, { rating: next });
+      setPrompt((p) => p ? { ...p, rating: next } : p);
+    } catch {
+      toast.error("Failed to update rating");
+    }
+  };
+
+  const handleLinkProject = async (projectId: string) => {
+    if (!prompt || !projectId) return;
+    try {
+      await addPromptToProject(projectId, prompt.id);
+      const refreshed = await getProjectsForPrompt(prompt.id);
+      setLinkedProjects(refreshed);
+      setShowProjectLinker(false);
+    } catch {
+      toast.error("Failed to link project");
+    }
+  };
+
+  const handleUnlinkProject = async (projectId: string) => {
+    if (!prompt) return;
+    try {
+      await removePromptFromProject(projectId, prompt.id);
+      setLinkedProjects((prev) => prev.filter((p) => p.id !== projectId));
+    } catch {
+      toast.error("Failed to unlink project");
+    }
   };
 
   const handleDuplicate = async () => {
@@ -817,12 +869,176 @@ export function PromptDetail() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <span className="system-label">SCORES</span>
-            <RatingDots rating={prompt.rating} label="RATING" />
+            {/* Interactive rating */}
+            <div className="flex items-center gap-2">
+              <span className="system-label w-28">RATING</span>
+              <div className="flex items-center gap-1" title="Click to rate">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSetRating(i + 1)}
+                    className={cn("w-2 h-2 rounded-full transition-precise hover:scale-125", i < prompt.rating ? "bg-white/70 hover:bg-amber/70" : "bg-white/12 hover:bg-white/30")}
+                  />
+                ))}
+              </div>
+              <span className="font-mono text-[10px] text-dim">{prompt.rating}/5</span>
+            </div>
             <div className="flex items-center gap-2">
               <span className="system-label w-28">AI RISK</span>
               <RiskBadge score={prompt.ai_look_risk} />
             </div>
-            <MetaRow label="REUSE" value={`${prompt.reuse_potential}/10`} />
+            {prompt.reuse_potential > 0 && (
+              <MetaRow label="REUSE" value={`${prompt.reuse_potential}/10`} />
+            )}
+          </div>
+
+          {/* Best Use + Risk Notes */}
+          <div
+            className="flex flex-col gap-4 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <span className="system-label">ANALYSIS</span>
+
+            {/* Best Use */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="system-label">BEST USE</span>
+                {!editingBestUse && (
+                  <button type="button" onClick={() => { setBestUseValue(prompt.best_use ?? ""); setEditingBestUse(true); }}
+                    className="font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+                    style={{ border: "var(--border-dim)" }}>
+                    {prompt.best_use ? "Edit" : "+ Add"}
+                  </button>
+                )}
+              </div>
+              {editingBestUse ? (
+                <div className="flex flex-col gap-1.5">
+                  <input
+                    autoFocus
+                    value={bestUseValue}
+                    onChange={(e) => setBestUseValue(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveBestUse(); if (e.key === "Escape") setEditingBestUse(false); }}
+                    className="w-full h-8 px-2 font-mono text-[10px] text-soft-white bg-transparent rounded-sm focus:outline-none"
+                    style={{ border: "1px solid rgba(255,255,255,0.18)" }}
+                    placeholder="Hero banner, social ad…"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={handleSaveBestUse}
+                      className="font-mono text-[8px] tracking-widest uppercase text-white px-2 py-1 rounded-sm transition-precise"
+                      style={{ border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.06)" }}>
+                      Save
+                    </button>
+                    <button type="button" onClick={() => setEditingBestUse(false)}
+                      className="font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
+                      style={{ border: "var(--border-dim)" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : prompt.best_use ? (
+                <p className="font-mono text-[10px] text-muted leading-relaxed cursor-pointer hover:text-readable transition-precise"
+                  onClick={() => { setBestUseValue(prompt.best_use ?? ""); setEditingBestUse(true); }}>
+                  {prompt.best_use}
+                </p>
+              ) : null}
+            </div>
+
+            {/* Risk Notes */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="system-label">RISK NOTES</span>
+                {!editingRiskNotes && (
+                  <button type="button" onClick={() => { setRiskNotesValue(prompt.risk_notes ?? ""); setEditingRiskNotes(true); }}
+                    className="font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+                    style={{ border: "var(--border-dim)" }}>
+                    {prompt.risk_notes ? "Edit" : "+ Add"}
+                  </button>
+                )}
+              </div>
+              {editingRiskNotes ? (
+                <div className="flex flex-col gap-1.5">
+                  <textarea
+                    autoFocus
+                    value={riskNotesValue}
+                    onChange={(e) => setRiskNotesValue(e.target.value)}
+                    onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveRiskNotes(); if (e.key === "Escape") setEditingRiskNotes(false); }}
+                    rows={3}
+                    className="w-full p-2 font-mono text-[10px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
+                    style={{ border: "1px solid rgba(255,255,255,0.18)" }}
+                    placeholder="Brand, legal, or production constraints…"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={handleSaveRiskNotes}
+                      className="font-mono text-[8px] tracking-widest uppercase text-white px-2 py-1 rounded-sm transition-precise"
+                      style={{ border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.06)" }}>
+                      Save
+                    </button>
+                    <button type="button" onClick={() => setEditingRiskNotes(false)}
+                      className="font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
+                      style={{ border: "var(--border-dim)" }}>
+                      Cancel
+                    </button>
+                    <span className="font-mono text-[8px] text-dim/30 ml-auto">⌘↩ save</span>
+                  </div>
+                </div>
+              ) : prompt.risk_notes ? (
+                <p className="font-mono text-[10px] text-muted leading-relaxed cursor-pointer hover:text-readable transition-precise"
+                  onClick={() => { setRiskNotesValue(prompt.risk_notes ?? ""); setEditingRiskNotes(true); }}>
+                  {prompt.risk_notes}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Linked Projects */}
+          <div
+            className="flex flex-col gap-3 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="system-label">PROJECTS</span>
+              <button type="button" onClick={() => setShowProjectLinker((v) => !v)}
+                className="font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+                style={{ border: "var(--border-dim)" }}>
+                + Link
+              </button>
+            </div>
+            {showProjectLinker && (
+              <div className="flex flex-col gap-1.5">
+                <select
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) handleLinkProject(e.target.value); }}
+                  className="w-full h-8 px-2 font-mono text-[10px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.14)" }}
+                >
+                  <option value="">Select project…</option>
+                  {allProjects
+                    .filter((p) => !linkedProjects.some((lp) => lp.id === p.id))
+                    .map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
+              </div>
+            )}
+            {linkedProjects.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {linkedProjects.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-sm"
+                    style={{ border: "var(--border-dim)" }}>
+                    <FolderOpen size={9} className="text-dim/40 shrink-0" />
+                    <button type="button" onClick={() => navigate(`/projects/${p.id}`)}
+                      className="flex-1 font-mono text-[10px] text-soft-white/80 hover:text-white text-left truncate transition-precise">
+                      {p.title}
+                    </button>
+                    <button type="button" onClick={() => handleUnlinkProject(p.id)}
+                      className="text-dim/30 hover:text-red/70 transition-precise ml-auto">
+                      <X size={8} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <span className="font-mono text-[9px] text-dim/40">Not linked to any project</span>
+            )}
           </div>
 
           {/* Parameters */}

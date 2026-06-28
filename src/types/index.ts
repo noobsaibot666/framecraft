@@ -55,6 +55,8 @@ export interface Prompt {
   is_failed: boolean;
   failure_notes?: string;
   notes?: string;
+  best_use?: string;
+  risk_notes?: string;
   version: number;
   parent_id?: string;
   created_at: string;

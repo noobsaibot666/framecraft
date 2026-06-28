@@ -289,6 +289,9 @@ export async function updatePrompt(
     if ("is_failed" in data && data.is_failed != null) add("is_failed", data.is_failed ? 1 : 0);
     if ("failure_notes" in data) add("failure_notes", data.failure_notes ?? null);
     if ("notes" in data) add("notes", data.notes ?? null);
+    if ("best_use" in data) add("best_use", data.best_use ?? null);
+    if ("risk_notes" in data) add("risk_notes", data.risk_notes ?? null);
+    if ("reuse_potential" in data && data.reuse_potential != null) add("reuse_potential", data.reuse_potential);
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);

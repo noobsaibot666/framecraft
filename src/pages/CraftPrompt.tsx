@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2 } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -528,6 +528,37 @@ function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
         <span className="font-mono text-[8px] text-muted">{ref_.project_count} proj</span>
       </div>
     </button>
+  );
+}
+
+// ─── Provider Format Block ────────────────────────────────────
+
+function ProviderFormatBlock({ label, icon, color, borderColor, bgColor, content }: {
+  label: string; icon: React.ReactNode; color: string;
+  borderColor: string; bgColor: string; content: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <div className="flex flex-col gap-3 p-4 rounded-card" style={{ border: `1px solid ${borderColor}`, background: bgColor }}>
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest" style={{ color }}>
+          {icon} {label}
+        </span>
+        <button type="button" onClick={handleCopy}
+          className="font-mono text-[9px] uppercase tracking-widest transition-precise"
+          style={{ color: copied ? "#fff" : color }}>
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="font-mono text-[9px] text-soft-white/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+        {content}
+      </pre>
+    </div>
   );
 }
 
@@ -1561,6 +1592,37 @@ export function CraftPrompt() {
               {copied ? "Copied!" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
             </Button>
           </div>
+
+          {/* Provider-specific formatted output */}
+          {fields.provider === "nano_banana" && assembled && (
+            <ProviderFormatBlock
+              label="NANO BANANA JSON"
+              icon={<FileCode size={11} />}
+              color="rgba(246,173,85,0.7)"
+              borderColor="rgba(246,173,85,0.2)"
+              bgColor="rgba(246,173,85,0.04)"
+              content={JSON.stringify({
+                prompt: assembled,
+                aspect_ratio: mjParams.aspect_ratio || "1:1",
+                model: "nano-banana-v1",
+              }, null, 2)}
+            />
+          )}
+          {(["seedance", "kling", "runway", "higgsfield"] as const).includes(fields.provider as "seedance" | "kling" | "runway" | "higgsfield") && assembled && (
+            <ProviderFormatBlock
+              label={`${fields.provider.toUpperCase()} MOTION PROMPT`}
+              icon={<Film size={11} />}
+              color="rgba(183,148,244,0.7)"
+              borderColor="rgba(183,148,244,0.2)"
+              bgColor="rgba(183,148,244,0.04)"
+              content={[
+                `SCENE: ${assembled}`,
+                mjParams.aspect_ratio ? `RATIO: ${mjParams.aspect_ratio}` : "",
+                fields.mood ? `TONE: ${fields.mood}` : "",
+                fields.avoidance_text ? `AVOID: ${fields.avoidance_text}` : "",
+              ].filter(Boolean).join("\n")}
+            />
+          )}
 
           {/* Low-quality token advisory */}
           {lowQualityTokens.length > 0 && !lowQualityDismissed && (

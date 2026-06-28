@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp, FolderKanban, ArrowRight, ListChecks, Wand2, Upload, CheckSquare } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp, FolderKanban, ArrowRight, ListChecks, Wand2, Upload, CheckSquare, ChevronDown, FolderPlus } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -268,6 +268,7 @@ export function Dashboard() {
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
+  const [recentPromptsOpen, setRecentPromptsOpen] = useState(true);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
@@ -303,21 +304,27 @@ export function Dashboard() {
       title="Dashboard"
       subtitle="PRODUCTION WORKSPACE"
       action={
-        <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
-          <Plus size={12} />
-          Craft Prompt
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="md" onClick={() => navigate("/projects/new")}>
+            <FolderPlus size={12} />
+            New Project
+          </Button>
+          <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
+            <Plus size={12} />
+            Craft Prompt
+          </Button>
+        </div>
       }
     >
       <div className="flex flex-col gap-8 min-w-0">
-        <div className="flex items-center gap-3">
-          <div className="relative w-full max-w-[520px]">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+        <div className="flex items-center justify-end gap-2">
+          <div className="relative">
+            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search recent prompts, tags, and results..."
-              className="w-full h-10 pl-9 pr-3 rounded-sm bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
+              placeholder="Search…"
+              className="h-8 w-48 pl-7 pr-3 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim focus:outline-none focus:w-64 transition-all duration-200"
               style={{ border: "var(--border-default)" }}
             />
           </div>
@@ -517,35 +524,47 @@ export function Dashboard() {
                 label="Recent Prompts"
                 count={stats.recent_prompts.length}
                 action={
-                  <Button variant="muted" size="sm" onClick={() => navigate("/library")}>
-                    View All
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="muted" size="sm" onClick={() => navigate("/library")}>
+                      View All
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setRecentPromptsOpen((v) => !v)}
+                      className="text-dim/40 hover:text-white transition-precise p-1"
+                      title={recentPromptsOpen ? "Collapse" : "Expand"}
+                    >
+                      <ChevronDown size={12} className={`transition-transform duration-200 ${recentPromptsOpen ? "" : "-rotate-90"}`} />
+                    </button>
+                  </div>
                 }
               />
-              <CardBody>
-                {loading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <span className="font-ndot text-[24px] text-dim/30">···</span>
-                  </div>
-                ) : stats.recent_prompts.length > 0 ? (
-                  <div className="flex flex-col">
-                    {recentPrompts.map((p) => (
-                      <PromptRow key={p.id} prompt={p} onClick={() => navigate(`/library/${p.id}`)} />
-                    ))}
-                    {recentPrompts.length === 0 && (
-                      <span className="font-mono text-[11px] text-muted px-4 py-6">No recent prompts match search.</span>
-                    )}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<Clock size={20} className="text-dim" />}
-                    label="No prompts yet"
-                    action="Craft your first prompt to get started."
-                    cta="Craft Prompt"
-                    onCta={() => navigate("/craft")}
-                  />
-                )}
-              </CardBody>
+              {recentPromptsOpen && (
+                <CardBody>
+                  {loading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <span className="font-ndot text-[24px] text-dim/30">···</span>
+                    </div>
+                  ) : stats.recent_prompts.length > 0 ? (
+                    <div className="flex flex-col">
+                      {recentPrompts.map((p) => (
+                        <PromptRow key={p.id} prompt={p} onClick={() => navigate(`/library/${p.id}`)} />
+                      ))}
+                      {recentPrompts.length === 0 && (
+                        <span className="font-mono text-[11px] text-muted px-4 py-6">No recent prompts match search.</span>
+                      )}
+                    </div>
+                  ) : (
+                    <EmptyState
+                      icon={<Clock size={20} className="text-dim" />}
+                      label="No prompts yet"
+                      action="Craft your first prompt to get started."
+                      cta="Craft Prompt"
+                      onCta={() => navigate("/craft")}
+                    />
+                  )}
+                </CardBody>
+              )}
             </Card>
           </div>
 

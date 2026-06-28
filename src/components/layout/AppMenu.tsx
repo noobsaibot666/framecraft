@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, Info, MonitorCog, MoreHorizontal, Settings, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Check, Info, MonitorCog, MoreHorizontal, Settings, X, FolderPlus, Upload, Layers, Circle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import {
-  APP_MENU_ITEMS,
   type AppMenuItemId,
   SUPPORTED_CREATIVE_PROVIDERS,
   SUPPORTED_SYSTEM_PROVIDERS,
 } from "@/lib/appInfo";
+import { getActiveLibrarySelection } from "@/lib/libraryConfig";
 import {
   getPreferences,
   PREF_ASPECT_RATIOS,
@@ -204,24 +204,48 @@ function AboutModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function MenuGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="px-3 pt-2 pb-1 font-mono text-[8px] uppercase tracking-widest text-soft-white/35">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
 export function AppMenu() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<AppMenuItemId | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const librarySelection = getActiveLibrarySelection();
+  const isPortable = librarySelection.mode === "portable";
+  const libraryLabel = isPortable ? (librarySelection.path?.split("/").pop() ?? "Portable") : "Local App Data";
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     }
-
     window.addEventListener("pointerdown", onPointerDown);
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, []);
 
-  function openModal(id: AppMenuItemId) {
-    setOpen(false);
-    setModal(id);
-  }
+  function go(path: string) { setOpen(false); navigate(path); }
+  function openModal(id: AppMenuItemId) { setOpen(false); setModal(id); }
 
   return (
     <div ref={menuRef} className="relative">
@@ -245,20 +269,40 @@ export function AppMenu() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-10 z-40 w-56 rounded-card border border-white/14 bg-[#121212] p-1.5 shadow-2xl"
+          className="absolute right-0 top-10 z-40 w-64 rounded-card border border-white/14 bg-[#121212] py-1.5 shadow-2xl"
         >
-          {APP_MENU_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
-              onClick={() => openModal(item.id)}
-            >
-              {item.id === "preferences" ? <Settings size={14} /> : <Info size={14} />}
-              {item.label}
-            </button>
-          ))}
+          {/* Library group */}
+          <MenuGroup label="Library">
+            {/* Active library status chip */}
+            <div className="flex items-center gap-2.5 px-3 py-2 mx-1.5 mb-0.5 rounded-[5px]"
+              style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}>
+              <Circle size={6} className="shrink-0 fill-green-400/80 text-green-400/80" />
+              <div className="flex flex-col gap-0 min-w-0">
+                <span className="font-mono text-[9px] text-soft-white/80 truncate">{libraryLabel}</span>
+                <span className="font-mono text-[8px] text-soft-white/35 uppercase tracking-widest">
+                  {isPortable ? "Portable / Shared" : "Local"} · Connected
+                </span>
+              </div>
+            </div>
+            <MenuItem icon={<Layers size={12} />} label="Manage Libraries" onClick={() => go("/settings")} />
+          </MenuGroup>
+
+          <div className="my-1.5 mx-3 h-px bg-white/7" />
+
+          {/* File group */}
+          <MenuGroup label="File">
+            <MenuItem icon={<FolderPlus size={12} />} label="New Project" onClick={() => go("/projects/new")} />
+            <MenuItem icon={<Upload size={12} />} label="Import" onClick={() => go("/import")} />
+            <MenuItem icon={<Upload size={12} />} label="Batch Import" onClick={() => go("/import?batch=1")} />
+          </MenuGroup>
+
+          <div className="my-1.5 mx-3 h-px bg-white/7" />
+
+          {/* Preferences / About */}
+          <MenuGroup label="App">
+            <MenuItem icon={<Settings size={12} />} label="Preferences" onClick={() => openModal("preferences")} />
+            <MenuItem icon={<Info size={12} />} label="About Framecraft" onClick={() => openModal("about")} />
+          </MenuGroup>
         </div>
       )}
 

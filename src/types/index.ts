@@ -248,6 +248,7 @@ export interface Project {
 
 export interface ProjectFilters {
   status?: ProjectStatus;
+  excludeArchived?: boolean;
 }
 
 export interface CreativeDirection {

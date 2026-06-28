@@ -153,6 +153,8 @@ export async function getProjects(filters?: ProjectFilters): Promise<Project[]> 
     if (filters?.status) {
       values.push(filters.status);
       conditions.push(`p.status = $${values.length}`);
+    } else if (filters?.excludeArchived) {
+      conditions.push(`p.status != 'archived'`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -171,6 +173,7 @@ export async function getProjects(filters?: ProjectFilters): Promise<Project[]> 
 
   let list = [..._devStore];
   if (filters?.status) list = list.filter((p) => p.status === filters.status);
+  else if (filters?.excludeArchived) list = list.filter((p) => p.status !== "archived");
   return list;
 }
 
@@ -205,6 +208,7 @@ export async function searchProjects(query: string, filters?: ProjectFilters): P
     const values: unknown[] = [`%${q}%`];
 
     if (filters?.status) { values.push(filters.status); conditions.push(`p.status = $${values.length}`); }
+    else if (filters?.excludeArchived) { conditions.push(`p.status != 'archived'`); }
 
     const rows = (await db.select(
       `SELECT p.*,

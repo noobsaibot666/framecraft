@@ -379,8 +379,12 @@ export function ProjectLibrary() {
 
   const buildFilters = (): ProjectFilters => {
     const f: ProjectFilters = {};
-    if (view === "archived") f.status = "archived";
-    else if (statusFilter !== "all") f.status = statusFilter as ProjectStatus;
+    if (view === "archived") {
+      f.status = "archived";
+    } else {
+      f.excludeArchived = true;
+      if (statusFilter !== "all") f.status = statusFilter as ProjectStatus;
+    }
     return f;
   };
 

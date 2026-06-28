@@ -72,6 +72,9 @@ export function CampaignDetail() {
   const delivered = projects.filter((p) => p.status === "delivered").length;
   const active = projects.filter((p) => p.status === "active").length;
   const winnerTotal = projects.reduce((sum, p) => sum + (p.winner_count ?? 0), 0);
+  const promptTotal = projects.reduce((sum, p) => sum + (p.prompt_count ?? 0), 0);
+  const resultTotal = projects.reduce((sum, p) => sum + (p.result_count ?? 0), 0);
+  const winRate = promptTotal > 0 ? Math.round((winnerTotal / promptTotal) * 100) : 0;
 
   return (
     <PageContainer
@@ -125,12 +128,14 @@ export function CampaignDetail() {
         )}
 
         {/* Stats strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
           {[
-            { label: "PROJECTS", value: projects.length },
-            { label: "ACTIVE",   value: active },
+            { label: "PROJECTS",  value: projects.length },
+            { label: "ACTIVE",    value: active },
             { label: "DELIVERED", value: delivered },
-            { label: "WINNERS",  value: winnerTotal },
+            { label: "PROMPTS",   value: promptTotal },
+            { label: "RESULTS",   value: resultTotal },
+            { label: "WIN RATE",  value: winnerTotal > 0 ? `${winRate}%` : "—" },
           ].map((s) => (
             <div key={s.label} className="flex flex-col gap-1 p-4 rounded-sm"
               style={{ background: "rgba(255,255,255,0.04)", border: "var(--border-default)" }}>
@@ -175,14 +180,20 @@ export function CampaignDetail() {
                   <span className="font-sans text-[13px] font-semibold text-white truncate">{p.title}</span>
                   <span className="font-mono text-[10px] text-readable">{STATUS_LABEL[p.status]}</span>
                 </div>
-                <div className="flex items-center gap-5 shrink-0">
+                <div className="flex items-center gap-4 shrink-0">
                   <div className="flex flex-col items-end gap-0.5">
-                    <span className="font-mono text-[14px] text-white">{p.prompt_count ?? 0}</span>
-                    <span className="font-mono text-[9px] text-muted uppercase tracking-widest">prompts</span>
+                    <span className="font-mono text-[13px] text-white">{p.prompt_count ?? 0}</span>
+                    <span className="font-mono text-[8px] text-muted uppercase tracking-widest">prompts</span>
                   </div>
+                  {(p.result_count ?? 0) > 0 && (
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span className="font-mono text-[13px] text-white">{p.result_count}</span>
+                      <span className="font-mono text-[8px] text-muted uppercase tracking-widest">results</span>
+                    </div>
+                  )}
                   {(p.winner_count ?? 0) > 0 && (
                     <div className="flex items-center gap-1">
-                      <CheckCircle2 size={11} className="text-white/60" />
+                      <CheckCircle2 size={10} className="text-white/60" />
                       <span className="font-mono text-[11px] text-white">{p.winner_count}</span>
                     </div>
                   )}

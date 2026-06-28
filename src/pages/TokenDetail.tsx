@@ -12,6 +12,7 @@ import {
   type TokenCombo,
   type TokenStats,
 } from "@/lib/tokenDetail";
+import { getTopPatterns, type TopPattern } from "@/lib/tokenPatterns";
 import { toggleTokenFavorite } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import type { Token } from "@/types";
@@ -115,6 +116,7 @@ export function TokenDetail() {
   });
   const [prompts, setPrompts] = useState<TokenDetailPrompt[]>([]);
   const [combos, setCombos] = useState<TokenCombo[]>([]);
+  const [patterns, setPatterns] = useState<TopPattern[]>([]);
   const [loading, setLoading] = useState(true);
   const [favorite, setFavorite] = useState(false);
   const [togglingFav, setTogglingFav] = useState(false);
@@ -123,16 +125,18 @@ export function TokenDetail() {
     if (!id) return;
     (async () => {
       setLoading(true);
-      const [tok, s, p, c] = await Promise.all([
+      const [tok, s, p, c, pats] = await Promise.all([
         getTokenById(id),
         getTokenStats(id),
         getPromptsUsingToken(id),
         getTokenCombos(id),
+        getTopPatterns(6),
       ]);
       setToken(tok);
       setStats(s);
       setPrompts(p);
       setCombos(c);
+      setPatterns(pats);
       setFavorite(tok?.is_favorite ?? false);
       setLoading(false);
     })();
@@ -254,6 +258,29 @@ export function TokenDetail() {
               </div>
             )}
           </div>
+
+          {/* Top system patterns */}
+          {patterns.length > 0 && (
+            <div className="flex flex-col gap-3 p-5 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <span className="system-label text-soft-white">TOP PATTERNS</span>
+              <span className="font-mono text-[9px] text-dim/40">Highest-rated token pairs library-wide</span>
+              <div className="flex flex-col gap-1.5">
+                {patterns.map((pat, i) => (
+                  <div key={i} className="flex items-center gap-2 px-2 py-2 rounded-sm"
+                    style={{ border: "var(--border-dim)" }}>
+                    <span className="font-mono text-[10px] text-soft-white/80 flex-1 truncate">
+                      <span className="text-dim/60">{pat.token_a_text}</span>
+                      <span className="text-dim/30 mx-1">+</span>
+                      <span className="text-dim/60">{pat.token_b_text}</span>
+                    </span>
+                    <span className="font-mono text-[9px] text-amber shrink-0">{pat.avg_rating.toFixed(1)}★</span>
+                    <span className="font-mono text-[8px] text-dim/40 shrink-0">{pat.co_occurrence_count}×</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Token metadata */}
           <div className="flex flex-col gap-3 p-5 rounded-card"

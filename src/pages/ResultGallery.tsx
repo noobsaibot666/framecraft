@@ -41,6 +41,39 @@ function DimBars({ result }: { result: GalleryResult }) {
   );
 }
 
+// ─── Top Shot Card ────────────────────────────────────────────
+
+function TopShotCard({ result, onClick }: { result: GalleryResult; onClick: () => void }) {
+  const thumb = useImageDisplaySrc(result.thumbnail_path);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col gap-0 rounded-card overflow-hidden group transition-precise hover:border-amber/30"
+      style={{ border: "1px solid rgba(251,191,36,0.18)", background: "var(--surface-card)" }}
+    >
+      <div className="aspect-video bg-black/40 flex items-center justify-center overflow-hidden relative">
+        {thumb.src
+          ? <img src={thumb.src} alt="" className="w-full h-full object-cover" onError={thumb.onError} />
+          : <ImageOff size={18} className="text-dim/40" />
+        }
+        <div className="absolute top-2 right-2 font-mono text-[9px] text-amber font-medium px-1.5 py-0.5 rounded-sm"
+          style={{ background: "rgba(0,0,0,0.7)" }}>
+          {result.score_overall}/5
+        </div>
+        {result.is_winner && (
+          <div className="absolute top-2 left-2">
+            <Star size={10} className="text-amber fill-amber/60" />
+          </div>
+        )}
+      </div>
+      <div className="px-2.5 py-2">
+        <span className="font-sans text-[10px] font-medium text-white/70 truncate block text-left">{result.prompt_title}</span>
+      </div>
+    </button>
+  );
+}
+
 // ─── Card ─────────────────────────────────────────────────────
 
 function GalleryCard({
@@ -154,6 +187,7 @@ export function ResultGallery() {
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchWorking, setBatchWorking] = useState(false);
+  const [minScore, setMinScore] = useState<number>(0);
 
   const filter = (searchParams.get("filter") as GalleryFilter) ?? "all";
   const sort = (searchParams.get("sort") as GallerySort) ?? "newest";
@@ -203,6 +237,12 @@ export function ResultGallery() {
       setBatchWorking(false);
     }
   };
+
+  const displayResults = minScore > 0 ? results.filter((r) => r.score_overall >= minScore) : results;
+  const topShots = results
+    .filter((r) => r.score_overall >= 4)
+    .sort((a, b) => b.score_overall - a.score_overall)
+    .slice(0, 4);
 
   return (
     <PageContainer
@@ -275,7 +315,27 @@ export function ResultGallery() {
             ))}
           </select>
 
-          <span className="ml-auto font-mono text-[10px] text-dim/50">{results.length} result{results.length !== 1 ? "s" : ""}</span>
+          <div className="w-px h-4 bg-white/12" />
+
+          {/* Score filter */}
+          <div className="flex items-center gap-1">
+            {([0, 3, 4, 5] as const).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setMinScore(n)}
+                className={cn(
+                  "px-2 py-1 rounded-sm font-mono text-[9px] uppercase tracking-widest transition-precise",
+                  minScore === n ? "text-white bg-white/10" : "text-muted hover:text-white"
+                )}
+                style={{ border: minScore === n ? "var(--border-strong)" : "var(--border-dim)" }}
+              >
+                {n === 0 ? "Any ★" : `${n}+★`}
+              </button>
+            ))}
+          </div>
+
+          <span className="ml-auto font-mono text-[10px] text-dim/50">{displayResults.length} result{displayResults.length !== 1 ? "s" : ""}</span>
         </div>
 
         {/* Batch action bar */}
@@ -315,28 +375,50 @@ export function ResultGallery() {
           </div>
         )}
 
+        {/* Top Shots strip */}
+        {!loading && topShots.length > 0 && minScore === 0 && filter === "all" && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <Star size={10} className="text-amber fill-amber/40 shrink-0" />
+              <span className="system-label text-soft-white">TOP SHOTS</span>
+              <span className="font-mono text-[9px] text-dim/40">Score ≥ 4</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {topShots.map((r) => (
+                <TopShotCard key={r.id} result={r} onClick={() => navigate(`/results/view/${r.id}`)} />
+              ))}
+            </div>
+            <div className="h-px bg-white/6" />
+          </div>
+        )}
+
         {/* Grid */}
         {loading ? (
           <div className="flex items-center justify-center py-16">
             <span className="font-ndot text-[28px] text-dim/30">···</span>
           </div>
-        ) : results.length === 0 ? (
+        ) : displayResults.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <ImageOff size={24} className="text-dim/30" />
             <div className="flex flex-col items-center gap-1">
               <span className="font-sans text-[14px] text-readable">No results found</span>
               <span className="font-mono text-[11px] text-muted">
-                {filter !== "all" ? "Try a different filter, or " : ""}
+                {filter !== "all" || minScore > 0 ? "Try a different filter, or " : ""}
                 Add results from Prompt Detail pages.
               </span>
             </div>
-            {filter !== "all" && (
-              <Button variant="ghost" size="sm" onClick={() => setFilter("all")}>View All</Button>
-            )}
+            <div className="flex items-center gap-2">
+              {filter !== "all" && (
+                <Button variant="ghost" size="sm" onClick={() => setFilter("all")}>Clear Filter</Button>
+              )}
+              {minScore > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setMinScore(0)}>Clear Score</Button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-            {results.map((r) => (
+            {displayResults.map((r) => (
               <GalleryCard
                 key={r.id}
                 result={r}

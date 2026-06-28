@@ -1102,7 +1102,7 @@ fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 18] {
+fn migration_sql() -> [&'static str; 21] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1122,6 +1122,9 @@ fn migration_sql() -> [&'static str; 18] {
         include_str!("../migrations/016_creative_directions.sql"),
         include_str!("../migrations/017_shot_sequence.sql"),
         include_str!("../migrations/018_campaigns.sql"),
+        include_str!("../migrations/019_queue_pin.sql"),
+        include_str!("../migrations/020_recipe_use_count.sql"),
+        include_str!("../migrations/021_prompt_analysis_fields.sql"),
     ]
 }
 

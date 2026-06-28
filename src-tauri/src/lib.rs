@@ -129,6 +129,12 @@ pub fn run() {
             sql: include_str!("../migrations/020_recipe_use_count.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 21,
+            description: "prompt_analysis_fields",
+            sql: include_str!("../migrations/021_prompt_analysis_fields.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

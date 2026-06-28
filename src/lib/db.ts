@@ -66,6 +66,8 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     is_failed: Boolean(row.is_failed),
     failure_notes: row.failure_notes as string | undefined,
     notes: row.notes as string | undefined,
+    best_use: row.best_use as string | undefined,
+    risk_notes: row.risk_notes as string | undefined,
     version: (row.version as number) ?? 1,
     parent_id: row.parent_id as string | undefined,
     created_at: row.created_at as string,

@@ -94,6 +94,7 @@ export default function App() {
               <Route path="/tokens" element={routeElement(<TokenLibrary />)} />
               <Route path="/tokens/:id" element={routeElement(<TokenDetail />)} />
               <Route path="/projects" element={routeElement(<ProjectLibrary />)} />
+              <Route path="/projects/new" element={routeElement(<ProjectLibrary initialCreate />)} />
               <Route path="/projects/:id" element={routeElement(<ProjectWorkspace />)} />
               <Route path="/lineage/:promptId" element={routeElement(<LineageView />)} />
               <Route path="/compare" element={routeElement(<ComparisonLab />)} />

@@ -368,14 +368,14 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
 
 // ─── Main Page ────────────────────────────────────────────────
 
-export function ProjectLibrary() {
+export function ProjectLibrary({ initialCreate = false }: { initialCreate?: boolean }) {
   const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [view, setView] = useState<"active" | "archived">("active");
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(initialCreate);
 
   const buildFilters = (): ProjectFilters => {
     const f: ProjectFilters = {};

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Star, AlertTriangle, Check, X,
-  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload,
+  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload, Edit2,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -113,15 +113,14 @@ function ComparisonSlot({
       )}
       style={{ border: slot.isWinner ? "1px solid rgba(223,168,58,0.70)" : "var(--border-default)", background: "var(--surface-card)" }}
     >
+      {/* Source label (Phase 188) */}
+      <div className="flex items-center px-4 py-2.5" style={{ borderBottom: "1px solid rgba(56,183,200,0.18)", background: "rgba(56,183,200,0.06)" }}>
+        <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-cyan">{formatComparisonRole(slot.sourceRole)}</span>
+      </div>
+
       {/* Image */}
       <div className="relative w-full aspect-video bg-black/40 flex items-center justify-center overflow-hidden">
         <SafeResultImage src={r.thumbnail_path ?? r.file_path} alt="" className="w-full h-full object-cover" />
-
-        <div className="absolute top-2 left-2 px-2 py-1 rounded-sm bg-black/75 border border-white/15">
-          <span className="font-mono text-[9px] tracking-widest uppercase text-cyan">
-            {formatComparisonRole(slot.sourceRole)}
-          </span>
-        </div>
 
         {/* Winner / Rejected badges */}
         {slot.isWinner && (
@@ -262,6 +261,73 @@ function ComparisonSlot({
             {slot.isRejected ? "Rejected" : "Reject"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Dimension matrix (Phase 189) ────────────────────────────
+
+const DIMENSIONS: { key: keyof ComparisonResult; label: string }[] = [
+  { key: "score_realism",     label: "Realism" },
+  { key: "score_brand_fit",   label: "Brand Fit" },
+  { key: "score_composition", label: "Composition" },
+  { key: "score_lighting",    label: "Lighting" },
+];
+
+function DimensionMatrix({ slots }: { slots: (SlotState | null)[] }) {
+  const filled = slots.filter((s): s is SlotState => Boolean(s));
+  if (filled.length < 2) return null;
+
+  return (
+    <div className="flex flex-col gap-3 p-5 rounded-card"
+      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+      <span className="system-label">DIMENSION BREAKDOWN</span>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr>
+              <th className="font-mono text-[9px] tracking-widest uppercase text-dim pb-3 pr-4 w-28">Dimension</th>
+              {filled.map((s) => (
+                <th key={s.result.result_id}
+                  className={cn("font-mono text-[9px] tracking-widest uppercase pb-3 px-3 text-center", s.isWinner ? "text-amber" : "text-readable")}>
+                  {formatComparisonRole(s.sourceRole)}
+                  {s.isWinner && <span className="ml-1 text-amber">★</span>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {DIMENSIONS.map(({ key, label }) => {
+              const scores = filled.map((s) => s.result[key] as number);
+              const maxScore = Math.max(...scores);
+              return (
+                <tr key={key} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                  <td className="font-mono text-[10px] text-readable py-2.5 pr-4">{label}</td>
+                  {filled.map((s) => {
+                    const score = s.result[key] as number;
+                    const isTop = score === maxScore && maxScore > 0;
+                    return (
+                      <td key={s.result.result_id} className="py-2.5 px-3 text-center">
+                        <div className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm",
+                          isTop ? "text-cyan" : "text-dim/60")}
+                          style={isTop ? { border: "1px solid rgba(56,183,200,0.3)", background: "rgba(56,183,200,0.07)" } : {}}>
+                          <span className="font-mono text-[11px]">{score}</span>
+                          <div className="flex gap-0.5">
+                            {Array.from({ length: 5 }).map((_, j) => (
+                              <div key={j} className={cn("w-1 h-1 rounded-full",
+                                j < score ? (isTop ? "bg-cyan/70" : "bg-white/25") : "bg-white/8")} />
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -419,6 +485,10 @@ export function ComparisonLab() {
   // Sync feedback
   const [synced, setSynced] = useState(false);
   const [applyError, setApplyError] = useState("");
+
+  // Outcome edit (Phase 190)
+  const [editingOutcome, setEditingOutcome] = useState(false);
+  const [outcomeEditValue, setOutcomeEditValue] = useState("");
 
   // ── Load sessions ──────────────────────────────────────────
 
@@ -670,13 +740,31 @@ export function ComparisonLab() {
     }
   };
 
+  // ── Change comparison type (Phase 187) ───────────────────
+  const handleChangeType = async (newType: ComparisonType) => {
+    setComparisonType(newType);
+    if (activeSessionId) {
+      await updateSession(activeSessionId, { comparison_type: newType });
+      reloadSessions();
+    }
+  };
+
+  // ── Save edited outcome (Phase 190) ──────────────────────
+  const handleSaveOutcome = async () => {
+    if (!activeSessionId) return;
+    const trimmed = outcomeEditValue.trim();
+    await updateSession(activeSessionId, { outcome_summary: trimmed || undefined });
+    setOutcomeSummary(trimmed);
+    setEditingOutcome(false);
+    reloadSessions();
+  };
+
   // ── Derived ───────────────────────────────────────────────
 
   const filledSlots = slots.filter(Boolean).length;
   const selectedResultIds = new Set(slots.filter(Boolean).map((s) => s!.result.result_id));
   const displaySlots = layout === "2up" ? slots.slice(0, 2) : slots;
   const comparisonSummary = summarizeComparisonSlots(slots);
-  const comparisonDefinition = getComparisonDefinition(comparisonType);
   const slotRoles = getComparisonRoles(comparisonType, displaySlots.length);
 
   // ── Render ────────────────────────────────────────────────
@@ -812,20 +900,69 @@ export function ComparisonLab() {
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.25)", background: "rgba(56,183,200,0.035)" }}>
-          <div className="flex flex-col gap-1">
-            <span className="font-sans text-[15px] font-semibold text-white">{comparisonDefinition.label}</span>
-            <span className="font-mono text-[11px] text-readable">{comparisonDefinition.purpose}</span>
+        {/* Type toggle bar (Phase 187) */}
+        <div className="flex flex-col gap-2">
+          <span className="system-label">COMPARISON TYPE</span>
+          <div className="flex flex-wrap gap-2">
+            {COMPARISON_TYPES.map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                onClick={() => handleChangeType(type.id)}
+                className={cn(
+                  "flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-sm text-left transition-precise",
+                  comparisonType === type.id ? "bg-cyan/8 text-white" : "text-readable hover:text-white hover:bg-white/5"
+                )}
+                style={{ border: comparisonType === type.id ? "1px solid rgba(56,183,200,0.45)" : "var(--border-dim)" }}
+              >
+                <span className="font-mono text-[9px] tracking-widest uppercase">{type.label}</span>
+                <span className="font-mono text-[8px] text-readable leading-relaxed max-w-40">{type.purpose}</span>
+              </button>
+            ))}
           </div>
-          <span className="font-mono text-[10px] text-cyan tracking-widest uppercase">
-            Decide on cards, then apply once
-          </span>
         </div>
 
-        {outcomeSummary && (
+        {/* Outcome summary (Phase 190) */}
+        {(outcomeSummary || editingOutcome) && (
           <div className="flex flex-col gap-2 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.28)", background: "rgba(223,168,58,0.05)" }}>
-            <span className="font-mono text-[10px] tracking-widest uppercase text-amber">Saved outcome</span>
-            <p className="font-mono text-[11px] leading-relaxed text-soft-white">{outcomeSummary}</p>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] tracking-widest uppercase text-amber">Saved outcome</span>
+              {!editingOutcome && (
+                <button type="button" onClick={() => { setOutcomeEditValue(outcomeSummary); setEditingOutcome(true); }}
+                  className="font-mono text-[8px] tracking-widest uppercase text-amber/50 hover:text-amber px-2 py-0.5 rounded-sm transition-precise"
+                  style={{ border: "1px solid rgba(223,168,58,0.2)" }}>
+                  <Edit2 size={8} className="inline mr-1" />Edit
+                </button>
+              )}
+            </div>
+            {editingOutcome ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  autoFocus
+                  value={outcomeEditValue}
+                  onChange={(e) => setOutcomeEditValue(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveOutcome(); if (e.key === "Escape") setEditingOutcome(false); }}
+                  rows={4}
+                  className="w-full p-2 font-mono text-[11px] text-soft-white bg-black/30 rounded-sm resize-none focus:outline-none leading-relaxed"
+                  style={{ border: "1px solid rgba(223,168,58,0.3)" }}
+                />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={handleSaveOutcome}
+                    className="font-mono text-[9px] tracking-widest uppercase text-amber px-3 py-1.5 rounded-sm transition-precise"
+                    style={{ border: "1px solid rgba(223,168,58,0.4)", background: "rgba(223,168,58,0.08)" }}>
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setEditingOutcome(false)}
+                    className="font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-3 py-1.5 rounded-sm transition-precise"
+                    style={{ border: "var(--border-dim)" }}>
+                    Cancel
+                  </button>
+                  <span className="font-mono text-[9px] text-dim/30 ml-auto">⌘↩ save</span>
+                </div>
+              </div>
+            ) : (
+              <p className="font-mono text-[11px] leading-relaxed text-soft-white">{outcomeSummary}</p>
+            )}
           </div>
         )}
 
@@ -944,6 +1081,11 @@ export function ComparisonLab() {
               )
             )}
           </div>
+
+          {/* Dimension matrix (Phase 189) */}
+          {filledSlots >= 2 && (
+            <DimensionMatrix slots={slots} />
+          )}
 
           {/* No results hint */}
           {availableResults.length === 0 && filledSlots === 0 && (

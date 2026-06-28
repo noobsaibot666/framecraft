@@ -100,6 +100,8 @@ export interface CreatePromptInput {
   is_recipe?: boolean;
   failure_notes?: string;
   notes?: string;
+  best_use?: string;
+  risk_notes?: string;
   parent_id?: string;
   version?: number;
 }
@@ -155,8 +157,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
          avoidance_text, aspect_ratio, model_version, camera, lens, lighting,
          style_ref, parameters,
          tags, rating, ai_look_risk, reuse_potential, is_recipe, is_winner, is_failed,
-         failure_notes, notes, version, parent_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,0,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+         failure_notes, notes, best_use, risk_notes, version, parent_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,0,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
       [
         id,
         data.title,
@@ -181,6 +183,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.is_failed ? 1 : 0,
         data.failure_notes ?? null,
         data.notes ?? null,
+        data.best_use ?? null,
+        data.risk_notes ?? null,
         data.version ?? 1,
         data.parent_id ?? null,
         ts,
@@ -837,6 +841,21 @@ export async function getResultSummaryMap(): Promise<Record<string, { count: num
   }
   for (const id in map) map[id].avg_score = map[id].avg_score / map[id].count;
   return map;
+}
+
+export async function getResultCoverMap(): Promise<Record<string, string>> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT prompt_id, file_path
+       FROM results
+       WHERE file_path IS NOT NULL AND file_path != ''
+       GROUP BY prompt_id
+       HAVING created_at = MAX(created_at)`
+    )) as Record<string, unknown>[];
+    return Object.fromEntries(rows.map((r) => [r.prompt_id as string, r.file_path as string]));
+  }
+  return {};
 }
 
 export async function getRecentResults(limit = 10): Promise<(Result & { prompt_title: string })[]> {

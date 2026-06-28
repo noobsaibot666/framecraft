@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultSummaryMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { getResultSummaryMap, getResultCoverMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
 import { addToQueue } from "@/lib/queue";
 import { cn, formatDate } from "@/lib/utils";
@@ -95,9 +96,21 @@ function LibraryStat({ label, value, accent }: { label: string; value: string | 
   );
 }
 
-function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index }: {
+function PromptCardThumb({ src }: { src: string }) {
+  const { src: displaySrc } = useImageDisplaySrc(src);
+  if (!displaySrc) return null;
+  return (
+    <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
+      <img src={displaySrc} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
+      <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
+    </div>
+  );
+}
+
+function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
+  coverImage?: string;
   onCopy: (p: Prompt) => void;
   onDelete: (p: Prompt) => void;
   onQueue: (p: Prompt) => void;
@@ -115,6 +128,9 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, onRate, 
       style={{ border: selected ? "1px solid rgba(56,183,200,0.70)" : "var(--border-default)", background: selected ? "rgba(56,183,200,0.08)" : "var(--surface-card)" }}
       onClick={() => { if (!batchMode) navigate(`/library/${prompt.id}`); }}
     >
+      {/* Cover thumbnail */}
+      {coverImage && <PromptCardThumb src={coverImage} />}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-3 min-w-0">
         {batchMode && (
@@ -281,6 +297,7 @@ export function PromptLibrary() {
   const [searchVal, setSearchVal] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Prompt | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
+  const [coverMap, setCoverMap] = useState<Record<string, string>>({});
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
@@ -293,6 +310,7 @@ export function PromptLibrary() {
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
+  useEffect(() => { getResultCoverMap().then(setCoverMap); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly, originalsOnly]);
 
   const handleSearch = useCallback(
@@ -761,6 +779,7 @@ export function PromptLibrary() {
                   key={p.id}
                   prompt={p}
                   resultSummary={resultMap[p.id]}
+                  coverImage={coverMap[p.id]}
                   onCopy={handleCopy}
                   onDelete={handleDelete}
                   onQueue={handleQueue}

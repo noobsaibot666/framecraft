@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getSREFByCode, createSREF } from "@/lib/db";
+import { getProjects, addPromptToProject } from "@/lib/projects";
 import { findSimilarPrompts } from "@/lib/memoryEngine";
 import {
   analyzeImportedPromptLearning,
@@ -14,7 +15,7 @@ import {
   type ImportLearningSignal,
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
-import type { Provider } from "@/types";
+import type { Provider, Project } from "@/types";
 
 // ─── Parameter Detection ──────────────────────────────────────
 
@@ -315,6 +316,15 @@ export function ManualImport() {
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [bestUse, setBestUse] = useState("");
+  const [riskNotes, setRiskNotes] = useState("");
+  const [aiLookNotes, setAiLookNotes] = useState("");
+  const [linkedProjectId, setLinkedProjectId] = useState("");
+  const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
+  const [importType, setImportType] = useState<"text" | "nano_banana_json">("text");
+  const [nbJson, setNbJson] = useState("");
+
+  useEffect(() => { getProjects({ excludeArchived: true }).then(setAvailableProjects).catch(() => {}); }, []);
 
   // Source URL preview
   const mjSource = useMemo(() => parseMJSourceUrl(source), [source]);
@@ -393,8 +403,14 @@ export function ManualImport() {
         parameters: Object.keys(extraParams).length ? extraParams : undefined,
         tags: uniqueTags([...tags, ...learned.tags]),
         notes,
+        best_use: bestUse.trim() || undefined,
+        risk_notes: riskNotes.trim() || undefined,
+        failure_notes: aiLookNotes.trim() || undefined,
         is_recipe: asRecipe,
       });
+      if (linkedProjectId) {
+        addPromptToProject(linkedProjectId, id).catch(() => {});
+      }
       navigate(`/library/${id}`);
     } finally {
       setSaving(false);
@@ -479,20 +495,61 @@ export function ManualImport() {
               </div>
             )}
 
+            {/* Import type toggle */}
+            <div className="flex items-center gap-2">
+              {(["text", "nano_banana_json"] as const).map((t) => (
+                <button key={t} type="button"
+                  onClick={() => setImportType(t)}
+                  className={cn("font-mono text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm transition-precise",
+                    importType === t ? "text-white" : "text-readable hover:text-cyan")}
+                  style={{ border: importType === t ? "var(--border-strong)" : "var(--border-dim)", background: importType === t ? "rgba(255,255,255,0.05)" : "transparent" }}>
+                  {t === "text" ? "Prompt Text" : "Nano Banana JSON"}
+                </button>
+              ))}
+            </div>
+
             {/* Paste area */}
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="system-label">PASTE PROMPT</span>
-                {raw.trim() && (
-                  <Button variant="ghost" size="sm" onClick={handleAnalyze}>
-                    {analyzed ? "Re-analyze" : "Detect Parameters"}
+            {importType === "text" ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="system-label">PASTE PROMPT</span>
+                  {raw.trim() && (
+                    <Button variant="ghost" size="sm" onClick={handleAnalyze}>
+                      {analyzed ? "Re-analyze" : "Detect Parameters"}
+                    </Button>
+                  )}
+                </div>
+                <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setLearning(null); setSuggestedTags([]); setDuplicates([]); }}
+                  placeholder="Paste your full prompt here, including any --parameters flags…"
+                  rows={8} mono />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="system-label">PASTE NANO BANANA JSON</span>
+                  <Button variant="ghost" size="sm" disabled={!nbJson.trim()} onClick={() => {
+                    try {
+                      const obj = JSON.parse(nbJson) as Record<string, unknown>;
+                      const promptText = (obj.prompt ?? obj.prompt_text ?? obj.text ?? "") as string;
+                      const ar = (obj.aspect_ratio ?? obj.ar ?? "") as string;
+                      if (promptText) { setRaw(promptText); if (ar) setDetected((d) => ({ ...d, aspect_ratio: ar })); setProvider("nano_banana"); setAnalyzed(true); }
+                    } catch { /* invalid JSON */ }
+                  }}>
+                    Extract Prompt
                   </Button>
+                </div>
+                <Textarea value={nbJson} onChange={(e) => setNbJson(e.target.value)}
+                  placeholder={`{\n  "prompt": "your prompt here",\n  "aspect_ratio": "1:1",\n  "model": "nano-banana-v1"\n}`}
+                  rows={8} mono />
+                {raw.trim() && importType === "nano_banana_json" && (
+                  <div className="flex flex-col gap-1 px-3 py-2 rounded-sm"
+                    style={{ border: "1px solid rgba(246,173,85,0.2)", background: "rgba(246,173,85,0.04)" }}>
+                    <span className="font-mono text-[8px] uppercase tracking-widest text-amber/60">Extracted prompt</span>
+                    <span className="font-mono text-[10px] text-soft-white/80 line-clamp-3">{raw}</span>
+                  </div>
                 )}
               </div>
-              <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setLearning(null); setSuggestedTags([]); setDuplicates([]); }}
-                placeholder="Paste your full prompt here, including any --parameters flags…"
-                rows={8} mono />
-            </div>
+            )}
 
             {/* Detected parameters */}
             {analyzed && paramCount > 0 && (
@@ -652,6 +709,51 @@ export function ManualImport() {
                 )}
               </div>
               <TagInput tags={tags} onChange={setTags} />
+
+              {/* Best use */}
+              <div className="flex flex-col gap-1.5">
+                <label className="system-label">BEST USE</label>
+                <input value={bestUse} onChange={(e) => setBestUse(e.target.value)}
+                  placeholder="Hero banner, social ad, product shot…"
+                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+              </div>
+
+              {/* Risk notes */}
+              <div className="flex flex-col gap-1.5">
+                <label className="system-label">RISK NOTES</label>
+                <input value={riskNotes} onChange={(e) => setRiskNotes(e.target.value)}
+                  placeholder="Brand, legal, or production constraints…"
+                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+              </div>
+
+              {/* AI-look notes */}
+              <div className="flex flex-col gap-1.5">
+                <label className="system-label">AI-LOOK NOTES</label>
+                <input value={aiLookNotes} onChange={(e) => setAiLookNotes(e.target.value)}
+                  placeholder="Known AI-look issues with this prompt…"
+                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+              </div>
+
+              {/* Link to project */}
+              {availableProjects.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="system-label">LINK TO PROJECT</label>
+                  <select
+                    value={linkedProjectId}
+                    onChange={(e) => setLinkedProjectId(e.target.value)}
+                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                    style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+                  >
+                    <option value="">None</option>
+                    {availableProjects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {error && (

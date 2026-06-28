@@ -17,12 +17,13 @@ import { buildRecipeDraft, getRecipeSuggestions, type RecipeSuggestion } from "@
 import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
-import { analyzePromptDraft, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
+import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
 import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import { useShortcut } from "@/lib/shortcuts";
+import { toast } from "@/lib/toast";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
@@ -584,6 +585,8 @@ export function CraftPrompt() {
   const [advice, setAdvice] = useState<PromptAdvice>(EMPTY_ADVICE);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceDismissed, setAdviceDismissed] = useState(false);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
 
   useEffect(() => {
@@ -770,6 +773,22 @@ export function CraftPrompt() {
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assembled]);
+
+  const handleSuggestTags = async () => {
+    const check = validatePromptForAnalysis(fields.prompt_text);
+    if (!check.valid) { toast.error(check.message ?? "Prompt too short to suggest tags"); return; }
+    setSuggestingTags(true);
+    setTagSuggestions([]);
+    try {
+      const result = await generateTagSuggestions({ promptText: fields.prompt_text, existingTags: fields.tags });
+      setTagSuggestions(result.tags);
+      if (!result.tags.length) toast.error("No new tags to suggest — try a longer prompt");
+    } catch {
+      toast.error("Tag suggestion failed — check your Anthropic API key");
+    } finally {
+      setSuggestingTags(false);
+    }
+  };
 
   const fullCopyText = includeAvoidance && fields.avoidance_text
     ? `${assembled}\n\n${fields.avoidance_text}`
@@ -1294,7 +1313,26 @@ export function CraftPrompt() {
           <div>
             <SectionHeader label="META" />
             <div className="flex flex-col gap-3">
-              <TagInput tags={fields.tags} onChange={(t) => setF("tags", t)} />
+              <TagInput tags={fields.tags} onChange={(t) => { setF("tags", t); setTagSuggestions([]); }} />
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button type="button"
+                  onClick={handleSuggestTags}
+                  disabled={suggestingTags || fields.prompt_text.trim().length < 20}
+                  className="flex items-center gap-1.5 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white disabled:opacity-30 transition-precise"
+                  style={{ border: "var(--border-dim)" }}>
+                  <Wand2 size={8} />{suggestingTags ? "Suggesting…" : "Suggest Tags"}
+                </button>
+                {tagSuggestions.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-cyan/80 transition-precise"
+                    style={{ border: "1px solid rgba(0,229,255,0.25)" }}>
+                    <button type="button" onClick={() => { setF("tags", [...fields.tags, tag]); setTagSuggestions((p) => p.filter((t) => t !== tag)); }}
+                      className="hover:text-cyan" title="Accept tag">+</button>
+                    {tag}
+                    <button type="button" onClick={() => setTagSuggestions((p) => p.filter((t) => t !== tag))}
+                      className="text-dim/40 hover:text-red" title="Dismiss">×</button>
+                  </span>
+                ))}
+              </div>
               <Textarea
                 value={fields.notes}
                 onChange={(e) => setF("notes", e.target.value)}

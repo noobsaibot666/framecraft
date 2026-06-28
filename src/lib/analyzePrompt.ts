@@ -122,6 +122,68 @@ export async function generatePromptVariations(opts: { promptText: string }): Pr
   return parseVariations(rawText);
 }
 
+// ─── Tag Suggestions ─────────────────────────────────────────
+
+export interface TagSuggestions {
+  tags: string[];
+}
+
+const TAG_SUGGEST_SYSTEM = `You are an expert AI image prompt engineer.
+Given a draft prompt and any existing tags, suggest 3-5 short new tags describing the prompt's category, style, subject, or mood.
+Tags should be 1-2 words, lowercase, no punctuation.
+Return ONLY a valid JSON object:
+{
+  "tags": ["tag1", "tag2", "tag3"]
+}
+Return only the JSON — no markdown fences, no preamble.`;
+
+export async function generateTagSuggestions(opts: {
+  promptText: string;
+  existingTags?: string[];
+}): Promise<TagSuggestions> {
+  if (!isTauri) return { tags: [] };
+
+  const apiKey = getApiKey("anthropic");
+  requireValidApiKey("anthropic", apiKey);
+
+  const context = opts.existingTags?.length
+    ? `Existing tags (do not repeat): ${opts.existingTags.join(", ")}\n`
+    : "";
+
+  const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
+    "anthropic",
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: HAIKU_MODEL,
+        max_tokens: 256,
+        system: TAG_SUGGEST_SYSTEM,
+        messages: [{ role: "user", content: `${context}Draft prompt:\n${opts.promptText.trim()}` }],
+      }),
+    }
+  );
+
+  const rawText = data.content.find((c) => c.type === "text")?.text ?? "";
+  try {
+    const json = JSON.parse(rawText.trim()) as Partial<TagSuggestions>;
+    const existing = new Set(opts.existingTags ?? []);
+    return {
+      tags: Array.isArray(json.tags)
+        ? json.tags.slice(0, 5).map(String).map((t) => t.toLowerCase().trim()).filter((t) => t && !existing.has(t))
+        : [],
+    };
+  } catch {
+    return { tags: [] };
+  }
+}
+
 // ─── Prompt Analysis ─────────────────────────────────────────
 
 export async function analyzePromptDraft(opts: {

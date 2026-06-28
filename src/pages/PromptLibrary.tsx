@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff, CheckSquare, X } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -417,6 +417,33 @@ export function PromptLibrary() {
     }
   }, [selectedIds, filteredAndSorted, resultMap]);
 
+  const handleBatchExportCSV = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const currentPrompts = filteredAndSorted(resultMap);
+    const selected = currentPrompts.filter((p) => selectedIds.has(p.id));
+    const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const headers = ["title", "provider", "category", "prompt_text", "tags", "rating", "is_winner", "created_at"];
+    const rows = selected.map((p) => [
+      esc(p.title),
+      esc(p.provider),
+      esc(p.category ?? ""),
+      esc(p.prompt_text),
+      esc((p.tags ?? []).join("; ")),
+      String(p.rating),
+      p.is_winner ? "1" : "0",
+      esc(p.created_at),
+    ].join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `framecraft-prompts.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.info(`${selected.length} prompt${selected.length !== 1 ? "s" : ""} exported as CSV`);
+  }, [selectedIds, filteredAndSorted, resultMap]);
+
   const handleBatchDelete = useCallback(async () => {
     if (selectedIds.size === 0 || batchWorking) return;
     if (!window.confirm(`Delete ${selectedIds.size} prompt${selectedIds.size !== 1 ? "s" : ""} permanently?`)) return;
@@ -586,6 +613,12 @@ export function PromptLibrary() {
             className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-white disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
             style={{ border: "var(--border-dim)" }}>
             <Copy size={9} className="inline mr-1" /> Copy Text
+          </button>
+          <button type="button" onClick={handleBatchExportCSV}
+            disabled={selectedIds.size === 0}
+            className="font-mono text-[9px] tracking-widest uppercase text-readable hover:text-white disabled:opacity-40 transition-precise px-2 py-1 rounded-sm"
+            style={{ border: "var(--border-dim)" }}>
+            <Download size={9} className="inline mr-1" /> CSV
           </button>
           <button type="button" onClick={handleBatchDelete}
             disabled={selectedIds.size === 0 || batchWorking}

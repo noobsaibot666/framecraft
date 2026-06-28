@@ -189,6 +189,14 @@ export function GenerationQueue() {
     setTimeout(() => setCopied(false), 1500);
   };
 
+  const sentItems = items.filter((item) => item.status === "sent");
+
+  const handleMarkAllSentDone = async () => {
+    if (sentItems.length === 0) return;
+    for (const item of sentItems) await updateQueueStatus(item.id, "done");
+    await refresh();
+  };
+
   const withPromptData = (item: QueueItem): QueueItem => {
     const prompt = promptMap.get(item.prompt_id);
     return {
@@ -263,6 +271,9 @@ export function GenerationQueue() {
           </Button>
           <Button variant="ghost" size="md" onClick={copyAllPending} disabled={pending.length === 0}>
             <Copy size={11} /> {copied ? "Copied" : "Copy Pending"}
+          </Button>
+          <Button variant="ghost" size="md" onClick={handleMarkAllSentDone} disabled={sentItems.length === 0}>
+            <Check size={11} /> Mark Sent Done {sentItems.length > 0 ? `(${sentItems.length})` : ""}
           </Button>
           <Button variant="ghost" size="md" onClick={async () => { await clearDone(); await refresh(); }}>
             Clear Completed

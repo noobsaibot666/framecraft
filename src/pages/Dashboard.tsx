@@ -8,7 +8,7 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { getRecentResults, getRecentWins, getResultStats, getTopTags, getPromptsWithoutResultsCount } from "@/lib/db";
+import { getRecentResults, getRecentWins, getResultStats, getTopTags, getPromptsWithoutResultsCount, getProviderStats } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
@@ -264,6 +264,7 @@ export function Dashboard() {
   const [resultStats, setResultStats] = useState<{ total: number; winners: number }>({ total: 0, winners: 0 });
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([]);
   const [promptsWithoutResults, setPromptsWithoutResults] = useState(0);
+  const [providerStats, setProviderStats] = useState<{ provider: string; total: number; winners: number; win_rate: number }[]>([]);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
@@ -274,6 +275,7 @@ export function Dashboard() {
   useEffect(() => { getResultStats().then(setResultStats); }, []);
   useEffect(() => { getTopTags(12).then(setTopTags); }, []);
   useEffect(() => { getPromptsWithoutResultsCount().then(setPromptsWithoutResults); }, []);
+  useEffect(() => { getProviderStats().then(setProviderStats); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
@@ -405,6 +407,47 @@ export function Dashboard() {
                 >
                   {tag}
                   <span className="text-dim/40 text-[8px]">{count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Provider performance */}
+        {providerStats.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="system-label">PROVIDER PERFORMANCE</span>
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="font-mono text-[8px] text-dim/40 uppercase tracking-widest">WIN RATE BY PROVIDER</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2">
+              {providerStats.map(({ provider, total, winners, win_rate }) => (
+                <button
+                  key={provider}
+                  type="button"
+                  onClick={() => navigate(`/library?provider=${encodeURIComponent(provider)}`)}
+                  className="flex flex-col gap-2 p-3 rounded-card text-left transition-precise hover:bg-white/4 group"
+                  style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+                >
+                  <ProviderBadge provider={provider as import("@/types").Provider} />
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-mono text-[9px] text-dim/50 uppercase tracking-widest">WIN RATE</span>
+                      <span className="font-mono text-[11px] font-medium text-amber">{win_rate}%</span>
+                    </div>
+                    {/* progress bar */}
+                    <div className="h-0.5 rounded-full w-full" style={{ background: "rgba(255,255,255,0.06)" }}>
+                      <div
+                        className="h-0.5 rounded-full bg-amber/60 transition-all"
+                        style={{ width: `${win_rate}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <span className="font-mono text-[8px] text-dim/40">{total} prompts</span>
+                      <span className="font-mono text-[8px] text-dim/40">{winners} wins</span>
+                    </div>
+                  </div>
                 </button>
               ))}
             </div>

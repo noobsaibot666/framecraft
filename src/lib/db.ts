@@ -911,6 +911,35 @@ export async function getResultStats(): Promise<{ total: number; winners: number
   return { total: 0, winners: 0 };
 }
 
+export async function getProviderStats(): Promise<{ provider: string; total: number; winners: number; win_rate: number }[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT p.provider,
+              COUNT(DISTINCT p.id) as total,
+              SUM(CASE WHEN r.is_winner = 1 THEN 1 ELSE 0 END) as winners,
+              COUNT(r.id) as result_count
+       FROM prompts p
+       LEFT JOIN results r ON r.prompt_id = p.id
+       WHERE p.provider IS NOT NULL AND p.provider != ''
+       GROUP BY p.provider
+       ORDER BY total DESC`
+    )) as Record<string, unknown>[];
+    return rows.map((r) => {
+      const total = (r.total as number) ?? 0;
+      const winners = (r.winners as number) ?? 0;
+      const result_count = (r.result_count as number) ?? 0;
+      return {
+        provider: r.provider as string,
+        total,
+        winners,
+        win_rate: result_count > 0 ? Math.round((winners / result_count) * 100) : 0,
+      };
+    });
+  }
+  return [];
+}
+
 export async function getChildPrompts(parentId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number }[]> {
   if (isTauri) {
     const db = await getDb();

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Copy, Search, Star, Zap, Tag } from "lucide-react";
+import { Copy, Download, Search, Star, Zap, Tag } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getAllTokens, searchTokens, getTokenCategories, toggleTokenFavorite } from "@/lib/db";
@@ -139,14 +139,43 @@ export function TokenLibrary() {
   const favorites = tokens.filter((t) => t.is_favorite).length;
   const highQuality = tokens.filter((t) => (t.quality_score ?? 0) > 0.5).length;
 
+  const handleExportCSV = () => {
+    if (tokens.length === 0) return;
+    const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const headers = ["text", "category", "quality_score", "use_count", "avg_rating", "win_appearances", "is_favorite", "is_builtin"];
+    const rows = tokens.map((t) => [
+      esc(t.text),
+      esc(t.category_name ?? ""),
+      String((t.quality_score ?? 0).toFixed(3)),
+      String(t.use_count ?? 0),
+      String((t.avg_rating ?? 0).toFixed(2)),
+      String(t.win_appearances ?? 0),
+      t.is_favorite ? "1" : "0",
+      t.is_builtin ? "1" : "0",
+    ].join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "framecraft-tokens.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <PageContainer
       title="Token Library"
       subtitle={`${total} TOKENS · ${highQuality} HIGH QUALITY · ${favorites} FAVORITES`}
       action={
-        <Button variant="primary" size="md" onClick={() => navigate("/settings#tokens")}>
-          <Tag size={11} /> Manage
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="md" onClick={handleExportCSV} disabled={tokens.length === 0}>
+            <Download size={11} /> CSV
+          </Button>
+          <Button variant="primary" size="md" onClick={() => navigate("/settings#tokens")}>
+            <Tag size={11} /> Manage
+          </Button>
+        </div>
       }
     >
       <div className="flex flex-col gap-6">

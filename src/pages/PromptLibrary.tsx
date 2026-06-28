@@ -149,6 +149,12 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, onRate, 
       {/* Badges */}
       <div className="flex flex-wrap items-center gap-1.5">
         <ProviderBadge provider={prompt.provider} />
+        {prompt.parent_id && (
+          <span className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-dim/50"
+            style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
+            copy
+          </span>
+        )}
         {prompt.category && <Badge variant="category">{prompt.category}</Badge>}
         {prompt.aspect_ratio && <Badge variant="default">{prompt.aspect_ratio}</Badge>}
         {prompt.tags?.slice(0, 2).map((tag) => (

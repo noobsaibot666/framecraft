@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, ChevronsUp, Copy, ExternalLink, GripVertical, Pin, Plus, Search, SkipForward, Upload, X } from "lucide-react";
+import { Check, ChevronsUp, Copy, ExternalLink, GripVertical, Pin, Plus, RotateCcw, Search, SkipForward, Upload, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { ProviderBadge } from "@/components/ui/Badge";
@@ -149,9 +149,15 @@ function QueueCard({
         <button type="button" onClick={() => onStatus("done")} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Mark done">
           <Check size={12} />
         </button>
-        <button type="button" onClick={() => onStatus("skipped")} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Skip">
-          <SkipForward size={12} />
-        </button>
+        {item.status === "failed" ? (
+          <button type="button" onClick={() => onStatus("pending")} className="p-2 rounded-sm text-red/60 hover:text-cyan transition-precise" title="Retry — reset to pending">
+            <RotateCcw size={12} />
+          </button>
+        ) : (
+          <button type="button" onClick={() => onStatus("skipped")} className="p-2 rounded-sm text-readable hover:text-cyan transition-precise" title="Skip">
+            <SkipForward size={12} />
+          </button>
+        )}
       </div>
     </div>
   );

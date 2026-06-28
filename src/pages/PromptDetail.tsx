@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
   Layers, ListPlus, Shuffle, X,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -254,6 +254,37 @@ export function PromptDetail() {
     toast.info(`${results.length} result${results.length !== 1 ? "s" : ""} exported`);
   };
 
+  const handleCopyAsJson = async () => {
+    if (!prompt) return;
+    const data = {
+      id: prompt.id,
+      title: prompt.title,
+      provider: prompt.provider,
+      category: prompt.category,
+      use_case: prompt.use_case,
+      prompt_text: prompt.prompt_text,
+      avoidance_text: prompt.avoidance_text,
+      aspect_ratio: prompt.aspect_ratio,
+      model_version: prompt.model_version,
+      camera: prompt.camera,
+      lens: prompt.lens,
+      lighting: prompt.lighting,
+      tags: prompt.tags,
+      rating: prompt.rating,
+      is_winner: prompt.is_winner,
+      notes: prompt.notes,
+      version: prompt.version,
+      parent_id: prompt.parent_id,
+      created_at: prompt.created_at,
+    };
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+      toast.info("Copied as JSON");
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
+
   const handleGenerateVariations = async () => {
     if (!prompt) return;
     const check = validatePromptForAnalysis(prompt.prompt_text);
@@ -343,6 +374,9 @@ export function PromptDetail() {
           </Button>
           <Button variant="ghost" size="sm" onClick={handleDuplicate}>
             <CopyPlus size={11} /> Duplicate
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleCopyAsJson}>
+            <Braces size={11} /> JSON
           </Button>
           <Button variant="ghost" size="sm" onClick={handleGenerateVariations} disabled={variationsLoading}>
             <Shuffle size={11} /> Variations

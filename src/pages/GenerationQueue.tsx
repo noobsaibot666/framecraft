@@ -59,6 +59,7 @@ function QueueCard({
   item,
   prompt,
   isFirst,
+  position,
   onCopy,
   onStatus,
   onImport,
@@ -68,6 +69,7 @@ function QueueCard({
   item: QueueItem;
   prompt?: Prompt;
   isFirst: boolean;
+  position: number;
   onCopy: () => void;
   onStatus: (status: QueueStatus) => void;
   onImport: () => void;
@@ -83,15 +85,18 @@ function QueueCard({
       style={{ ...style, border: "var(--border-default)", background: "var(--surface-card)" }}
       className="group grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card"
     >
-      <button
-        type="button"
-        className="text-muted hover:text-cyan transition-precise cursor-grab active:cursor-grabbing pt-1"
-        {...attributes}
-        {...listeners}
-        aria-label="Drag queue item"
-      >
-        <GripVertical size={14} />
-      </button>
+      <div className="flex flex-col items-center gap-1.5 pt-0.5">
+        <span className="font-mono text-[9px] text-dim/40 tabular-nums leading-none">#{position}</span>
+        <button
+          type="button"
+          className="text-muted hover:text-cyan transition-precise cursor-grab active:cursor-grabbing"
+          {...attributes}
+          {...listeners}
+          aria-label="Drag queue item"
+        >
+          <GripVertical size={14} />
+        </button>
+      </div>
 
       <div className="flex flex-col gap-2 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
@@ -384,6 +389,7 @@ export function GenerationQueue() {
                   item={item}
                   prompt={promptMap.get(item.prompt_id)}
                   isFirst={idx === 0}
+                  position={items.findIndex((i) => i.id === item.id) + 1}
                   onCopy={async () => {
                     await navigator.clipboard.writeText(promptMap.get(item.prompt_id)?.prompt_text ?? item.prompt_text ?? "");
                     setCopied(true);

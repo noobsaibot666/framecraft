@@ -281,10 +281,11 @@ export function PromptLibrary() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [tagFilter, setTagFilter] = useState<string>("");
   const [noResultsOnly, setNoResultsOnly] = useState(false);
+  const [originalsOnly, setOriginalsOnly] = useState(false);
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly, originalsOnly]);
 
   const handleSearch = useCallback(
     (q: string) => {
@@ -304,6 +305,7 @@ export function PromptLibrary() {
     setSortBy("newest");
     setTagFilter("");
     setNoResultsOnly(false);
+    setOriginalsOnly(false);
   }, [handleSearch, setFilters, setSortBy]);
 
   const handleCopy = useCallback(async (prompt: Prompt) => {
@@ -491,8 +493,11 @@ export function PromptLibrary() {
   const noResultsFiltered = noResultsOnly
     ? tagFilteredPrompts.filter((p) => !resultMap[p.id] || resultMap[p.id].count === 0)
     : tagFilteredPrompts;
-  const prompts = noResultsFiltered.slice(0, visibleCount);
-  const hasMoreVisible = visibleCount < noResultsFiltered.length;
+  const originalsFiltered = originalsOnly
+    ? noResultsFiltered.filter((p) => !p.parent_id)
+    : noResultsFiltered;
+  const prompts = originalsFiltered.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < originalsFiltered.length;
   const metrics = getPromptLibraryMetrics(allPrompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
@@ -564,7 +569,7 @@ export function PromptLibrary() {
         </div>
 
         {/* Clear All Filters */}
-        {(searchVal || filters.provider || filters.category || filters.minRating != null || filters.maxAiRisk != null || statusFilter || tagFilter || noResultsOnly || sortBy !== "newest") && (
+        {(searchVal || filters.provider || filters.category || filters.minRating != null || filters.maxAiRisk != null || statusFilter || tagFilter || noResultsOnly || originalsOnly || sortBy !== "newest") && (
           <div className="flex justify-end">
             <button type="button" onClick={handleClearAllFilters}
               className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
@@ -575,8 +580,14 @@ export function PromptLibrary() {
         )}
 
         {/* Tag filter chips */}
-        {(uniqueTags.length > 0 || noResultsOnly) && (
+        {(uniqueTags.length > 0 || noResultsOnly || originalsOnly) && (
           <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => setOriginalsOnly(!originalsOnly)}
+              className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+                originalsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
+              style={{ border: originalsOnly ? "1px solid rgba(255,255,255,0.30)" : "var(--border-dim)" }}>
+              Originals
+            </button>
             <button type="button" onClick={() => setNoResultsOnly(!noResultsOnly)}
               className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
                 noResultsOnly ? "text-white" : "text-dim/60 hover:text-muted")}

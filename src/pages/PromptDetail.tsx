@@ -10,7 +10,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary } from "@/lib/db";
+import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary, getChildPrompts } from "@/lib/db";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
 import { getPromptVersions, type VersionNode } from "@/lib/lineage";
@@ -95,6 +95,7 @@ export function PromptDetail() {
   const [notesValue, setNotesValue] = useState("");
   const [editingFailureNotes, setEditingFailureNotes] = useState(false);
   const [failureNotesValue, setFailureNotesValue] = useState("");
+  const [childPrompts, setChildPrompts] = useState<{ id: string; title: string; is_winner: boolean; rating: number }[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -104,6 +105,7 @@ export function PromptDetail() {
     });
     getResultsForPrompt(id).then(setResults);
     getPromptVersions(id).then(setVersions).catch(() => {});
+    getChildPrompts(id).then(setChildPrompts).catch(() => {});
   }, [id, getById]);
 
   useShortcut("e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
@@ -821,6 +823,30 @@ export function PromptDetail() {
               </div>
             );
           })()}
+
+          {/* Variations */}
+          {childPrompts.length > 0 && (
+            <div className="flex flex-col gap-3 p-4 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <span className="system-label text-soft-white">VARIATIONS ({childPrompts.length})</span>
+              <div className="flex flex-col gap-1.5">
+                {childPrompts.map((child) => (
+                  <button key={child.id} type="button"
+                    onClick={() => navigate(`/library/${child.id}`)}
+                    className="flex items-center gap-2 text-left px-2 py-2 rounded-sm hover:bg-white/4 transition-precise group"
+                    style={{ border: "var(--border-dim)" }}>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-[10px] text-soft-white/80 truncate block">{child.title}</span>
+                      {child.rating > 0 && (
+                        <span className="font-mono text-[8px] text-dim/40">{"★".repeat(child.rating)}</span>
+                      )}
+                    </div>
+                    {child.is_winner && <span className="font-mono text-[8px] text-amber shrink-0">★</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recommendations */}
           <div

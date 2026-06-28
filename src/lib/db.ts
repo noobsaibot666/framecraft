@@ -870,6 +870,23 @@ export async function getRecentWins(limit = 4): Promise<(Result & { prompt_title
   return [];
 }
 
+export async function getChildPrompts(parentId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number }[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT id, title, is_winner, rating FROM prompts WHERE parent_id = $1 ORDER BY created_at DESC`,
+      [parentId]
+    )) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: r.id as string,
+      title: r.title as string,
+      is_winner: Boolean(r.is_winner),
+      rating: (r.rating as number) ?? 0,
+    }));
+  }
+  return [];
+}
+
 // ─── Production Memory (Phase 06) ────────────────────────────
 
 export async function updateTokenQualityFromResult(

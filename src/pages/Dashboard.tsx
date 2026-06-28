@@ -8,7 +8,7 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { getRecentResults } from "@/lib/db";
+import { getRecentResults, getRecentWins } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
@@ -260,12 +260,14 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { stats, loading, fetchStats } = useDashboardStore();
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
+  const [recentWins, setRecentWins] = useState<(Result & { prompt_title: string })[]>([]);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
+  useEffect(() => { getRecentWins(4).then(setRecentWins); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
@@ -333,6 +335,38 @@ export function Dashboard() {
           <StatModule label="WINNERS" value={stats.total_winners} sub="FLAGGED" />
           <StatModule label="RECIPES" value={stats.total_recipes} sub="STORED" />
         </div>
+
+        {/* Recent Wins */}
+        {recentWins.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="system-label flex items-center gap-1.5"><Star size={10} className="text-amber fill-amber/30" /> RECENT WINS</span>
+              <div className="flex-1 h-px bg-white/10" />
+              <button type="button" onClick={() => navigate("/results?filter=winner")}
+                className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-white flex items-center gap-1 transition-precise">
+                View all <ArrowRight size={8} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {recentWins.map((r) => (
+                <button key={r.id} type="button"
+                  onClick={() => navigate(`/results/view/${r.id}`)}
+                  className="group flex flex-col gap-2 rounded-card overflow-hidden text-left transition-precise hover:-translate-y-0.5"
+                  style={{ border: "1px solid rgba(255,193,7,0.18)", background: "var(--surface-card)" }}>
+                  <div className="w-full aspect-video bg-black/40 overflow-hidden">
+                    <ResultThumb result={r} promptId={r.prompt_id} />
+                  </div>
+                  <div className="flex flex-col gap-0.5 px-2.5 pb-2.5">
+                    <span className="font-mono text-[10px] text-soft-white truncate">{r.prompt_title}</span>
+                    {r.score_overall > 0 && (
+                      <span className="font-mono text-[9px] text-amber">{r.score_overall}/5</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Production health — activity this week */}
         <div className="flex flex-col gap-3">

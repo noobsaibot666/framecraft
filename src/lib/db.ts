@@ -545,6 +545,21 @@ export async function toggleTokenFavorite(id: string, isFavorite: boolean): Prom
   // dev mode: no-op (tokens are stateless in dev)
 }
 
+export async function getPromptsForToken(tokenId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number }[]> {
+  if (!isTauri) return [];
+  const db = await getDb();
+  const rows = (await db.select(
+    `SELECT p.id, p.title, p.is_winner, p.rating
+     FROM prompts p
+     JOIN prompt_tokens pt ON pt.prompt_id = p.id
+     WHERE pt.token_id = $1
+     ORDER BY p.is_winner DESC, p.rating DESC, p.created_at DESC
+     LIMIT 50`,
+    [tokenId]
+  )) as { id: string; title: string; is_winner: number; rating: number }[];
+  return rows.map((r) => ({ id: r.id, title: r.title, is_winner: Boolean(r.is_winner), rating: r.rating }));
+}
+
 // ─── Avoidance Patterns ──────────────────────────────────────
 
 function rowToAvoidancePattern(row: Record<string, unknown>): AvoidancePattern {
@@ -837,6 +852,22 @@ export async function getRecentResults(limit = 10): Promise<(Result & { prompt_t
     return rows.map((row) => ({ ...rowToResult(row), prompt_title: (row.prompt_title as string) ?? "" }));
   }
   return _devResults.slice(-limit).reverse().map((r) => ({ ...r, prompt_title: r.prompt_title ?? "" }));
+}
+
+export async function getRecentWins(limit = 4): Promise<(Result & { prompt_title: string })[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT r.*, p.title as prompt_title
+       FROM results r
+       LEFT JOIN prompts p ON r.prompt_id = p.id
+       WHERE r.is_winner = 1
+       ORDER BY r.created_at DESC LIMIT $1`,
+      [limit]
+    )) as Record<string, unknown>[];
+    return rows.map((row) => ({ ...rowToResult(row), prompt_title: (row.prompt_title as string) ?? "" }));
+  }
+  return [];
 }
 
 // ─── Production Memory (Phase 06) ────────────────────────────

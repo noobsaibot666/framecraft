@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckSquare, ImageOff, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CheckSquare, Download, ImageOff, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -238,6 +238,38 @@ export function ResultGallery() {
     }
   };
 
+  const handleExportResultsCSV = () => {
+    const selected = selectedIds.size > 0
+      ? displayResults.filter((r) => selectedIds.has(r.id))
+      : displayResults;
+    if (selected.length === 0) return;
+    const esc = (v: string) => `"${String(v).replace(/"/g, '""')}"`;
+    const headers = ["prompt_title", "score_overall", "score_composition", "score_lighting", "score_realism", "score_brand_fit", "score_ai_risk", "is_winner", "is_failed", "notes", "created_at"];
+    const rows = selected.map((r) => [
+      esc(r.prompt_title ?? ""),
+      String(r.score_overall),
+      String(r.score_composition),
+      String(r.score_lighting),
+      String(r.score_realism),
+      String(r.score_brand_fit),
+      String(r.score_ai_risk),
+      r.is_winner ? "1" : "0",
+      r.is_failed ? "1" : "0",
+      esc(r.notes ?? ""),
+      esc(r.created_at),
+    ].join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "framecraft-results.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.info(`${selected.length} result${selected.length !== 1 ? "s" : ""} exported as CSV`);
+    if (selectedIds.size > 0) exitBatch();
+  };
+
   const displayResults = minScore > 0 ? results.filter((r) => r.score_overall >= minScore) : results;
   const topShots = results
     .filter((r) => r.score_overall >= 4)
@@ -256,6 +288,9 @@ export function ResultGallery() {
             onClick={() => batchMode ? exitBatch() : setBatchMode(true)}
           >
             {batchMode ? <><X size={10} /> Cancel</> : "Select"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleExportResultsCSV} disabled={displayResults.length === 0}>
+            <Download size={11} /> CSV
           </Button>
           <Button variant="ghost" size="sm" onClick={() => navigate("/craft")}>
             Craft New
@@ -371,6 +406,14 @@ export function ResultGallery() {
               className="flex items-center gap-1.5 font-mono text-[10px] text-red/70 hover:text-red disabled:opacity-30 transition-precise"
             >
               <Trash2 size={10} /> Delete
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0}
+              onClick={handleExportResultsCSV}
+              className="flex items-center gap-1.5 font-mono text-[10px] text-readable hover:text-white disabled:opacity-30 transition-precise"
+            >
+              <Download size={10} /> CSV
             </button>
           </div>
         )}

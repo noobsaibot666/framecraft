@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ArrowLeft, Copy, CopyPlus, Edit2, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
   Layers, ListPlus, Shuffle, X,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -74,6 +74,8 @@ export function PromptDetail() {
   const [variationsLoading, setVariationsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
   const [versions, setVersions] = useState<VersionNode[]>([]);
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesValue, setNotesValue] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -140,6 +142,50 @@ export function PromptDetail() {
       toast.success("Added to queue");
     } catch {
       toast.error("Failed to add to queue");
+    }
+  };
+
+  const handleEditNotes = () => {
+    setNotesValue(prompt?.notes ?? "");
+    setEditingNotes(true);
+  };
+
+  const handleSaveNotes = async () => {
+    if (!prompt) return;
+    const trimmed = notesValue.trim();
+    try {
+      await update(prompt.id, { notes: trimmed || undefined });
+      setPrompt((p) => p ? { ...p, notes: trimmed || undefined } : p);
+    } catch {
+      toast.error("Failed to save notes");
+    }
+    setEditingNotes(false);
+  };
+
+  const handleDuplicate = async () => {
+    if (!prompt) return;
+    try {
+      const newId = await create({
+        title: `Copy of ${prompt.title}`,
+        provider: prompt.provider,
+        category: prompt.category,
+        use_case: prompt.use_case,
+        prompt_text: prompt.prompt_text,
+        avoidance_text: prompt.avoidance_text,
+        aspect_ratio: prompt.aspect_ratio,
+        model_version: prompt.model_version,
+        camera: prompt.camera,
+        lens: prompt.lens,
+        lighting: prompt.lighting,
+        tags: prompt.tags,
+        notes: prompt.notes,
+        parent_id: prompt.id,
+        version: prompt.version + 1,
+      });
+      toast.success("Prompt duplicated");
+      navigate(`/library/${newId}`);
+    } catch {
+      toast.error("Failed to duplicate prompt");
     }
   };
 
@@ -229,6 +275,9 @@ export function PromptDetail() {
           )}
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleDuplicate}>
+            <CopyPlus size={11} /> Duplicate
           </Button>
           <Button variant="ghost" size="sm" onClick={handleGenerateVariations} disabled={variationsLoading}>
             <Shuffle size={11} /> Variations
@@ -380,12 +429,47 @@ export function PromptDetail() {
           )}
 
           {/* Notes */}
-          {prompt.notes && (
-            <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
               <span className="system-label">NOTES</span>
-              <p className="font-mono text-[11px] text-muted leading-relaxed">{prompt.notes}</p>
+              {!editingNotes && (
+                <button type="button" onClick={handleEditNotes}
+                  className="font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+                  style={{ border: "var(--border-dim)" }}>
+                  {prompt.notes ? "Edit" : "+ Add"}
+                </button>
+              )}
             </div>
-          )}
+            {editingNotes ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  autoFocus
+                  value={notesValue}
+                  onChange={(e) => setNotesValue(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveNotes(); if (e.key === "Escape") setEditingNotes(false); }}
+                  rows={4}
+                  className="w-full p-3 font-mono text-[11px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
+                  style={{ border: "1px solid rgba(255,255,255,0.18)" }}
+                  placeholder="Add notes about this prompt…"
+                />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={handleSaveNotes}
+                    className="font-mono text-[9px] tracking-widest uppercase text-white px-3 py-1.5 rounded-sm transition-precise"
+                    style={{ border: "1px solid rgba(255,255,255,0.22)", background: "rgba(255,255,255,0.06)" }}>
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setEditingNotes(false)}
+                    className="font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-3 py-1.5 rounded-sm transition-precise"
+                    style={{ border: "var(--border-dim)" }}>
+                    Cancel
+                  </button>
+                  <span className="font-mono text-[9px] text-dim/30 ml-auto">⌘↩ to save · Esc to cancel</span>
+                </div>
+              </div>
+            ) : prompt.notes ? (
+              <p className="font-mono text-[11px] text-muted leading-relaxed cursor-pointer hover:text-readable transition-precise" onClick={handleEditNotes}>{prompt.notes}</p>
+            ) : null}
+          </div>
 
           {/* Results / Versions tabs */}
           <div className="flex flex-col gap-3">

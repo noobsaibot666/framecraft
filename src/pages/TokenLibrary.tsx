@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Star, Zap, Tag } from "lucide-react";
+import { Copy, Search, Star, Zap, Tag } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getAllTokens, searchTokens, getTokenCategories, toggleTokenFavorite } from "@/lib/db";
@@ -38,6 +38,7 @@ function QualityBar({ score }: { score: number }) {
 function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle: (id: string, next: boolean) => void }) {
   const navigate = useNavigate();
   const [fav, setFav] = useState(token.is_favorite ?? false);
+  const [copied, setCopied] = useState(false);
 
   const handleFav = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -45,6 +46,13 @@ function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle
     setFav(next);
     await toggleTokenFavorite(token.id, next);
     onFavoriteToggle(token.id, next);
+  };
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(token.text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
   };
 
   return (
@@ -55,14 +63,25 @@ function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle
     >
       <div className="flex items-start justify-between gap-2">
         <span className="font-mono text-[12px] text-soft-white/90 leading-snug wrap-break-word flex-1">{token.text}</span>
-        <button
-          type="button"
-          onClick={handleFav}
-          className={`shrink-0 transition-precise ${fav ? "text-amber" : "text-dim/30 opacity-0 group-hover:opacity-100"}`}
-          aria-label="Toggle favorite"
-        >
-          <Star size={11} className={fav ? "fill-amber/40" : ""} />
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleCopy}
+            className={`transition-precise opacity-0 group-hover:opacity-100 ${copied ? "text-cyan" : "text-dim/40 hover:text-white"}`}
+            aria-label="Copy token text"
+            title="Copy text"
+          >
+            <Copy size={10} />
+          </button>
+          <button
+            type="button"
+            onClick={handleFav}
+            className={`transition-precise ${fav ? "text-amber" : "text-dim/30 opacity-0 group-hover:opacity-100"}`}
+            aria-label="Toggle favorite"
+          >
+            <Star size={11} className={fav ? "fill-amber/40" : ""} />
+          </button>
+        </div>
       </div>
 
       <QualityBar score={token.quality_score ?? 0} />

@@ -76,6 +76,8 @@ export function PromptDetail() {
   const [versions, setVersions] = useState<VersionNode[]>([]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState("");
+  const [editingFailureNotes, setEditingFailureNotes] = useState(false);
+  const [failureNotesValue, setFailureNotesValue] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -143,6 +145,23 @@ export function PromptDetail() {
     } catch {
       toast.error("Failed to add to queue");
     }
+  };
+
+  const handleEditFailureNotes = () => {
+    setFailureNotesValue(prompt?.failure_notes ?? "");
+    setEditingFailureNotes(true);
+  };
+
+  const handleSaveFailureNotes = async () => {
+    if (!prompt) return;
+    const trimmed = failureNotesValue.trim();
+    try {
+      await update(prompt.id, { failure_notes: trimmed || undefined });
+      setPrompt((p) => p ? { ...p, failure_notes: trimmed || undefined } : p);
+    } catch {
+      toast.error("Failed to save failure notes");
+    }
+    setEditingFailureNotes(false);
   };
 
   const handleEditNotes = () => {
@@ -627,9 +646,46 @@ export function PromptDetail() {
                 </div>
               )}
               {prompt.is_failed && (
-                <div className="flex items-center gap-2">
-                  <AlertTriangle size={10} className="text-red/60" />
-                  <span className="font-mono text-[10px] text-red/60">FAILED</span>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={10} className="text-red/60" />
+                    <span className="font-mono text-[10px] text-red/60">FAILED</span>
+                    {!editingFailureNotes && (
+                      <button type="button" onClick={handleEditFailureNotes}
+                        className="ml-auto font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-red/70 px-1.5 py-0.5 rounded-sm transition-precise"
+                        style={{ border: "1px solid rgba(215,25,33,0.2)" }}>
+                        {prompt.failure_notes ? "Edit" : "+ Why"}
+                      </button>
+                    )}
+                  </div>
+                  {editingFailureNotes ? (
+                    <div className="flex flex-col gap-1.5">
+                      <textarea
+                        autoFocus
+                        value={failureNotesValue}
+                        onChange={(e) => setFailureNotesValue(e.target.value)}
+                        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveFailureNotes(); if (e.key === "Escape") setEditingFailureNotes(false); }}
+                        rows={3}
+                        className="w-full p-2 font-mono text-[10px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
+                        style={{ border: "1px solid rgba(215,25,33,0.3)" }}
+                        placeholder="Why did this fail?"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <button type="button" onClick={handleSaveFailureNotes}
+                          className="font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-red px-2 py-1 rounded-sm transition-precise"
+                          style={{ border: "1px solid rgba(215,25,33,0.3)" }}>
+                          Save
+                        </button>
+                        <button type="button" onClick={() => setEditingFailureNotes(false)}
+                          className="font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
+                          style={{ border: "var(--border-dim)" }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : prompt.failure_notes ? (
+                    <p className="font-mono text-[10px] text-red/50 leading-relaxed cursor-pointer hover:text-red/70 transition-precise" onClick={handleEditFailureNotes}>{prompt.failure_notes}</p>
+                  ) : null}
                 </div>
               )}
               {prompt.is_recipe && (

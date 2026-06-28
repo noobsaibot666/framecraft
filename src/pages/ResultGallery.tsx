@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckSquare, Download, ImageOff, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CheckSquare, Download, ImageOff, Search, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -188,6 +188,7 @@ export function ResultGallery() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchWorking, setBatchWorking] = useState(false);
   const [minScore, setMinScore] = useState<number>(0);
+  const [searchText, setSearchText] = useState("");
 
   const filter = (searchParams.get("filter") as GalleryFilter) ?? "all";
   const sort = (searchParams.get("sort") as GallerySort) ?? "newest";
@@ -270,7 +271,14 @@ export function ResultGallery() {
     if (selectedIds.size > 0) exitBatch();
   };
 
-  const displayResults = minScore > 0 ? results.filter((r) => r.score_overall >= minScore) : results;
+  const displayResults = results.filter((r) => {
+    if (minScore > 0 && r.score_overall < minScore) return false;
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      if (!r.prompt_title.toLowerCase().includes(q) && !(r.notes ?? "").toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
   const topShots = results
     .filter((r) => r.score_overall >= 4)
     .sort((a, b) => b.score_overall - a.score_overall)
@@ -301,6 +309,16 @@ export function ResultGallery() {
       <div className="flex flex-col gap-6 min-w-0">
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder="Search by prompt…"
+              className="h-8 pl-8 pr-3 w-44 font-mono text-[10px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
+              style={{ border: "var(--border-dim)" }}
+            />
+          </div>
           <SlidersHorizontal size={13} className="text-dim/60 shrink-0" />
 
           {/* Filter */}
@@ -446,11 +464,14 @@ export function ResultGallery() {
             <div className="flex flex-col items-center gap-1">
               <span className="font-sans text-[14px] text-readable">No results found</span>
               <span className="font-mono text-[11px] text-muted">
-                {filter !== "all" || minScore > 0 ? "Try a different filter, or " : ""}
+                {filter !== "all" || minScore > 0 || searchText ? "Try a different filter, or " : ""}
                 Add results from Prompt Detail pages.
               </span>
             </div>
             <div className="flex items-center gap-2">
+              {searchText && (
+                <Button variant="ghost" size="sm" onClick={() => setSearchText("")}>Clear Search</Button>
+              )}
               {filter !== "all" && (
                 <Button variant="ghost" size="sm" onClick={() => setFilter("all")}>Clear Filter</Button>
               )}

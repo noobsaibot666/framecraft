@@ -82,21 +82,6 @@ const STATUS_FILTER_OPTIONS = [
   { value: "failed", label: "Failed" },
 ];
 
-function RatingDots({ rating }: { rating: number }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className={cn(
-            "w-1.5 h-1.5 rounded-full",
-            i < rating ? "bg-amber/80" : "bg-white/14"
-          )}
-        />
-      ))}
-    </div>
-  );
-}
 
 function LibraryStat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
@@ -110,12 +95,13 @@ function LibraryStat({ label, value, accent }: { label: string; value: string | 
   );
 }
 
-function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMode, selected, onSelect, index }: {
+function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   onCopy: (p: Prompt) => void;
   onDelete: (p: Prompt) => void;
   onQueue: (p: Prompt) => void;
+  onRate: (p: Prompt, rating: number) => void;
   batchMode: boolean;
   selected: boolean;
   onSelect: (id: string, selected: boolean, index: number, shiftHeld: boolean) => void;
@@ -176,7 +162,16 @@ function PromptCard({ prompt, resultSummary, onCopy, onDelete, onQueue, batchMod
       {/* Footer */}
       <div className="mt-auto flex items-center justify-between gap-4 pt-3" style={{ borderTop: "var(--border-default)" }}>
         <div className="flex flex-wrap items-center gap-3">
-          <RatingDots rating={prompt.rating} />
+          <div className="flex items-center gap-0.5" title="Click to rate">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onRate(prompt, i + 1 === prompt.rating ? 0 : i + 1); }}
+                className={cn("w-1.5 h-1.5 rounded-full transition-precise hover:scale-125", i < prompt.rating ? "bg-amber/80" : "bg-white/14 hover:bg-amber/40")}
+              />
+            ))}
+          </div>
           {prompt.ai_look_risk > 0 && <RiskBadge score={prompt.ai_look_risk} />}
           {resultSummary && resultSummary.count > 0 && (
             <span className="font-mono text-[10.5px] text-readable">
@@ -266,6 +261,7 @@ export function PromptLibrary() {
     filters,
     sortBy,
     remove,
+    update,
     filteredAndSorted,
   } = usePromptStore();
 
@@ -324,6 +320,15 @@ export function PromptLibrary() {
       toast.error("Failed to add to queue");
     }
   }, []);
+
+  const handleRate = useCallback(async (prompt: Prompt, rating: number) => {
+    try {
+      await update(prompt.id, { rating });
+      await fetchPrompts();
+    } catch {
+      toast.error("Failed to rate prompt");
+    }
+  }, [update, fetchPrompts]);
 
   const exitBatch = useCallback(() => {
     setBatchMode(false);
@@ -699,6 +704,7 @@ export function PromptLibrary() {
                 onCopy={handleCopy}
                 onDelete={handleDelete}
                 onQueue={handleQueue}
+                onRate={handleRate}
                 batchMode={batchMode}
                 selected={selectedIds.has(p.id)}
                 onSelect={handleSelect}

@@ -4,7 +4,7 @@ import type { Result } from "@/types";
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export type GalleryFilter = "all" | "winner" | "failed" | "unreviewed";
-export type GallerySort = "newest" | "highest_score" | "winner_first";
+export type GallerySort = "newest" | "oldest" | "highest_score" | "winner_first";
 
 export interface GalleryOptions {
   filter: GalleryFilter;
@@ -35,6 +35,7 @@ export function buildGalleryWhere(opts: Pick<GalleryOptions, "filter" | "provide
 }
 
 export function buildGalleryOrderBy(sort: GallerySort): string {
+  if (sort === "oldest") return "r.created_at ASC";
   if (sort === "highest_score") return "r.score_overall DESC, r.created_at DESC";
   if (sort === "winner_first") return "r.is_winner DESC, r.score_overall DESC, r.created_at DESC";
   return "r.created_at DESC";

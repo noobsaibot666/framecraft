@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -289,6 +289,7 @@ export function PromptLibrary() {
   const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "");
   const [noResultsOnly, setNoResultsOnly] = useState(false);
   const [originalsOnly, setOriginalsOnly] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
@@ -514,6 +515,13 @@ export function PromptLibrary() {
       subtitle="STORED PROMPT ASSETS"
       action={
         <div className="flex items-center gap-2">
+          <button type="button"
+            onClick={() => setViewMode((v) => v === "grid" ? "list" : "grid")}
+            className="p-2 rounded-sm text-readable hover:text-white transition-precise"
+            style={{ border: "var(--border-dim)" }}
+            title={viewMode === "grid" ? "Switch to list view" : "Switch to grid view"}>
+            {viewMode === "grid" ? <LayoutList size={13} /> : <LayoutGrid size={13} />}
+          </button>
           <Button variant="ghost" size="md" onClick={() => { batchMode ? exitBatch() : setBatchMode(true); }}>
             <CheckSquare size={11} /> {batchMode ? "Exit Select" : "Select"}
           </Button>
@@ -746,23 +754,71 @@ export function PromptLibrary() {
               {metrics.withResults} with results · {metrics.failed} failed marked
             </span>
           </div>
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
-            {prompts.map((p, i) => (
-              <PromptCard
-                key={p.id}
-                prompt={p}
-                resultSummary={resultMap[p.id]}
-                onCopy={handleCopy}
-                onDelete={handleDelete}
-                onQueue={handleQueue}
-                onRate={handleRate}
-                batchMode={batchMode}
-                selected={selectedIds.has(p.id)}
-                onSelect={handleSelect}
-                index={i}
-              />
-            ))}
-          </div>
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 2xl:grid-cols-3">
+              {prompts.map((p, i) => (
+                <PromptCard
+                  key={p.id}
+                  prompt={p}
+                  resultSummary={resultMap[p.id]}
+                  onCopy={handleCopy}
+                  onDelete={handleDelete}
+                  onQueue={handleQueue}
+                  onRate={handleRate}
+                  batchMode={batchMode}
+                  selected={selectedIds.has(p.id)}
+                  onSelect={handleSelect}
+                  index={i}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col divide-y" style={{ borderTop: "var(--border-dim)", borderBottom: "var(--border-dim)" }}>
+              {prompts.map((p, i) => (
+                <div
+                  key={p.id}
+                  className="group flex items-center gap-4 py-2.5 px-1 cursor-pointer hover:bg-white/3 transition-precise"
+                  onClick={() => { if (!batchMode) navigate(`/library/${p.id}`); }}
+                >
+                  {batchMode && (
+                    <input type="checkbox" checked={selectedIds.has(p.id)}
+                      onChange={(e) => { e.stopPropagation(); handleSelect(p.id, e.target.checked, i, e.nativeEvent instanceof MouseEvent && (e.nativeEvent as MouseEvent).shiftKey); }}
+                      onClick={(e) => e.stopPropagation()} className="h-4 w-4 accent-cyan shrink-0" />
+                  )}
+                  <ProviderBadge provider={p.provider} />
+                  {p.is_winner && <Star size={10} className="text-amber fill-amber/40 shrink-0" />}
+                  <span className="font-sans text-[13px] font-medium text-white truncate flex-1 min-w-0">{p.title}</span>
+                  {p.parent_id && (
+                    <span className="font-mono text-[7px] uppercase tracking-widest px-1 py-0.5 rounded-sm text-dim/40 shrink-0"
+                      style={{ border: "1px solid rgba(255,255,255,0.08)" }}>copy</span>
+                  )}
+                  {(p.tags ?? []).slice(0, 3).map((tag) => (
+                    <span key={tag} className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-dim/50 shrink-0 hidden md:inline"
+                      style={{ border: "var(--border-dim)" }}>{tag}</span>
+                  ))}
+                  {resultMap[p.id]?.count > 0 ? (
+                    <span className="font-mono text-[9px] text-readable shrink-0 w-16 text-right">{resultMap[p.id].count} result{resultMap[p.id].count !== 1 ? "s" : ""}</span>
+                  ) : (
+                    <span className="font-mono text-[9px] text-dim/30 shrink-0 w-16 text-right flex items-center justify-end gap-1"><ImageOff size={8} /> none</span>
+                  )}
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {Array.from({ length: 5 }).map((_, idx) => (
+                      <div key={idx} className={cn("w-1 h-1 rounded-full", idx < p.rating ? "bg-amber/70" : "bg-white/12")} />
+                    ))}
+                  </div>
+                  <span className="font-mono text-[9px] text-dim/40 shrink-0 hidden lg:inline">{formatDate(p.created_at)}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise shrink-0">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleQueue(p); }}
+                      className="p-1.5 rounded-sm text-dim/60 hover:text-cyan transition-precise" title="Add to Queue"><ListPlus size={11} /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleCopy(p); }}
+                      className="p-1.5 rounded-sm text-dim/60 hover:text-cyan transition-precise" title="Copy"><Copy size={11} /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); handleDelete(p); }}
+                      className={cn("p-1.5 rounded-sm transition-precise", confirmDelete?.id === p.id ? "text-red" : "text-dim/60 hover:text-red")} title="Delete"><Trash2 size={11} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {hasMoreVisible && (
             <div className="flex flex-col items-center gap-2 py-6">

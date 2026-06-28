@@ -8,7 +8,7 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { getRecentResults, getRecentWins, getResultStats, getTopTags } from "@/lib/db";
+import { getRecentResults, getRecentWins, getResultStats, getTopTags, getPromptsWithoutResultsCount } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
@@ -263,6 +263,7 @@ export function Dashboard() {
   const [recentWins, setRecentWins] = useState<(Result & { prompt_title: string })[]>([]);
   const [resultStats, setResultStats] = useState<{ total: number; winners: number }>({ total: 0, winners: 0 });
   const [topTags, setTopTags] = useState<{ tag: string; count: number }[]>([]);
+  const [promptsWithoutResults, setPromptsWithoutResults] = useState(0);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
@@ -272,6 +273,7 @@ export function Dashboard() {
   useEffect(() => { getRecentWins(4).then(setRecentWins); }, []);
   useEffect(() => { getResultStats().then(setResultStats); }, []);
   useEffect(() => { getTopTags(12).then(setTopTags); }, []);
+  useEffect(() => { getPromptsWithoutResultsCount().then(setPromptsWithoutResults); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
@@ -333,7 +335,7 @@ export function Dashboard() {
         )}
 
         {/* Library totals */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
+        <div className="grid grid-cols-2 xl:grid-cols-5 gap-4 min-w-0">
           <StatModule label="TOTAL PROMPTS" value={stats.total_prompts} sub="IN LIBRARY" />
           <StatModule label="TOTAL RESULTS" value={resultStats.total} sub="GENERATED" />
           <StatModule label="WINNERS" value={resultStats.winners} sub="FLAGGED" />
@@ -341,6 +343,11 @@ export function Dashboard() {
             label="WIN RATE"
             value={resultStats.total > 0 ? `${Math.round((resultStats.winners / resultStats.total) * 100)}%` : "—"}
             sub="RESULTS → WINNERS"
+          />
+          <StatModule
+            label="NO RESULTS"
+            value={promptsWithoutResults}
+            sub="PROMPTS UNGENERATED"
           />
         </div>
 

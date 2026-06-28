@@ -870,6 +870,18 @@ export async function getRecentWins(limit = 4): Promise<(Result & { prompt_title
   return [];
 }
 
+export async function getPromptsWithoutResultsCount(): Promise<number> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT COUNT(*) as count FROM prompts p
+       WHERE NOT EXISTS (SELECT 1 FROM results r WHERE r.prompt_id = p.id)`
+    )) as Record<string, unknown>[];
+    return (rows[0]?.count as number) ?? 0;
+  }
+  return 0;
+}
+
 export async function getTopTags(limit = 12): Promise<{ tag: string; count: number }[]> {
   if (isTauri) {
     const db = await getDb();

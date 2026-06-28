@@ -178,16 +178,20 @@ export function GenerationQueue() {
 
   const [statusFilter, setStatusFilter] = useState<QueueStatus | "all">("all");
   const [queueSearch, setQueueSearch] = useState("");
+  const [hideCompleted, setHideCompleted] = useState(false);
 
   const promptMap = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
   const pending = items.filter((item) => item.status === "pending");
   const statusFiltered = statusFilter === "all" ? items : items.filter((item) => item.status === statusFilter);
+  const completionFiltered = hideCompleted && statusFilter === "all"
+    ? statusFiltered.filter((item) => item.status !== "done" && item.status !== "skipped")
+    : statusFiltered;
   const visibleItems = queueSearch
-    ? statusFiltered.filter((item) => {
+    ? completionFiltered.filter((item) => {
         const title = (promptMap.get(item.prompt_id)?.title ?? item.prompt_title ?? "").toLowerCase();
         return title.includes(queueSearch.toLowerCase());
       })
-    : statusFiltered;
+    : completionFiltered;
 
   const refresh = async () => {
     const [queue] = await Promise.all([getQueue(projectId), fetchPrompts()]);
@@ -379,6 +383,12 @@ export function GenerationQueue() {
             <X size={8} /> Clear
           </button>
         )}
+        <button type="button" onClick={() => setHideCompleted((v) => !v)}
+          className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise ml-auto",
+            hideCompleted ? "text-white" : "text-dim/50 hover:text-muted")}
+          style={{ border: hideCompleted ? "var(--border-strong)" : "var(--border-dim)" }}>
+          {hideCompleted ? "Showing active" : "Hide completed"}
+        </button>
       </div>
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">

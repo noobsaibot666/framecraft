@@ -180,6 +180,7 @@ const FILTER_OPTIONS: { value: GalleryFilter; label: string }[] = [
 
 const SORT_OPTIONS: { value: GallerySort; label: string }[] = [
   { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
   { value: "highest_score", label: "Highest Score" },
   { value: "winner_first", label: "Winners First" },
 ];

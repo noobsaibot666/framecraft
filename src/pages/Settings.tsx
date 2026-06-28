@@ -667,7 +667,7 @@ export function Settings() {
               <span className="font-sans text-[14px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
             </div>
             <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="Sprint 21 · Phase 157–161 Complete" />
+            <InfoRow label="BUILD" value="Sprint 22 · Phase 162–166 Complete" />
             <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
             <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
           </div>

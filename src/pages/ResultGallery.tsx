@@ -239,6 +239,21 @@ export function ResultGallery() {
     }
   };
 
+  const handleBatchScore = async (score: number) => {
+    if (selectedIds.size === 0 || batchWorking) return;
+    setBatchWorking(true);
+    try {
+      for (const id of selectedIds) await updateResult(id, { score_overall: score });
+      toast.success(`${selectedIds.size} result${selectedIds.size !== 1 ? "s" : ""} scored ${score}/5`);
+      exitBatch();
+      await load();
+    } catch {
+      toast.error("Batch score failed");
+    } finally {
+      setBatchWorking(false);
+    }
+  };
+
   const handleExportResultsCSV = () => {
     const selected = selectedIds.size > 0
       ? displayResults.filter((r) => selectedIds.has(r.id))
@@ -400,6 +415,17 @@ export function ResultGallery() {
             <span className="font-mono text-[10px] text-readable">
               {selectedIds.size} selected
             </span>
+            <span className="font-mono text-[9px] text-muted uppercase tracking-widest">Score:</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button"
+                onClick={() => handleBatchScore(n)}
+                disabled={selectedIds.size === 0 || batchWorking}
+                className="font-mono text-[9px] text-readable hover:text-amber disabled:opacity-30 transition-precise px-1.5 py-1 rounded-sm"
+                style={{ border: "var(--border-dim)" }}>
+                {"★".repeat(n)}
+              </button>
+            ))}
+            <div className="w-px h-4 bg-white/10" />
             <div className="flex-1" />
             <Button
               variant="ghost"

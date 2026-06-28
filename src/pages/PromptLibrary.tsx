@@ -293,6 +293,13 @@ export function PromptLibrary() {
     [search, fetchPrompts]
   );
 
+  const handleClearAllFilters = useCallback(() => {
+    handleSearch("");
+    setFilters({ provider: undefined, category: undefined, minRating: undefined, maxAiRisk: undefined, isWinner: undefined, isFailed: undefined });
+    setSortBy("newest");
+    setTagFilter("");
+  }, [handleSearch, setFilters, setSortBy]);
+
   const handleCopy = useCallback(async (prompt: Prompt) => {
     try {
       await navigator.clipboard.writeText(prompt.prompt_text);
@@ -546,6 +553,17 @@ export function PromptLibrary() {
             options={STATUS_FILTER_OPTIONS}
           />
         </div>
+
+        {/* Clear All Filters */}
+        {(searchVal || filters.provider || filters.category || filters.minRating != null || filters.maxAiRisk != null || statusFilter || tagFilter || sortBy !== "newest") && (
+          <div className="flex justify-end">
+            <button type="button" onClick={handleClearAllFilters}
+              className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+              style={{ border: "var(--border-dim)" }}>
+              <X size={8} /> Clear All Filters
+            </button>
+          </div>
+        )}
 
         {/* Tag filter chips */}
         {uniqueTags.length > 0 && (

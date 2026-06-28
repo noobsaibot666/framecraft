@@ -60,7 +60,7 @@ function ResultImage({ src }: { src?: string }) {
 export function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getById, remove, update, create } = usePromptStore();
+  const { getById, remove, update, create, prompts: allPrompts } = usePromptStore();
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -763,6 +763,38 @@ export function PromptDetail() {
               <GitBranch size={9} /> Version history
             </button>
           </div>
+
+          {/* Related by tags */}
+          {(() => {
+            if (!prompt.tags?.length) return null;
+            const tagSet = new Set(prompt.tags);
+            const related = allPrompts
+              .filter((p) => p.id !== prompt.id && (p.tags ?? []).some((t) => tagSet.has(t)))
+              .map((p) => ({ p, overlap: (p.tags ?? []).filter((t) => tagSet.has(t)).length }))
+              .sort((a, b) => b.overlap - a.overlap)
+              .slice(0, 3);
+            if (!related.length) return null;
+            return (
+              <div className="flex flex-col gap-3 p-4 rounded-card"
+                style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+                <span className="system-label text-soft-white">RELATED</span>
+                <div className="flex flex-col gap-1.5">
+                  {related.map(({ p, overlap }) => (
+                    <button key={p.id} type="button"
+                      onClick={() => navigate(`/library/${p.id}`)}
+                      className="flex items-start gap-2 text-left px-2 py-2 rounded-sm hover:bg-white/4 transition-precise group"
+                      style={{ border: "var(--border-dim)" }}>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-mono text-[10px] text-soft-white/80 truncate block">{p.title}</span>
+                        <span className="font-mono text-[8px] text-dim/40">{overlap} shared tag{overlap !== 1 ? "s" : ""}</span>
+                      </div>
+                      {p.is_winner && <span className="font-mono text-[8px] text-amber shrink-0 mt-0.5">★</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Recommendations */}
           <div

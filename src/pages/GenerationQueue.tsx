@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Check, Copy, ExternalLink, GripVertical, Pin, Plus, SkipForward, Upload, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { Badge, ProviderBadge } from "@/components/ui/Badge";
+import { ProviderBadge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
 import {
   addToQueue,
@@ -152,8 +152,11 @@ export function GenerationQueue() {
   const bulkFileRef = useRef<HTMLInputElement>(null);
   const singleFileRef = useRef<HTMLInputElement>(null);
 
+  const [statusFilter, setStatusFilter] = useState<QueueStatus | "all">("all");
+
   const promptMap = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
   const pending = items.filter((item) => item.status === "pending");
+  const visibleItems = statusFilter === "all" ? items : items.filter((item) => item.status === statusFilter);
 
   const refresh = async () => {
     const [queue] = await Promise.all([getQueue(projectId), fetchPrompts()]);
@@ -319,9 +322,22 @@ export function GenerationQueue() {
         </div>
       )}
 
-      <div className="flex items-center gap-2 mb-5">
-        <Badge variant="default">{items.length} total</Badge>
-        <Badge variant="default">{pending.length} pending</Badge>
+      <div className="flex items-center gap-2 mb-5 flex-wrap">
+        {([
+          { value: "all", label: `All (${items.length})` },
+          { value: "pending", label: `Pending (${items.filter((i) => i.status === "pending").length})` },
+          { value: "sent", label: `Sent (${items.filter((i) => i.status === "sent").length})` },
+          { value: "done", label: `Done (${items.filter((i) => i.status === "done").length})` },
+          { value: "failed", label: `Failed (${items.filter((i) => i.status === "failed").length})` },
+        ] as const).map((tab) => (
+          <button key={tab.value} type="button"
+            onClick={() => setStatusFilter(tab.value)}
+            className={cn("font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise",
+              statusFilter === tab.value ? "text-white" : "text-dim hover:text-muted")}
+            style={{ border: statusFilter === tab.value ? "var(--border-strong)" : "var(--border-dim)", background: statusFilter === tab.value ? "rgba(255,255,255,0.05)" : "transparent" }}>
+            {tab.label}
+          </button>
+        ))}
       </div>
       {importError && (
         <div className="mb-5 px-4 py-3 rounded-sm border border-red/30 bg-red/10 font-mono text-[11px] text-red">
@@ -333,11 +349,15 @@ export function GenerationQueue() {
         <div className="flex items-center justify-center h-48 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
           <span className="font-mono text-[12px] text-readable">No queued prompts.</span>
         </div>
+      ) : visibleItems.length === 0 ? (
+        <div className="flex items-center justify-center h-32 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
+          <span className="font-mono text-[11px] text-readable">No {statusFilter} items.</span>
+        </div>
       ) : (
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={visibleItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
             <div className="flex flex-col gap-3">
-              {items.map((item) => (
+              {visibleItems.map((item) => (
                 <QueueCard
                   key={item.id}
                   item={item}

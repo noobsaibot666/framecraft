@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Copy, CopyPlus, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ArrowLeft, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
   Layers, ListPlus, Shuffle, X,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -225,6 +225,33 @@ export function PromptDetail() {
     } catch {
       toast.error("Failed to duplicate prompt");
     }
+  };
+
+  const handleExportResultsCSV = () => {
+    if (!prompt || results.length === 0) return;
+    const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const headers = ["score_overall", "score_composition", "score_lighting", "score_realism", "score_brand_fit", "score_ai_risk", "is_winner", "is_failed", "notes", "created_at"];
+    const rows = results.map((r) => [
+      String(r.score_overall),
+      String(r.score_composition),
+      String(r.score_lighting),
+      String(r.score_realism),
+      String(r.score_brand_fit),
+      String(r.score_ai_risk),
+      r.is_winner ? "1" : "0",
+      r.is_failed ? "1" : "0",
+      esc(r.notes ?? ""),
+      esc(r.created_at),
+    ].join(","));
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `results-${prompt.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.info(`${results.length} result${results.length !== 1 ? "s" : ""} exported`);
   };
 
   const handleGenerateVariations = async () => {
@@ -538,9 +565,16 @@ export function PromptDetail() {
                 )}
               </div>
               {activeTab === "results" && (
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
-                  <Plus size={10} /> Add Result
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {results.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={handleExportResultsCSV}>
+                      <Download size={10} /> CSV
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+                    <Plus size={10} /> Add Result
+                  </Button>
+                </div>
               )}
               {activeTab === "versions" && (
                 <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>

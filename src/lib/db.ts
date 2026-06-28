@@ -870,6 +870,19 @@ export async function getRecentWins(limit = 4): Promise<(Result & { prompt_title
   return [];
 }
 
+export async function getResultStats(): Promise<{ total: number; winners: number }> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN is_winner = 1 THEN 1 ELSE 0 END) as winners FROM results`
+    )) as Record<string, unknown>[];
+    if (rows[0]) {
+      return { total: (rows[0].total as number) ?? 0, winners: (rows[0].winners as number) ?? 0 };
+    }
+  }
+  return { total: 0, winners: 0 };
+}
+
 export async function getChildPrompts(parentId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number }[]> {
   if (isTauri) {
     const db = await getDb();

@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, ChevronsUp, Copy, ExternalLink, GripVertical, Pin, Plus, SkipForward, Upload, X } from "lucide-react";
+import { Check, ChevronsUp, Copy, ExternalLink, GripVertical, Pin, Plus, Search, SkipForward, Upload, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { ProviderBadge } from "@/components/ui/Badge";
@@ -171,10 +171,17 @@ export function GenerationQueue() {
   const singleFileRef = useRef<HTMLInputElement>(null);
 
   const [statusFilter, setStatusFilter] = useState<QueueStatus | "all">("all");
+  const [queueSearch, setQueueSearch] = useState("");
 
   const promptMap = useMemo(() => new Map(prompts.map((prompt) => [prompt.id, prompt])), [prompts]);
   const pending = items.filter((item) => item.status === "pending");
-  const visibleItems = statusFilter === "all" ? items : items.filter((item) => item.status === statusFilter);
+  const statusFiltered = statusFilter === "all" ? items : items.filter((item) => item.status === statusFilter);
+  const visibleItems = queueSearch
+    ? statusFiltered.filter((item) => {
+        const title = (promptMap.get(item.prompt_id)?.title ?? item.prompt_title ?? "").toLowerCase();
+        return title.includes(queueSearch.toLowerCase());
+      })
+    : statusFiltered;
 
   const refresh = async () => {
     const [queue] = await Promise.all([getQueue(projectId), fetchPrompts()]);
@@ -347,6 +354,26 @@ export function GenerationQueue() {
           </div>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative">
+          <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
+          <input
+            value={queueSearch}
+            onChange={(e) => setQueueSearch(e.target.value)}
+            placeholder="Filter by name…"
+            className="h-8 pl-8 pr-3 w-44 font-mono text-[10px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
+            style={{ border: "var(--border-dim)" }}
+          />
+        </div>
+        {queueSearch && (
+          <button type="button" onClick={() => setQueueSearch("")}
+            className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-white px-2 py-1 rounded-sm transition-precise"
+            style={{ border: "var(--border-dim)" }}>
+            <X size={8} /> Clear
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-2 mb-5 flex-wrap">
         {([

@@ -434,6 +434,14 @@ export function ResultGallery() {
                 {"★".repeat(n)}
               </button>
             ))}
+            <button type="button"
+              onClick={() => handleBatchScore(0)}
+              disabled={selectedIds.size === 0 || batchWorking}
+              className="font-mono text-[9px] text-dim/60 hover:text-white disabled:opacity-30 transition-precise px-1.5 py-1 rounded-sm"
+              style={{ border: "var(--border-dim)" }}
+              title="Clear score">
+              ☆
+            </button>
             <div className="w-px h-4 bg-white/10" />
             <div className="flex-1" />
             <Button

@@ -8,7 +8,7 @@ import { DotMatrix } from "@/components/ui/DotMatrix";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { getRecentResults, getRecentWins } from "@/lib/db";
+import { getRecentResults, getRecentWins, getResultStats } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
@@ -261,6 +261,7 @@ export function Dashboard() {
   const { stats, loading, fetchStats } = useDashboardStore();
   const [recentResults, setRecentResults] = useState<(Result & { prompt_title: string })[]>([]);
   const [recentWins, setRecentWins] = useState<(Result & { prompt_title: string })[]>([]);
+  const [resultStats, setResultStats] = useState<{ total: number; winners: number }>({ total: 0, winners: 0 });
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
@@ -268,6 +269,7 @@ export function Dashboard() {
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
   useEffect(() => { getRecentWins(4).then(setRecentWins); }, []);
+  useEffect(() => { getResultStats().then(setResultStats); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
 
@@ -331,9 +333,13 @@ export function Dashboard() {
         {/* Library totals */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 min-w-0">
           <StatModule label="TOTAL PROMPTS" value={stats.total_prompts} sub="IN LIBRARY" />
-          <StatModule label="TOTAL RESULTS" value={stats.total_results} sub="GENERATED" />
-          <StatModule label="WINNERS" value={stats.total_winners} sub="FLAGGED" />
-          <StatModule label="RECIPES" value={stats.total_recipes} sub="STORED" />
+          <StatModule label="TOTAL RESULTS" value={resultStats.total} sub="GENERATED" />
+          <StatModule label="WINNERS" value={resultStats.winners} sub="FLAGGED" />
+          <StatModule
+            label="WIN RATE"
+            value={resultStats.total > 0 ? `${Math.round((resultStats.winners / resultStats.total) * 100)}%` : "—"}
+            sub="RESULTS → WINNERS"
+          />
         </div>
 
         {/* Recent Wins */}

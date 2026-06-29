@@ -16,6 +16,7 @@ import {
   Wand2,
 } from "lucide-react";
 import { getQueue } from "@/lib/queue";
+import { getActiveSharedIngestStatus } from "@/lib/librarySettings";
 import { cn } from "@/lib/utils";
 
 const NAV_GROUPS = [
@@ -120,11 +121,15 @@ function NavItem({
 
 export function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0);
+  const [ingestPending, setIngestPending] = useState(0);
 
   useEffect(() => {
     getQueue()
       .then((items) => setPendingCount(items.filter((item) => item.status === "pending").length))
       .catch(() => setPendingCount(0));
+    getActiveSharedIngestStatus()
+      .then((status) => setIngestPending(status?.pending ?? 0))
+      .catch(() => setIngestPending(0));
   }, []);
 
   return (
@@ -177,6 +182,11 @@ export function Sidebar() {
               <span className="font-sans text-[13px] font-semibold tracking-[0.04em] uppercase">
                 Settings
               </span>
+              {ingestPending > 0 && (
+                <span className="ml-auto rounded-sm border border-amber/40 bg-amber/12 px-2 py-1 font-mono text-[10px] text-amber">
+                  {ingestPending}
+                </span>
+              )}
             </>
           )}
         </NavLink>

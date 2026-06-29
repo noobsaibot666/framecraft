@@ -18,6 +18,7 @@ import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 
 registerShortcutLabel("cmd+n", "New prompt (Prompt Library)");
 registerShortcutLabel("escape", "Exit batch mode (Prompt Library)");
+registerShortcutLabel("i", "Import prompt (Prompt Library)");
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
 const PROVIDER_OPTIONS: { value: Provider | ""; label: string }[] = [
@@ -378,6 +379,7 @@ export function PromptLibrary() {
   }, []);
 
   useShortcut("cmd+n", () => navigate("/craft"), !batchMode);
+  useShortcut("i", () => navigate("/import"), !batchMode);
   useShortcut("escape", exitBatch, batchMode);
 
   const handleBatchQueue = useCallback(async () => {

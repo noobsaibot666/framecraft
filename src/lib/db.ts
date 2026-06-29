@@ -97,6 +97,7 @@ export interface CreatePromptInput {
   tags?: string[];
   rating?: number;
   ai_look_risk?: number;
+  reuse_potential?: number;
   is_winner?: boolean;
   is_failed?: boolean;
   is_recipe?: boolean;
@@ -121,6 +122,20 @@ export async function getPrompts(): Promise<Prompt[]> {
   return loadMemStore().prompts.sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+}
+
+export async function getRecipePrompts(): Promise<Prompt[]> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      "SELECT * FROM prompts WHERE is_recipe = 1 ORDER BY created_at DESC"
+    )) as Record<string, unknown>[];
+    return rows.map(rowToPrompt);
+  }
+
+  return loadMemStore().prompts
+    .filter((prompt) => prompt.is_recipe)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 export async function getPromptsPaged(opts: PageOptions = {}): Promise<PageResult<Prompt>> {

@@ -888,9 +888,32 @@ export function PromptDetail() {
               <span className="system-label w-28">AI RISK</span>
               <RiskBadge score={prompt.ai_look_risk} />
             </div>
-            {prompt.reuse_potential > 0 && (
-              <MetaRow label="REUSE" value={`${prompt.reuse_potential}/10`} />
-            )}
+            {/* Editable reuse potential 0-10 */}
+            <div className="flex items-center gap-2">
+              <span className="system-label w-28">REUSE</span>
+              <div className="flex items-center gap-0.5" title="Click to set reuse potential (0–10)">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={async () => {
+                      const next = i + 1 === prompt.reuse_potential ? 0 : i + 1;
+                      try {
+                        await update(prompt.id, { reuse_potential: next });
+                        setPrompt((p) => p ? { ...p, reuse_potential: next } : p);
+                      } catch {
+                        toast.error("Failed to update reuse potential");
+                      }
+                    }}
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full transition-precise hover:scale-125",
+                      i < prompt.reuse_potential ? "bg-cyan/70 hover:bg-cyan" : "bg-white/10 hover:bg-white/25"
+                    )}
+                  />
+                ))}
+              </div>
+              <span className="font-mono text-[10px] text-dim">{prompt.reuse_potential}/10</span>
+            </div>
           </div>
 
           {/* Best Use + Risk Notes */}

@@ -48,6 +48,7 @@ pub fn native_sqlite_select(
     bind_values: Vec<JsonValue>,
 ) -> Result<Vec<Map<String, JsonValue>>, String> {
     let conn = open_connection(&db_path)?;
+    let query = normalize_numbered_parameters(&query);
     let values = bind_values
         .into_iter()
         .map(JsonSqlValue)
@@ -82,6 +83,7 @@ pub fn native_sqlite_execute(
     bind_values: Vec<JsonValue>,
 ) -> Result<NativeSqliteQueryResult, String> {
     let conn = open_connection(&db_path)?;
+    let query = normalize_numbered_parameters(&query);
     let values = bind_values
         .into_iter()
         .map(JsonSqlValue)
@@ -104,6 +106,21 @@ pub fn native_sqlite_execute_batch(db_path: String, query: String) -> Result<(),
 
 fn open_connection(db_path: &str) -> Result<Connection, String> {
     open_portable_database(db_path)
+}
+
+fn normalize_numbered_parameters(query: &str) -> String {
+    let mut normalized = String::with_capacity(query.len());
+    let mut chars = query.chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == '$' && chars.peek().is_some_and(char::is_ascii_digit) {
+            normalized.push('?');
+        } else {
+            normalized.push(character);
+        }
+    }
+
+    normalized
 }
 
 fn sqlite_value_to_json(value: ValueRef<'_>) -> JsonValue {
@@ -156,6 +173,55 @@ mod tests {
         assert_eq!(
             rows[0].get("title"),
             Some(&JsonValue::String("NAS prompt".to_string()))
+        );
+
+        let _ = std::fs::remove_file(db_path);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn binds_dollar_parameters_by_number_when_sql_uses_them_out_of_order() {
+        let root = std::env::temp_dir().join(format!(
+            "framecraft_native_sqlite_parameter_order_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let db_path = root.join("framecraft.db");
+        let db_path = db_path.to_str().unwrap().to_string();
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE projects (
+                id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+             );
+             INSERT INTO projects (id, status, updated_at)
+             VALUES ('project-1', 'active', 'before');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let result = native_sqlite_execute(
+            db_path.clone(),
+            "UPDATE projects SET status = $2, updated_at = $3 WHERE id = $1".to_string(),
+            vec![
+                JsonValue::String("project-1".to_string()),
+                JsonValue::String("archived".to_string()),
+                JsonValue::String("after".to_string()),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(result.rows_affected, 1);
+        let rows = native_sqlite_select(
+            db_path.clone(),
+            "SELECT status FROM projects WHERE id = $1".to_string(),
+            vec![JsonValue::String("project-1".to_string())],
+        )
+        .unwrap();
+        assert_eq!(
+            rows[0].get("status"),
+            Some(&JsonValue::String("archived".to_string()))
         );
 
         let _ = std::fs::remove_file(db_path);

@@ -22,8 +22,8 @@ import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analyzePrompt";
 import type { Project } from "@/types";
 
-registerShortcutLabel("e", "Edit prompt (Prompt Detail)");
-registerShortcutLabel("q", "Add to queue (Prompt Detail)");
+registerShortcutLabel("cmd+e", "Edit prompt (Prompt Detail)");
+registerShortcutLabel("cmd+enter", "Add to queue (Prompt Detail)");
 import type { Prompt, Result } from "@/types";
 
 function providerUrl(provider: string): string {
@@ -103,8 +103,8 @@ export function PromptDetail() {
     getProjects({ excludeArchived: true }).then(setAllProjects).catch(() => {});
   }, [id, getById]);
 
-  useShortcut("e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
-  useShortcut("q", () => { if (prompt) handleAddToQueue(); }, !!prompt);
+  useShortcut("cmd+e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
+  useShortcut("cmd+enter", () => { if (prompt) handleAddToQueue(); }, !!prompt);
 
   const handleCopy = async () => {
     if (!prompt) return;

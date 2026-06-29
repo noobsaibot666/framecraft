@@ -6,6 +6,13 @@ export interface ShortcutDef {
   handler: (e: KeyboardEvent) => void;
 }
 
+const SAFE_UNMODIFIED_KEYS = new Set(["escape"]);
+
+function isAllowedShortcut(keys: string): boolean {
+  const parsed = parseKeys(keys);
+  return parsed.meta || parsed.ctrl || parsed.shift || SAFE_UNMODIFIED_KEYS.has(parsed.key);
+}
+
 function parseKeys(keys: string): { meta: boolean; ctrl: boolean; shift: boolean; alt: boolean; key: string } {
   const parts = keys.toLowerCase().split("+");
   return {
@@ -31,7 +38,7 @@ function matches(e: KeyboardEvent, keys: string): boolean {
 
 export function useShortcut(keys: string, handler: (e: KeyboardEvent) => void, enabled = true) {
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !isAllowedShortcut(keys)) return;
     const listener = (e: KeyboardEvent) => {
       if (matches(e, keys)) {
         e.preventDefault();
@@ -47,6 +54,7 @@ export function useShortcut(keys: string, handler: (e: KeyboardEvent) => void, e
 const _registry: Map<string, string> = new Map();
 
 export function registerShortcutLabel(keys: string, description: string) {
+  if (!isAllowedShortcut(keys)) return;
   _registry.set(keys, description);
 }
 

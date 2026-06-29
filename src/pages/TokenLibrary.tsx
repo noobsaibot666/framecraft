@@ -8,7 +8,7 @@ import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import type { Token, TokenCategory } from "@/types";
 
-registerShortcutLabel("f", "Toggle favorite (Token Library — hover)");
+registerShortcutLabel("cmd+f", "Focus search (Token Library)");
 
 type SortOption = "quality" | "use" | "alpha" | "rating" | "winners";
 
@@ -133,7 +133,7 @@ export function TokenLibrary() {
     setTokens((prev) => prev.map((t) => t.id === id ? { ...t, is_favorite: next } : t));
   }, []);
 
-  useShortcut("f", () => searchRef.current?.focus());
+  useShortcut("cmd+f", () => searchRef.current?.focus());
 
   const total = tokens.length;
   const favorites = tokens.filter((t) => t.is_favorite).length;

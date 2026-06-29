@@ -16,7 +16,7 @@ import { toast } from "@/lib/toast";
 import { getPreferences } from "@/lib/userPreferences";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 
-registerShortcutLabel("n", "New prompt (Prompt Library)");
+registerShortcutLabel("cmd+n", "New prompt (Prompt Library)");
 registerShortcutLabel("escape", "Exit batch mode (Prompt Library)");
 import type { Prompt, Provider, Category, SortOption } from "@/types";
 
@@ -377,7 +377,7 @@ export function PromptLibrary() {
     setLastSelectedIndex(null);
   }, []);
 
-  useShortcut("n", () => navigate("/craft"), !batchMode);
+  useShortcut("cmd+n", () => navigate("/craft"), !batchMode);
   useShortcut("escape", exitBatch, batchMode);
 
   const handleBatchQueue = useCallback(async () => {

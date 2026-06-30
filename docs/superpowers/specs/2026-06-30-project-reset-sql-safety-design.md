@@ -14,7 +14,7 @@ Replacing the native batch path with repeated `execute` calls is unsafe because 
 
 Keep both execution paths. Extract the batch SQL construction into a focused helper that applies SQLite string-literal quoting to every interpolated value. Add a comment at the interpolation boundary explaining the risk, the lack of batch bind parameters, and the requirement that all future interpolated values pass through the quoting helper.
 
-Export the helper only as an explicitly test-oriented internal so Vitest can inspect the generated batch without requiring a Tauri runtime. Production code continues to call it from `executeProjectResetTransaction`.
+Export the helper as a focused production function so Vitest can inspect the same generated batch that `executeProjectResetTransaction` executes, without requiring a Tauri runtime. This avoids introducing a test-only production API.
 
 ## Error Handling and Compatibility
 

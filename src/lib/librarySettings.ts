@@ -23,6 +23,7 @@ import {
   backupLibraryPackageNative,
   copyLibraryPackageNative,
   createLibraryPackageNative,
+  inspectLibraryPackageNative,
   mergeLibraryPackageNative,
   migrateAppDataToLibraryNative,
   repairLibraryDatabaseSchemaNative,
@@ -78,7 +79,12 @@ export async function selectValidatedLibrary(
 ): Promise<SelectValidatedLibraryResult> {
   if (!isFramecraftLibraryPath(path)) throw new Error("Library path must end with .framecraftlib.");
   const validation = await deps.validateLibrary(path);
-  if (!validation.ok) throw new Error(validation.errors.join(", "));
+  if (!validation.ok && (
+    validation.errors.length === 0
+    || !validation.errors.every(isRepairableLibraryPackageError)
+  )) {
+    throw new Error(validation.errors.join(", ") || "Library validation failed.");
+  }
   setSelectedLibraryPath(path, deps.storage);
   return { path, restartRequired: true };
 }
@@ -97,14 +103,9 @@ export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
   const appDir = isTauri() ? await appDataDir() : "localStorage";
   const selection = getActiveLibrarySelection();
   const paths = getActiveLibraryPaths(appDir);
-  let validation = selection.path && isTauri()
-    ? await validateLibraryPackageNative(selection.path)
+  const validation = selection.path && isTauri()
+    ? await inspectLibraryPackageNative(selection.path)
     : null;
-  // Silently repair missing dirs / schema gaps introduced by new migrations so that
-  // the user never sees a stale "Missing database schema" error after an app update.
-  if (validation && !validation.ok && validation.errors.every(isRepairableLibraryPackageError)) {
-    validation = await repairLibraryDatabaseSchemaNative(paths.baseDir).catch(() => validation);
-  }
   const activeLock = selection.path && isTauri()
     ? await getLibraryLockStatusNative(paths.baseDir).catch(() => null)
     : null;
@@ -131,12 +132,8 @@ export async function openLibraryFromDialog(): Promise<SelectValidatedLibraryRes
     multiple: false,
   });
   if (!path || Array.isArray(path)) return null;
-  const validation = await validateLibraryPackageNative(path);
-  if (!validation.ok && validation.errors.every(isRepairableLibraryPackageError)) {
-    await repairLibraryDatabaseSchemaNative(path);
-  }
   return selectValidatedLibrary(path, {
-    validateLibrary: validateLibraryPackageNative,
+    validateLibrary: inspectLibraryPackageNative,
   });
 }
 

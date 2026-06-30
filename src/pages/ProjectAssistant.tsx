@@ -14,6 +14,7 @@ import {
   getThreadsForProject,
   deleteThread,
   addMessage,
+  appendProjectNote,
   getMessages,
 } from "@/lib/assistant";
 import { createPrompt } from "@/lib/db";
@@ -410,8 +411,11 @@ export function ProjectAssistant() {
         label: "Save",
         onConfirm: async () => {
           setConfirm(null);
-          if (!id) return;
-          await updateProject(id, { notes: s.action?.payload });
+          if (!id || !pack || !s.action?.payload) return;
+          await updateProject(id, {
+            notes: appendProjectNote(pack.project.notes, s.action.payload),
+          });
+          await reload();
         },
       });
     }

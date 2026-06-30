@@ -24,27 +24,13 @@ pub(crate) fn open_portable_database(db_path: &str) -> Result<Connection, String
         first_error
     };
 
-    match open_nolock_connection(path) {
-        Ok(conn) => Ok(conn),
-        Err(fallback_error) => Err(format_open_error(path, retry_error, Some(fallback_error))),
-    }
+    Err(format_open_error(path, retry_error, None))
 }
 
 fn open_configured_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
-    )?;
-    configure_connection(&conn)?;
-    Ok(conn)
-}
-
-fn open_nolock_connection(path: &Path) -> Result<Connection, rusqlite::Error> {
-    let conn = Connection::open_with_flags(
-        sqlite_nolock_uri(path),
-        OpenFlags::SQLITE_OPEN_READ_WRITE
-            | OpenFlags::SQLITE_OPEN_FULL_MUTEX
-            | OpenFlags::SQLITE_OPEN_URI,
     )?;
     configure_connection(&conn)?;
     Ok(conn)
@@ -292,7 +278,7 @@ fn format_open_error(
     let wal = sidecar_path(path, "wal");
     let shm = sidecar_path(path, "shm");
     let mut message = format!(
-        "Unable to open database file: {}. Parent: {}. WAL exists: {}. SHM exists: {}. SQLite: {error}",
+        "Unable to open database file: {}. Parent: {}. WAL exists: {}. SHM exists: {}. SQLite: {error}. Close other Framecraft instances and applications using this library. Verify that the storage supports normal SQLite locking. If needed, move or copy the library to writable local storage and try again",
         path.display(),
         parent,
         wal.exists(),
@@ -304,20 +290,6 @@ fn format_open_error(
         ));
     }
     message
-}
-
-fn sqlite_nolock_uri(path: &Path) -> String {
-    let encoded_path = path
-        .to_string_lossy()
-        .bytes()
-        .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                (byte as char).to_string()
-            }
-            _ => format!("%{byte:02X}"),
-        })
-        .collect::<String>();
-    format!("file:{encoded_path}?mode=rw&nolock=1")
 }
 
 fn timestamp_slug() -> String {
@@ -367,41 +339,30 @@ mod tests {
     }
 
     #[test]
-    fn sqlite_nolock_uri_encodes_network_path() {
-        let path =
-            Path::new("/Volumes/DATA/04_SHARED/03 FRAMECRAFT/lib#1.framecraftlib/framecraft.db");
+    fn does_not_use_writable_nolock_fallback() {
+        let source = include_str!("portable_sqlite.rs");
 
-        let uri = sqlite_nolock_uri(path);
-
-        assert_eq!(
-            uri,
-            "file:/Volumes/DATA/04_SHARED/03%20FRAMECRAFT/lib%231.framecraftlib/framecraft.db?mode=rw&nolock=1"
-        );
+        for forbidden in [
+            ["open", "_nolock_connection"].concat(),
+            ["sqlite", "_nolock_uri"].concat(),
+            ["SQLITE_OPEN", "_URI"].concat(),
+            ["nolock", "=1"].concat(),
+        ] {
+            assert!(!source.contains(&forbidden), "found {forbidden}");
+        }
     }
 
     #[test]
-    fn nolock_connection_opens_existing_database_with_delete_journal() {
-        let root = test_root("nolock-open");
-        let db_path = root.join("framecraft db.sqlite");
-        let conn = Connection::open(&db_path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE prompts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
-             INSERT INTO prompts (title) VALUES ('Test');",
-        )
-        .unwrap();
-        drop(conn);
+    fn formatted_open_error_includes_locking_recovery_guidance() {
+        let path = Path::new("/Volumes/shared/Library.framecraftlib/framecraft.db");
 
-        let conn = open_nolock_connection(&db_path).unwrap();
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM prompts", [], |row| row.get(0))
-            .unwrap();
-        let journal_mode: String = conn
-            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
-            .unwrap();
+        let error = format_open_error(path, rusqlite::Error::InvalidQuery, None);
 
-        assert_eq!(count, 1);
-        assert_eq!(journal_mode.to_lowercase(), "delete");
-        let _ = fs::remove_dir_all(root);
+        assert!(
+            error.contains("Close other Framecraft instances and applications using this library")
+        );
+        assert!(error.contains("supports normal SQLite locking"));
+        assert!(error.contains("move or copy the library to writable local storage"));
     }
 
     #[test]

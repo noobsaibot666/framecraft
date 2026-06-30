@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendProjectNote,
   generateSuggestions,
   serializePackToSystem,
   createThread,
@@ -12,6 +13,20 @@ import {
 import type { ProjectContextPack } from "@/types";
 
 // isTauri is false in Vitest — all calls use in-memory stores
+
+describe("appendProjectNote", () => {
+  it("uses the new note when no existing note is present", () => {
+    expect(appendProjectNote(undefined, "New note")).toBe("New note");
+  });
+
+  it("appends without overwriting existing project notes", () => {
+    expect(appendProjectNote("Existing", "New note")).toBe("Existing\n\nNew note");
+  });
+
+  it("normalizes surrounding whitespace", () => {
+    expect(appendProjectNote(" Existing ", " New note ")).toBe("Existing\n\nNew note");
+  });
+});
 
 function makePack(overrides: Partial<ProjectContextPack> = {}): ProjectContextPack {
   return {

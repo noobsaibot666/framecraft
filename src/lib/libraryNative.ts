@@ -16,6 +16,11 @@ export async function validateLibraryPackageNative(baseDir: string): Promise<Lib
   return invoke<LibraryValidationResult>("validate_library_package_native", { baseDir });
 }
 
+export async function inspectLibraryPackageNative(baseDir: string): Promise<LibraryValidationResult> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<LibraryValidationResult>("inspect_library_package_native", { baseDir });
+}
+
 export async function repairLibraryDatabaseSchemaNative(baseDir: string): Promise<LibraryValidationResult> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<LibraryValidationResult>("repair_library_database_schema_native", { baseDir });

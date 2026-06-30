@@ -18,6 +18,12 @@ async function getDb() {
 function generateId() { return crypto.randomUUID(); }
 function now() { return new Date().toISOString(); }
 
+export function appendProjectNote(existing: string | undefined, next: string): string {
+  const current = existing?.trim() ?? "";
+  const addition = next.trim();
+  return current ? `${current}\n\n${addition}` : addition;
+}
+
 // ─── Dev fallback stores ──────────────────────────────────────
 
 const _devThreads: AssistantThread[] = [];
@@ -61,6 +67,7 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
       category: project.category,
       status: project.status,
       client: project.client,
+      notes: project.notes,
     },
     prompts: {
       total: prompts.length,

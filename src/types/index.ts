@@ -439,6 +439,7 @@ export interface ProjectContextPack {
     category?: string;
     status: string;
     client?: string;
+    notes?: string;
   };
   prompts: {
     total: number;

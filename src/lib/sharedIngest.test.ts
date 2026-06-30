@@ -84,6 +84,12 @@ function createDb(options: { promptExists?: boolean; projectExists?: boolean; re
   };
 }
 
+async function expectedAppliedMarkerPath(appliedDir: string, idempotencyKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(idempotencyKey));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${appliedDir}${hex}.json`;
+}
+
 describe("sharedIngest", () => {
   it("creates a valid reference import job with safe staged paths", () => {
     const job = createReferenceImportJob({
@@ -102,6 +108,22 @@ describe("sharedIngest", () => {
     expect(validateSharedIngestJob(job).ok).toBe(true);
   });
 
+  it("accepts exactly 128-character ids and normalizes uppercase dotted extensions", () => {
+    const safeId = "a".repeat(128);
+    const job = createReferenceImportJob({
+      jobId: safeId,
+      referenceId: safeId,
+      idempotencyKey: "ref:hash-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: ".PNG",
+      reference: { title: "Mood", kind: "image" },
+    });
+
+    expect(job.payload.originalExtension).toBe("png");
+    expect(validateSharedIngestJob(job)).toEqual({ ok: true, errors: [] });
+  });
+
   it("rejects unsafe staged paths", () => {
     const job = createReferenceImportJob({
       jobId: "job-a",
@@ -118,6 +140,191 @@ describe("sharedIngest", () => {
       ok: false,
       errors: ["Unsafe staged media path: ../escape.png"],
     });
+  });
+
+  it.each(["../escape", "nested/id", "nested\\id", "", "a".repeat(129)])(
+    "rejects unsafe job ids: %s",
+    (jobId) => {
+      const job = createReferenceImportJob({
+        jobId,
+        referenceId: "ref-a",
+        idempotencyKey: "ref:hash-a",
+        createdAt: "2026-06-25T10:00:00.000Z",
+        createdBy: { machine: "mac", user: "alan" },
+        originalExtension: "png",
+        reference: { title: "Mood", kind: "image" },
+      });
+
+      expect(validateSharedIngestJob(job).ok).toBe(false);
+    }
+  );
+
+  it.each(["../escape", "nested/id", "nested\\id", "", "a".repeat(129)])(
+    "rejects unsafe reference ids: %s",
+    (referenceId) => {
+      const job = createReferenceImportJob({
+        jobId: "job-a",
+        referenceId,
+        idempotencyKey: "ref:hash-a",
+        createdAt: "2026-06-25T10:00:00.000Z",
+        createdBy: { machine: "mac", user: "alan" },
+        originalExtension: "png",
+        reference: { title: "Mood", kind: "image" },
+      });
+
+      expect(validateSharedIngestJob(job).ok).toBe(false);
+    }
+  );
+
+  it.each(["../escape", "nested/id", "nested\\id", "", "a".repeat(129)])(
+    "rejects unsafe result ids: %s",
+    (resultId) => {
+      const job = createResultImportJob({
+        jobId: "job-a",
+        resultId,
+        promptId: "prompt-1",
+        idempotencyKey: "result:hash-a",
+        createdAt: "2026-06-25T10:00:00.000Z",
+        createdBy: { machine: "mac", user: "alan" },
+        originalExtension: "png",
+        result: { provider: "midjourney" },
+      });
+
+      expect(validateSharedIngestJob(job).ok).toBe(false);
+    }
+  );
+
+  it.each(["../../db", "exe", "nested/png", "nested\\png", ""])(
+    "rejects unsafe original extensions: %s",
+    (originalExtension) => {
+      const job = createReferenceImportJob({
+        jobId: "job-a",
+        referenceId: "ref-a",
+        idempotencyKey: "ref:hash-a",
+        createdAt: "2026-06-25T10:00:00.000Z",
+        createdBy: { machine: "mac", user: "alan" },
+        originalExtension: "png",
+        reference: { title: "Mood", kind: "image" },
+      });
+      job.payload.originalExtension = originalExtension;
+      job.payload.originalStagedPath = `job-a/original.${originalExtension}`;
+
+      expect(validateSharedIngestJob(job).ok).toBe(false);
+    }
+  );
+
+  it.each([
+    ["original", "other-job/original.png", "job-a/thumb.jpg"],
+    ["thumbnail", "job-a/original.png", "job-a/other.jpg"],
+  ])("requires the canonical %s staged path", (_kind, originalStagedPath, thumbnailStagedPath) => {
+    const job = createReferenceImportJob({
+      jobId: "job-a",
+      referenceId: "ref-a",
+      idempotencyKey: "ref:hash-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: "png",
+      reference: { title: "Mood", kind: "image" },
+    });
+    job.payload.originalStagedPath = originalStagedPath;
+    job.payload.thumbnailStagedPath = thumbnailStagedPath;
+
+    expect(validateSharedIngestJob(job).ok).toBe(false);
+  });
+
+  it("rejects an unsafe result id in a project result link", () => {
+    const job = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-1",
+      resultId: "../result",
+      idempotencyKey: "project-result:project-1:result-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+
+    expect(validateSharedIngestJob(job).ok).toBe(false);
+  });
+
+  it.each([
+    ["promptId", "../prompt"],
+    ["projectId", "project/id"],
+  ] as const)("rejects unsafe DB identity %s", (field, unsafeId) => {
+    const job = field === "promptId"
+      ? createResultImportJob({
+          jobId: "job-a",
+          resultId: "result-a",
+          promptId: unsafeId,
+          idempotencyKey: "result:hash-a",
+          createdAt: "2026-06-25T10:00:00.000Z",
+          createdBy: { machine: "mac", user: "alan" },
+          originalExtension: "png",
+          result: { provider: "midjourney" },
+        })
+      : createProjectResultLinkJob({
+          jobId: "job-a",
+          projectId: unsafeId,
+          resultId: "result-a",
+          idempotencyKey: "project-result:project-a:result-a",
+          createdAt: "2026-06-25T10:00:00.000Z",
+          createdBy: { machine: "mac", user: "alan" },
+        });
+
+    expect(validateSharedIngestJob(job).ok).toBe(false);
+  });
+
+  it("rejects an invalid publish before filesystem I/O", async () => {
+    const paths = resolveLibraryPaths("/Volumes/NAS/Work.framecraftlib");
+    const fs = createFs();
+    const job = createReferenceImportJob({
+      jobId: "../escape",
+      referenceId: "ref-a",
+      idempotencyKey: "ref:hash-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: "png",
+      reference: { title: "Mood", kind: "image" },
+    });
+
+    await expect(publishSharedIngestJob({
+      paths,
+      fs,
+      job,
+      originalBytes: new Uint8Array([1]),
+      thumbnailBytes: new Uint8Array([2]),
+    })).rejects.toThrow();
+
+    expect(fs.mkdir).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(fs.writeTextFile).not.toHaveBeenCalled();
+    expect(fs.renameFile).not.toHaveBeenCalled();
+  });
+
+  it("does not copy media or query the database for an invalid inbox job", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const job = createReferenceImportJob({
+      jobId: "job-a",
+      referenceId: "../escape",
+      idempotencyKey: "ref:hash-a",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+      originalExtension: "png",
+      reference: { title: "Mood", kind: "image" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-a.json": JSON.stringify(job),
+      "/lib/Work.framecraftlib/staging/job-a/original.png": new Uint8Array([1]),
+      "/lib/Work.framecraftlib/staging/job-a/thumb.jpg": new Uint8Array([2]),
+    });
+    const db = createDb();
+
+    await expect(processSharedIngestInbox({ paths, fs, db })).resolves.toEqual({
+      applied: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    expect(fs.copyFile).not.toHaveBeenCalled();
+    expect(db.select).not.toHaveBeenCalled();
+    expect(db.execute).not.toHaveBeenCalled();
   });
 
   it("publishes media before atomically renaming the job into inbox", async () => {
@@ -170,6 +377,7 @@ describe("sharedIngest", () => {
     const db = createDb();
 
     const result = await processSharedIngestInbox({ paths, fs, db });
+    const markerPath = await expectedAppliedMarkerPath(paths.appliedDir, job.idempotency_key);
 
     expect(result).toEqual({ applied: 1, failed: 0, skipped: 0 });
     expect(fs.copies).toContainEqual([
@@ -177,7 +385,7 @@ describe("sharedIngest", () => {
       "/lib/Work.framecraftlib/references/ref-a.png",
     ]);
     expect(db.references).toHaveLength(1);
-    expect(fs.files["/lib/Work.framecraftlib/sync/applied/ref_hash-a.json"]).toContain('"job_id": "job-a"');
+    expect(fs.files[markerPath]).toContain('"job_id": "job-a"');
     expect(fs.removed).toContain("/lib/Work.framecraftlib/inbox/job-a.json");
   });
 
@@ -192,9 +400,10 @@ describe("sharedIngest", () => {
       originalExtension: "png",
       reference: { title: "Mood", kind: "image" },
     });
+    const markerPath = await expectedAppliedMarkerPath(paths.appliedDir, job.idempotency_key);
     const fs = createFs({
       "/lib/Work.framecraftlib/inbox/job-a.json": JSON.stringify(job),
-      "/lib/Work.framecraftlib/sync/applied/ref_hash-a.json": "{}",
+      [markerPath]: "{}",
     });
     const db = createDb();
 
@@ -222,10 +431,11 @@ describe("sharedIngest", () => {
     const db = createDb({ referenceExists: true });
 
     const result = await processSharedIngestInbox({ paths, fs, db });
+    const markerPath = await expectedAppliedMarkerPath(paths.appliedDir, job.idempotency_key);
 
     expect(result).toEqual({ applied: 1, failed: 0, skipped: 0 });
     expect(db.references).toHaveLength(0);
-    expect(fs.files["/lib/Work.framecraftlib/sync/applied/ref_hash-a.json"]).toContain('"job_id": "job-a"');
+    expect(fs.files[markerPath]).toContain('"job_id": "job-a"');
     expect(fs.removed).toContain("/lib/Work.framecraftlib/inbox/job-a.json");
   });
 
@@ -286,10 +496,70 @@ describe("sharedIngest", () => {
     const db = createDb({ projectExists: true, resultExists: true });
 
     const result = await processSharedIngestInbox({ paths, fs, db });
+    const markerPath = await expectedAppliedMarkerPath(paths.appliedDir, job.idempotency_key);
 
     expect(result).toEqual({ applied: 1, failed: 0, skipped: 0 });
     expect(db.projectResults).toEqual([["project-1", "result-a"]]);
-    expect(fs.files["/lib/Work.framecraftlib/sync/applied/project-result_project-1_result-a.json"]).toContain('"job_id": "job-link"');
+    expect(fs.files[markerPath]).toContain('"job_id": "job-link"');
+  });
+
+  it("uses distinct applied markers for idempotency keys that sanitize identically", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const firstJob = createProjectResultLinkJob({
+      jobId: "job-link-a",
+      projectId: "project-a",
+      resultId: "result-a",
+      idempotencyKey: "project-result:a_b:c",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const secondJob = createProjectResultLinkJob({
+      jobId: "job-link-b",
+      projectId: "project-a",
+      resultId: "result-b",
+      idempotencyKey: "project-result:a:b_c",
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-link-a.json": JSON.stringify(firstJob),
+      "/lib/Work.framecraftlib/inbox/job-link-b.json": JSON.stringify(secondJob),
+    });
+    const db = createDb({ projectExists: true, resultExists: true });
+
+    await expect(processSharedIngestInbox({ paths, fs, db })).resolves.toEqual({
+      applied: 2,
+      failed: 0,
+      skipped: 0,
+    });
+    const markers = Object.keys(fs.files).filter((path) => path.startsWith(paths.appliedDir));
+    expect(markers).toHaveLength(2);
+    expect(new Set(markers).size).toBe(2);
+  });
+
+  it("uses a bounded applied marker filename for a very long idempotency key", async () => {
+    const paths = resolveLibraryPaths("/lib/Work.framecraftlib");
+    const job = createProjectResultLinkJob({
+      jobId: "job-link",
+      projectId: "project-a",
+      resultId: "result-a",
+      idempotencyKey: `project-result:${"a".repeat(10_000)}`,
+      createdAt: "2026-06-25T10:00:00.000Z",
+      createdBy: { machine: "mac", user: "alan" },
+    });
+    const fs = createFs({
+      "/lib/Work.framecraftlib/inbox/job-link.json": JSON.stringify(job),
+    });
+    const db = createDb({ projectExists: true, resultExists: true });
+
+    await expect(processSharedIngestInbox({ paths, fs, db })).resolves.toEqual({
+      applied: 1,
+      failed: 0,
+      skipped: 0,
+    });
+    const marker = Object.keys(fs.files).find((path) => path.startsWith(paths.appliedDir));
+    const filename = marker?.slice(paths.appliedDir.length);
+    expect(filename).toMatch(/^[a-f0-9]{64}\.json$/);
   });
 
   it("fails a project result link when the result does not exist yet", async () => {

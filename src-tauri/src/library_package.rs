@@ -2,6 +2,7 @@ use crate::portable_sqlite::open_portable_database;
 use rusqlite::{
     params_from_iter,
     types::{Value, ValueRef},
+    OptionalExtension,
 };
 use serde::Serialize;
 use std::{
@@ -105,6 +106,13 @@ pub fn validate_library_package_native(
     base_dir: String,
 ) -> Result<LibraryValidationResult, String> {
     Ok(validate_library_package(&base_dir))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn inspect_library_package_native(
+    base_dir: String,
+) -> Result<LibraryValidationResult, String> {
+    Ok(inspect_library_package(&base_dir))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -263,6 +271,13 @@ const PROMPT_COLUMNS: [&str; 30] = [
     "updated_at",
 ];
 
+const MIGRATION_022_NANO_BANANA_TITLES: [&str; 4] = [
+    "Nano Banana — Skin Texture Macro",
+    "Nano Banana — Eye Detail Macro",
+    "Nano Banana — Lip Texture Macro",
+    "Nano Banana — Tongue Texture Macro",
+];
+
 const RESULT_COLUMNS: [&str; 17] = [
     "id",
     "prompt_id",
@@ -302,11 +317,12 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 28] = [
+const REQUIRED_RELEASE_TABLES: [&str; 29] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
     "avoidance_patterns",
+    "campaigns",
     "comparison_items",
     "comparison_sessions",
     "creative_directions",
@@ -331,6 +347,26 @@ const REQUIRED_RELEASE_TABLES: [&str; 28] = [
     "token_categories",
     "token_patterns",
     "tokens",
+];
+
+const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
+    (
+        "comparison_sessions",
+        &["comparison_type", "outcome_summary"],
+    ),
+    ("comparison_items", &["source_role"]),
+    ("projects", &["campaign_id"]),
+    ("generation_queue", &["is_pinned"]),
+    (
+        "prompts",
+        &[
+            "recipe_use_count",
+            "best_use",
+            "risk_notes",
+            "source_url",
+            "thumbnail_data",
+        ],
+    ),
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -362,6 +398,7 @@ fn merge_library_package(
         errors: Vec::new(),
     };
 
+    map_builtin_seed_prompt_ids(&source_conn, &mut target_conn, &mut report)?;
     merge_prompt_rows(&source_conn, &mut target_conn, &mut report)?;
     merge_result_rows(
         &source_conn,
@@ -378,6 +415,46 @@ fn merge_library_package(
         &mut report,
     )?;
     Ok(report)
+}
+
+fn map_builtin_seed_prompt_ids(
+    source_conn: &rusqlite::Connection,
+    target_conn: &mut rusqlite::Connection,
+    report: &mut LibraryMergeReport,
+) -> Result<(), String> {
+    let source_rows = read_builtin_seed_prompt_records(source_conn)?;
+    let transaction = target_conn
+        .transaction()
+        .map_err(|error| error.to_string())?;
+
+    for source_row in source_rows {
+        let source_id = value_as_string(&source_row.values[0])?;
+        let title = value_as_string(&source_row.values[1])?;
+        let target_id = transaction
+            .query_row(
+                "SELECT id FROM prompts
+                 WHERE provider = 'nano_banana' AND title = ?1
+                 ORDER BY id
+                 LIMIT 1",
+                [&title],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+
+        if let Some(target_id) = target_id {
+            if target_id != source_id {
+                report.id_remaps.push(MergeIdRemap {
+                    table: "prompts".to_string(),
+                    source_id,
+                    target_id,
+                    reason: "builtin_seed".to_string(),
+                });
+            }
+        }
+    }
+
+    transaction.commit().map_err(|error| error.to_string())
 }
 
 fn assert_valid_library_for_merge(label: &str, base_dir: &str) -> Result<(), String> {
@@ -754,10 +831,57 @@ fn read_table_records(
 
 fn read_prompt_records(conn: &rusqlite::Connection) -> Result<Vec<TableRecord>, String> {
     let sql = format!(
-        "SELECT {} FROM prompts WHERE COALESCE(is_recipe, 0) = 0 ORDER BY created_at, id",
+        "SELECT {} FROM prompts
+         WHERE COALESCE(is_recipe, 0) = 0
+           AND NOT (
+             COALESCE(provider, '') = ?1
+             AND title IN (?2, ?3, ?4, ?5)
+           )
+         ORDER BY created_at, id",
         PROMPT_COLUMNS.join(", ")
     );
-    read_records_with_sql(conn, &sql, PROMPT_COLUMNS.len())
+    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(
+            params_from_iter(
+                std::iter::once("nano_banana")
+                    .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
+            ),
+            |row| record_from_row(row, PROMPT_COLUMNS.len()),
+        )
+        .map_err(|error| error.to_string())?;
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(row.map_err(|error| error.to_string())?);
+    }
+    Ok(records)
+}
+
+fn read_builtin_seed_prompt_records(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<TableRecord>, String> {
+    let sql = format!(
+        "SELECT {} FROM prompts
+         WHERE COALESCE(provider, '') = ?1
+           AND title IN (?2, ?3, ?4, ?5)
+         ORDER BY title, id",
+        PROMPT_COLUMNS.join(", ")
+    );
+    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    let rows = statement
+        .query_map(
+            params_from_iter(
+                std::iter::once("nano_banana")
+                    .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
+            ),
+            |row| record_from_row(row, PROMPT_COLUMNS.len()),
+        )
+        .map_err(|error| error.to_string())?;
+    let mut records = Vec::new();
+    for row in rows {
+        records.push(row.map_err(|error| error.to_string())?);
+    }
+    Ok(records)
 }
 
 fn read_records_with_sql(
@@ -893,7 +1017,7 @@ fn write_metadata(paths: &LibraryPathsDto) -> Result<(), String> {
     fs::write(format!("{}library.json", paths.base_dir), raw).map_err(format_io_error)
 }
 
-fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
+fn inspect_library_package(base_dir: &str) -> LibraryValidationResult {
     let paths = resolve_library_paths(base_dir);
     let mut errors = Vec::new();
     let metadata_path = format!("{}library.json", paths.base_dir);
@@ -903,12 +1027,6 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
     if !Path::new(&paths.db_path).exists() {
         errors.push("Missing framecraft.db".to_string());
-    } else {
-        match has_required_database_schema(&paths.db_path) {
-            Ok(true) => {}
-            Ok(false) => errors.push("Missing database schema".to_string()),
-            Err(error) => errors.push(error),
-        }
     }
     if !Path::new(&paths.results_dir).exists() {
         errors.push("Missing results directory".to_string());
@@ -960,6 +1078,20 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     }
 }
 
+fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
+    let paths = resolve_library_paths(base_dir);
+    let mut validation = inspect_library_package(base_dir);
+    if Path::new(&paths.db_path).exists() {
+        match has_required_database_schema(&paths.db_path) {
+            Ok(true) => {}
+            Ok(false) => validation.errors.push("Missing database schema".to_string()),
+            Err(error) => validation.errors.push(error),
+        }
+    }
+    validation.ok = validation.errors.is_empty();
+    validation
+}
+
 fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationResult, String> {
     let paths = resolve_library_paths(base_dir);
     create_package_dirs(&paths)?;
@@ -980,7 +1112,7 @@ fn repair_library_database_schema(base_dir: &str) -> Result<LibraryValidationRes
     }
 
     if has_previous_release_schema(&paths.db_path)? {
-        upgrade_previous_release_schema(&paths.db_path)?;
+        upgrade_supported_release_schema(&paths.db_path)?;
         return Ok(validate_library_package(&paths.base_dir));
     }
 
@@ -1027,33 +1159,41 @@ fn database_user_tables(db_path: &str) -> Result<Vec<String>, String> {
 
 fn has_required_database_schema(db_path: &str) -> Result<bool, String> {
     let conn = open_portable_database(db_path)?;
-    let has_tables = REQUIRED_RELEASE_TABLES.iter().all(|table| {
-        conn.query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
-            [table],
-            |_| Ok(()),
-        )
-        .is_ok()
-    });
-    Ok(has_tables
-        && connection_column_exists(&conn, "comparison_sessions", "comparison_type")?
-        && connection_column_exists(&conn, "comparison_sessions", "outcome_summary")?
-        && connection_column_exists(&conn, "comparison_items", "source_role")?)
+    for table in REQUIRED_RELEASE_TABLES {
+        if !connection_table_exists(&conn, table) {
+            return Ok(false);
+        }
+    }
+    for (table, columns) in REQUIRED_RELEASE_COLUMNS {
+        for column in columns {
+            if !connection_column_exists(&conn, table, column)? {
+                return Ok(false);
+            }
+        }
+    }
+    Ok(true)
 }
 
 fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
     let conn = open_portable_database(db_path)?;
     Ok(REQUIRED_RELEASE_TABLES
         .iter()
-        .filter(|table| **table != "creative_directions" && **table != "shot_sequence")
-        .all(|table| {
-            conn.query_row(
-                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
-                [table],
-                |_| Ok(()),
+        .filter(|table| {
+            !matches!(
+                **table,
+                "campaigns" | "creative_directions" | "shot_sequence"
             )
-            .is_ok()
-        }))
+        })
+        .all(|table| connection_table_exists(&conn, table)))
+}
+
+fn connection_table_exists(conn: &rusqlite::Connection, table: &str) -> bool {
+    conn.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+        [table],
+        |_| Ok(()),
+    )
+    .is_ok()
 }
 
 fn connection_column_exists(
@@ -1075,30 +1215,128 @@ fn connection_column_exists(
     Ok(false)
 }
 
-fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
-    let conn = open_portable_database(db_path)?;
-    if !connection_column_exists(&conn, "comparison_sessions", "comparison_type")? {
-        conn.execute_batch(
-            "ALTER TABLE comparison_sessions ADD COLUMN comparison_type TEXT NOT NULL DEFAULT 'result_result';",
+fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
+    let mut conn = open_portable_database(db_path)?;
+    let tx = conn.transaction().map_err(|error| error.to_string())?;
+
+    tx.execute_batch(include_str!("../migrations/016_creative_directions.sql"))
+        .map_err(|error| error.to_string())?;
+    tx.execute_batch(include_str!("../migrations/017_shot_sequence.sql"))
+        .map_err(|error| error.to_string())?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS campaigns (
+           id         TEXT PRIMARY KEY NOT NULL,
+           title      TEXT NOT NULL,
+           client     TEXT,
+           brief      TEXT,
+           status     TEXT NOT NULL DEFAULT 'active',
+           created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+           updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+         );
+         CREATE INDEX IF NOT EXISTS idx_campaigns_status ON campaigns(status);",
+    )
+    .map_err(|error| error.to_string())?;
+
+    add_column_if_missing(
+        &tx,
+        "comparison_sessions",
+        "comparison_type",
+        "ALTER TABLE comparison_sessions ADD COLUMN comparison_type TEXT NOT NULL DEFAULT 'result_result';",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "comparison_sessions",
+        "outcome_summary",
+        "ALTER TABLE comparison_sessions ADD COLUMN outcome_summary TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "comparison_items",
+        "source_role",
+        "ALTER TABLE comparison_items ADD COLUMN source_role TEXT NOT NULL DEFAULT 'result';",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "projects",
+        "campaign_id",
+        "ALTER TABLE projects ADD COLUMN campaign_id TEXT REFERENCES campaigns(id) ON DELETE SET NULL;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "generation_queue",
+        "is_pinned",
+        "ALTER TABLE generation_queue ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "recipe_use_count",
+        "ALTER TABLE prompts ADD COLUMN recipe_use_count INTEGER NOT NULL DEFAULT 0;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "best_use",
+        "ALTER TABLE prompts ADD COLUMN best_use TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "risk_notes",
+        "ALTER TABLE prompts ADD COLUMN risk_notes TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "source_url",
+        "ALTER TABLE prompts ADD COLUMN source_url TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "thumbnail_data",
+        "ALTER TABLE prompts ADD COLUMN thumbnail_data TEXT;",
+    )?;
+
+    tx.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
+         CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
+         CREATE INDEX IF NOT EXISTS idx_prompts_recipe_use
+           ON prompts(recipe_use_count) WHERE is_recipe = 1;",
+    )
+    .map_err(|error| error.to_string())?;
+
+    let built_in_count: i64 = tx
+        .query_row(
+            "SELECT COUNT(*) FROM prompts WHERE title IN (?1, ?2, ?3, ?4)",
+            params_from_iter(MIGRATION_022_NANO_BANANA_TITLES.iter()),
+            |row| row.get(0),
         )
         .map_err(|error| error.to_string())?;
-    }
-    if !connection_column_exists(&conn, "comparison_sessions", "outcome_summary")? {
-        conn.execute_batch("ALTER TABLE comparison_sessions ADD COLUMN outcome_summary TEXT;")
+    if built_in_count == 0 {
+        tx.execute_batch(include_str!("../migrations/022_nano_banana_library.sql"))
             .map_err(|error| error.to_string())?;
     }
-    if !connection_column_exists(&conn, "comparison_items", "source_role")? {
-        conn.execute_batch(
-            "ALTER TABLE comparison_items ADD COLUMN source_role TEXT NOT NULL DEFAULT 'result';",
-        )
-        .map_err(|error| error.to_string())?;
+
+    tx.commit().map_err(|error| error.to_string())?;
+    if !has_required_database_schema(db_path)? {
+        return Err(
+            "Database schema upgrade did not produce the required release schema.".to_string(),
+        );
     }
-    conn.execute_batch(include_str!("../migrations/016_creative_directions.sql"))
-        .map_err(|error| error.to_string())?;
-    conn.execute_batch(include_str!("../migrations/017_shot_sequence.sql"))
-        .map_err(|error| error.to_string())?;
-    conn.execute_batch(include_str!("../migrations/018_campaigns.sql"))
-        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn add_column_if_missing(
+    conn: &rusqlite::Connection,
+    table: &str,
+    column: &str,
+    alter_sql: &str,
+) -> Result<(), String> {
+    if !connection_column_exists(conn, table, column)? {
+        conn.execute_batch(alter_sql)
+            .map_err(|error| error.to_string())?;
+    }
     Ok(())
 }
 
@@ -1357,6 +1595,24 @@ mod tests {
     }
 
     #[test]
+    fn structural_inspection_does_not_require_or_mutate_database_schema() {
+        let root = test_root("inspect-structure-only");
+        let package = root.join("StructureOnly.framecraftlib");
+        let paths = create_library_package(package.to_str().unwrap(), false).unwrap();
+        fs::write(&paths.db_path, []).unwrap();
+
+        let inspection = inspect_library_package(&paths.base_dir);
+        let validation = validate_library_package(&paths.base_dir);
+
+        assert!(inspection.ok, "{:?}", inspection.errors);
+        assert!(!validation.ok);
+        assert!(validation.errors.contains(&"Missing database schema".to_string()));
+        assert_eq!(fs::metadata(&paths.db_path).unwrap().len(), 0);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn repair_initializes_empty_database_schema() {
         let root = test_root("repair-empty-schema");
         let package = root.join("Repair.framecraftlib");
@@ -1385,9 +1641,9 @@ mod tests {
     }
 
     #[test]
-    fn repair_upgrades_previous_release_schema() {
-        let root = test_root("repair-previous-release-schema");
-        let package = root.join("PreviousRelease.framecraftlib");
+    fn repair_upgrades_supported_release_schema() {
+        let root = test_root("repair-supported-release-schema");
+        let package = root.join("SupportedRelease.framecraftlib");
         fs::create_dir_all(package.join("results")).unwrap();
         fs::create_dir_all(package.join("references")).unwrap();
         fs::write(
@@ -1418,6 +1674,80 @@ mod tests {
             db_path.to_str().unwrap(),
             "shot_sequence"
         ));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn repair_upgrades_every_supported_historical_release_schema() {
+        for migration_count in [15, 18, 19, 20, 21, 22] {
+            let root = test_root(&format!("repair-migration-{migration_count}"));
+            let package = root.join(format!("Migration{migration_count}.framecraftlib"));
+            let db_path = create_historical_package(&package, migration_count);
+
+            let validation = repair_library_database_schema(package.to_str().unwrap()).unwrap();
+
+            assert!(
+                validation.ok,
+                "migration {migration_count}: {:?}",
+                validation.errors
+            );
+            for table in REQUIRED_RELEASE_TABLES {
+                assert!(
+                    sqlite_table_exists(db_path.to_str().unwrap(), table),
+                    "migration {migration_count} missing table {table}"
+                );
+            }
+            for (table, columns) in REQUIRED_RELEASE_COLUMNS {
+                for column in columns {
+                    assert!(
+                        sqlite_column_exists(db_path.to_str().unwrap(), table, column),
+                        "migration {migration_count} missing {table}.{column}"
+                    );
+                }
+            }
+
+            let second_validation =
+                repair_library_database_schema(package.to_str().unwrap()).unwrap();
+            assert!(
+                second_validation.ok,
+                "migration {migration_count} failed idempotent repair: {:?}",
+                second_validation.errors
+            );
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn repair_migration_22_schema_supports_prompt_source_and_thumbnail_data() {
+        let root = test_root("repair-migration-22-prompt-media");
+        let package = root.join("Migration22.framecraftlib");
+        let db_path = create_historical_package(&package, 22);
+
+        let validation = repair_library_database_schema(package.to_str().unwrap()).unwrap();
+        assert!(validation.ok, "{:?}", validation.errors);
+
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute(
+            "INSERT INTO prompts (
+                id, title, provider, prompt_text, source_url, thumbnail_data, created_at, updated_at
+             ) VALUES (
+                'prompt-with-media', 'Prompt with media', 'nano_banana', 'test',
+                'https://example.com/source', 'data:image/png;base64,dGVzdA==',
+                '2026-06-30T00:00:00Z', '2026-06-30T00:00:00Z'
+             )",
+            [],
+        )
+        .unwrap();
+        let media = conn
+            .query_row(
+                "SELECT source_url, thumbnail_data FROM prompts WHERE id = 'prompt-with-media'",
+                [],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap();
+        assert_eq!(media.0, "https://example.com/source");
+        assert_eq!(media.1, "data:image/png;base64,dGVzdA==");
 
         let _ = fs::remove_dir_all(root);
     }
@@ -1495,24 +1825,120 @@ mod tests {
     }
 
     #[test]
-    fn merge_imports_prompt_into_destination_library() {
+    fn merge_imports_only_user_prompts_and_repeat_merge_adds_none() {
         let root = test_root("merge-prompt");
         let source = root.join("Source.framecraftlib");
         let target = root.join("Target.framecraftlib");
         let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
         let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
         insert_prompt(&source_paths.db_path, "prompt-a", "Source Prompt");
+        insert_prompt_for_provider(
+            &source_paths.db_path,
+            "custom-nano-banana",
+            "My Nano Banana Prompt",
+            "nano_banana",
+        );
+        insert_prompt_for_provider(
+            &source_paths.db_path,
+            "other-provider-seed-title",
+            MIGRATION_022_NANO_BANANA_TITLES[0],
+            "midjourney",
+        );
+        for (index, title) in MIGRATION_022_NANO_BANANA_TITLES.iter().enumerate() {
+            insert_prompt_for_provider(
+                &source_paths.db_path,
+                &format!("legacy-seed-{index}"),
+                title,
+                "nano_banana",
+            );
+        }
+        let source_seed_ids = migration_022_seed_ids(&source_paths.db_path);
+        assert_eq!(source_seed_ids.len(), 4);
+        assert_migration_022_seed_singletons(&target_paths.db_path);
 
         let report =
             merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
 
-        assert_eq!(report.prompts.imported, 1);
+        assert_eq!(report.prompts.imported, 3);
         assert_eq!(report.prompts.skipped_duplicates, 0);
         assert_eq!(report.prompts.remapped, 0);
+        assert_eq!(user_prompt_count(&target_paths.db_path), 3);
         assert_eq!(
             prompt_title(&target_paths.db_path, "prompt-a").as_deref(),
             Some("Source Prompt")
         );
+        assert_eq!(
+            prompt_title(&target_paths.db_path, "custom-nano-banana").as_deref(),
+            Some("My Nano Banana Prompt")
+        );
+        assert_eq!(
+            prompt_title(&target_paths.db_path, "other-provider-seed-title").as_deref(),
+            Some(MIGRATION_022_NANO_BANANA_TITLES[0])
+        );
+        assert!(source_seed_ids
+            .iter()
+            .all(|id| prompt_title(&target_paths.db_path, id).is_none()));
+        assert_migration_022_seed_singletons(&target_paths.db_path);
+
+        let repeat_report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(repeat_report.prompts.imported, 0);
+        assert_eq!(repeat_report.prompts.skipped_duplicates, 3);
+        assert_eq!(repeat_report.prompts.remapped, 0);
+        assert_eq!(user_prompt_count(&target_paths.db_path), 3);
+        assert_migration_022_seed_singletons(&target_paths.db_path);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_maps_result_from_source_builtin_to_matching_target_builtin() {
+        let root = test_root("merge-result-builtin-prompt");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        let title = MIGRATION_022_NANO_BANANA_TITLES[0];
+        insert_prompt_for_provider(
+            &source_paths.db_path,
+            "legacy-source-seed",
+            title,
+            "nano_banana",
+        );
+        insert_prompt_for_provider(
+            &target_paths.db_path,
+            "legacy-target-seed",
+            title,
+            "nano_banana",
+        );
+        let source_prompt_id = migration_022_seed_id(&source_paths.db_path, title);
+        let target_prompt_id = migration_022_seed_id(&target_paths.db_path, title);
+        assert_ne!(source_prompt_id, target_prompt_id);
+        insert_result(
+            &source_paths.db_path,
+            "builtin-prompt-result",
+            &source_prompt_id,
+            None,
+            None,
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        assert_eq!(report.prompts.imported, 0);
+        assert_eq!(report.prompts.remapped, 0);
+        assert_eq!(report.results.imported, 1);
+        assert_eq!(
+            result_prompt_id(&target_paths.db_path, "builtin-prompt-result").as_deref(),
+            Some(target_prompt_id.as_str())
+        );
+        assert!(report.id_remaps.iter().any(|remap| {
+            remap.table == "prompts"
+                && remap.source_id == source_prompt_id
+                && remap.target_id == target_prompt_id
+                && remap.reason == "builtin_seed"
+        }));
+        assert_migration_022_seed_singletons(&target_paths.db_path);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1532,7 +1958,7 @@ mod tests {
         assert_eq!(report.prompts.imported, 0);
         assert_eq!(report.prompts.skipped_duplicates, 1);
         assert_eq!(report.prompts.remapped, 0);
-        assert_eq!(prompt_count(&target_paths.db_path), 1);
+        assert_eq!(user_prompt_count(&target_paths.db_path), 1);
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1552,17 +1978,20 @@ mod tests {
         assert_eq!(report.prompts.imported, 1);
         assert_eq!(report.prompts.skipped_duplicates, 0);
         assert_eq!(report.prompts.remapped, 1);
-        assert_eq!(report.id_remaps.len(), 1);
-        assert_eq!(report.id_remaps[0].table, "prompts");
-        assert_eq!(report.id_remaps[0].source_id, "shared-id");
-        assert_ne!(report.id_remaps[0].target_id, "shared-id");
-        assert_eq!(prompt_count(&target_paths.db_path), 2);
+        let collision_remap = report
+            .id_remaps
+            .iter()
+            .find(|remap| remap.reason == "id_collision" && remap.source_id == "shared-id")
+            .expect("missing user prompt collision remap");
+        assert_eq!(collision_remap.table, "prompts");
+        assert_ne!(collision_remap.target_id, "shared-id");
+        assert_eq!(user_prompt_count(&target_paths.db_path), 2);
         assert_eq!(
             prompt_title(&target_paths.db_path, "shared-id").as_deref(),
             Some("Target Prompt")
         );
         assert_eq!(
-            prompt_title(&target_paths.db_path, &report.id_remaps[0].target_id).as_deref(),
+            prompt_title(&target_paths.db_path, &collision_remap.target_id).as_deref(),
             Some("Source Prompt")
         );
         let _ = fs::remove_dir_all(root);
@@ -1955,6 +2384,16 @@ mod tests {
         root
     }
 
+    fn create_historical_package(package: &Path, migration_count: usize) -> PathBuf {
+        fs::create_dir_all(package).unwrap();
+        let db_path = package.join("framecraft.db");
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        for sql in migration_sql().iter().take(migration_count) {
+            conn.execute_batch(sql).unwrap();
+        }
+        db_path
+    }
+
     fn sqlite_table_exists(db_path: &str, table: &str) -> bool {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.query_row(
@@ -1981,11 +2420,15 @@ mod tests {
     }
 
     fn insert_prompt(db_path: &str, id: &str, title: &str) {
+        insert_prompt_for_provider(db_path, id, title, "midjourney");
+    }
+
+    fn insert_prompt_for_provider(db_path: &str, id: &str, title: &str, provider: &str) {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.execute(
             "INSERT INTO prompts (id, title, provider, prompt_text, created_at, updated_at)
-             VALUES (?1, ?2, 'midjourney', ?3, '2026-06-26T00:00:00Z', '2026-06-26T00:00:00Z')",
-            (id, title, format!("Prompt text for {title}")),
+             VALUES (?1, ?2, ?3, ?4, '2026-06-26T00:00:00Z', '2026-06-26T00:00:00Z')",
+            (id, title, provider, format!("Prompt text for {title}")),
         )
         .unwrap();
     }
@@ -2030,11 +2473,80 @@ mod tests {
         .ok()
     }
 
-    fn prompt_count(db_path: &str) -> i64 {
+    fn migration_022_seed_ids(db_path: &str) -> Vec<String> {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        let mut statement = conn
+            .prepare(
+                "SELECT id FROM prompts
+                 WHERE provider = ?1 AND title IN (?2, ?3, ?4, ?5)
+                 ORDER BY title",
+            )
+            .unwrap();
+        statement
+            .query_map(
+                params_from_iter(
+                    std::iter::once("nano_banana")
+                        .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
+                ),
+                |row| row.get(0),
+            )
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    fn migration_022_seed_id(db_path: &str, title: &str) -> String {
         let conn = rusqlite::Connection::open(db_path).unwrap();
         conn.query_row(
-            "SELECT COUNT(*) FROM prompts WHERE COALESCE(is_recipe, 0) = 0",
-            [],
+            "SELECT id FROM prompts WHERE provider = 'nano_banana' AND title = ?1",
+            [title],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    fn assert_migration_022_seed_singletons(db_path: &str) {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        let total: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM prompts
+                 WHERE provider = ?1 AND title IN (?2, ?3, ?4, ?5)",
+                params_from_iter(
+                    std::iter::once("nano_banana")
+                        .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
+                ),
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            total <= MIGRATION_022_NANO_BANANA_TITLES.len() as i64,
+            "expected at most one legacy built-in prompt per title"
+        );
+        for title in MIGRATION_022_NANO_BANANA_TITLES {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM prompts WHERE provider = 'nano_banana' AND title = ?1",
+                    [title],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(count <= 1, "expected at most one built-in prompt titled {title}");
+        }
+    }
+
+    fn user_prompt_count(db_path: &str) -> i64 {
+        let conn = rusqlite::Connection::open(db_path).unwrap();
+        conn.query_row(
+            "SELECT COUNT(*) FROM prompts
+             WHERE COALESCE(is_recipe, 0) = 0
+               AND NOT (
+                 COALESCE(provider, '') = ?1
+                 AND title IN (?2, ?3, ?4, ?5)
+               )",
+            params_from_iter(
+                std::iter::once("nano_banana")
+                    .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
+            ),
             |row| row.get(0),
         )
         .unwrap()

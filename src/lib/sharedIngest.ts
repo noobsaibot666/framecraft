@@ -2,6 +2,9 @@ import type { Reference } from "@/types";
 import type { CreateResultInput } from "./db";
 import type { LibraryPaths } from "./libraryConfig";
 
+const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
+const SAFE_ORIGINAL_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp"]);
+
 export interface SharedIngestFileSystem {
   mkdir(path: string): Promise<void>;
   exists(path: string): Promise<boolean>;
@@ -188,18 +191,27 @@ export function validateSharedIngestJob(job: SharedIngestJob): ValidationResult 
   const errors: string[] = [];
   if (job.schema_version !== 1) errors.push("Unsupported shared ingest schema.");
   if (!job.job_id) errors.push("Missing job id.");
+  else if (!isSafeId(job.job_id)) errors.push("Invalid job id.");
   if (!job.idempotency_key) errors.push("Missing idempotency key.");
   if (job.kind !== "reference.import" && job.kind !== "result.import" && job.kind !== "project_result.link") {
     errors.push("Unsupported shared ingest kind.");
   }
   if (job.kind === "reference.import" || job.kind === "result.import") {
-    for (const path of [job.payload.originalStagedPath, job.payload.thumbnailStagedPath]) {
-      if (!isSafeRelativePath(path)) errors.push(`Unsafe staged media path: ${path}`);
+    if (!SAFE_ORIGINAL_EXTENSIONS.has(job.payload.originalExtension)) {
+      errors.push("Invalid original extension.");
     }
+    validateStagedPath(
+      errors,
+      job.payload.originalStagedPath,
+      `${job.job_id}/original.${job.payload.originalExtension}`
+    );
+    validateStagedPath(errors, job.payload.thumbnailStagedPath, `${job.job_id}/thumb.jpg`);
   }
-  if (job.kind === "result.import" && !job.payload.promptId) errors.push("Missing prompt id.");
-  if (job.kind === "project_result.link" && !job.payload.projectId) errors.push("Missing project id.");
-  if (job.kind === "project_result.link" && !job.payload.resultId) errors.push("Missing result id.");
+  if (job.kind === "reference.import" && !isSafeId(job.payload.referenceId)) errors.push("Invalid reference id.");
+  if (job.kind === "result.import" && !isSafeId(job.payload.resultId)) errors.push("Invalid result id.");
+  if (job.kind === "result.import" && !isSafeId(job.payload.promptId)) errors.push("Invalid prompt id.");
+  if (job.kind === "project_result.link" && !isSafeId(job.payload.projectId)) errors.push("Invalid project id.");
+  if (job.kind === "project_result.link" && !isSafeId(job.payload.resultId)) errors.push("Invalid result id.");
   return { ok: errors.length === 0, errors };
 }
 
@@ -249,7 +261,7 @@ export async function processSharedIngestInbox(input: {
       const validation = validateSharedIngestJob(job);
       if (!validation.ok) throw new Error(validation.errors.join(", "));
 
-	      if (await input.fs.exists(appliedPath(input.paths, job.idempotency_key))) {
+	      if (await input.fs.exists(await appliedPath(input.paths, job.idempotency_key))) {
 	        await input.fs.removeFile(inboxPath);
 	        result.skipped += 1;
 	        continue;
@@ -414,7 +426,7 @@ async function jobAlreadyExistsInDatabase(db: SharedIngestDb, job: SharedIngestJ
 }
 
 async function writeAppliedMarker(paths: LibraryPaths, fs: SharedIngestFileSystem, job: SharedIngestJob): Promise<void> {
-  await fs.writeTextFile(appliedPath(paths, job.idempotency_key), JSON.stringify({
+  await fs.writeTextFile(await appliedPath(paths, job.idempotency_key), JSON.stringify({
     job_id: job.job_id,
     idempotency_key: job.idempotency_key,
     applied_at: new Date().toISOString(),
@@ -497,19 +509,31 @@ async function ensureSyncDirs(paths: LibraryPaths, fs: SharedIngestFileSystem): 
   await fs.mkdir(paths.failedDir);
 }
 
-function appliedPath(paths: LibraryPaths, idempotencyKey: string): string {
-  return `${paths.appliedDir}${safeKey(idempotencyKey)}.json`;
-}
-
-function safeKey(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+async function appliedPath(paths: LibraryPaths, idempotencyKey: string): Promise<string> {
+  const encoded = new TextEncoder().encode(idempotencyKey);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${paths.appliedDir}${hex}.json`;
 }
 
 function normalizeExtension(extension: string): string {
-  return extension.replace(/^\./, "").toLowerCase() || "jpg";
+  return extension.replace(/^\./, "").toLowerCase();
 }
 
-function isSafeRelativePath(path: string): boolean {
+function isSafeId(value: unknown): value is string {
+  return typeof value === "string" && SAFE_ID.test(value);
+}
+
+function validateStagedPath(errors: string[], path: string, expected: string): void {
+  if (!isSafeRelativePath(path)) {
+    errors.push(`Unsafe staged media path: ${path}`);
+  } else if (path !== expected) {
+    errors.push(`Non-canonical staged media path: ${path}`);
+  }
+}
+
+function isSafeRelativePath(path: unknown): path is string {
+  if (typeof path !== "string") return false;
   if (!path || path.includes("\\") || path.startsWith("/") || path.startsWith("~")) return false;
   return path.split("/").every((part) => part.length > 0 && part !== "." && part !== "..");
 }

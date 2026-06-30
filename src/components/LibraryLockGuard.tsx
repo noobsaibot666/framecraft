@@ -32,49 +32,49 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
   const baseDir = useRef<string | null>(null);
   const [state, setState] = useState<LockState>({ status: "checking" });
 
-  const buildLock = useCallback(async (): Promise<LibraryLockInfo> => {
-    const identity = isTauri()
-      ? await getLibraryLockIdentityNative().catch(() => ({
+  const acquire = useCallback(async (forceTakeover = false) => {
+    try {
+      if (!isTauri()) {
+        setState({ status: "inactive" });
+        return;
+      }
+
+      // Fetch settings, identity, and app version in parallel to minimise startup latency.
+      const [settings, identity, appVersion] = await Promise.all([
+        getLibrarySettingsState(),
+        getLibraryLockIdentityNative().catch(() => ({
           machine: navigator.platform || "unknown-machine",
           user: "unknown-user",
-        }))
-      : {
-          machine: navigator.platform || "unknown-machine",
-          user: "dev-user",
-        };
+        })),
+        getVersion().catch(() => "unknown"),
+      ]);
 
-    return {
-      session_id: session.current,
-      machine: identity.machine,
-      user: identity.user,
-      updated_at: new Date().toISOString(),
-      app_version: isTauri() ? await getVersion() : "dev",
-    };
-  }, []);
+      if (settings.selection.mode !== "portable") {
+        setState({ status: "inactive" });
+        return;
+      }
 
-  const acquire = useCallback(async (forceTakeover = false) => {
-    if (!isTauri()) {
-      setState({ status: "inactive" });
-      return;
-    }
+      baseDir.current = settings.paths.baseDir;
+      const lock: LibraryLockInfo = {
+        session_id: session.current,
+        machine: identity.machine,
+        user: identity.user,
+        updated_at: new Date().toISOString(),
+        app_version: appVersion,
+      };
 
-    const settings = await getLibrarySettingsState();
-    if (settings.selection.mode !== "portable") {
-      setState({ status: "inactive" });
-      return;
-    }
-
-    baseDir.current = settings.paths.baseDir;
-    const lock = await buildLock();
-    try {
-      currentLock.current = await acquireLibraryLockNative(settings.paths.baseDir, lock, Date.now(), forceTakeover);
-      setState({ status: "owned" });
+      try {
+        currentLock.current = await acquireLibraryLockNative(settings.paths.baseDir, lock, Date.now(), forceTakeover);
+        setState({ status: "owned" });
+      } catch (error) {
+        if (error instanceof LibraryLockConflictError) setState({ status: "conflict", lock: error.lock });
+        else if (error instanceof LibraryLockStaleError) setState({ status: "stale", lock: error.lock });
+        else setState({ status: "error", message: error instanceof Error ? error.message : "Library lock failed." });
+      }
     } catch (error) {
-      if (error instanceof LibraryLockConflictError) setState({ status: "conflict", lock: error.lock });
-      else if (error instanceof LibraryLockStaleError) setState({ status: "stale", lock: error.lock });
-      else setState({ status: "error", message: error instanceof Error ? error.message : "Library lock failed." });
+      setState({ status: "error", message: error instanceof Error ? error.message : "Library initialization failed." });
     }
-  }, [buildLock]);
+  }, []);
 
   useEffect(() => {
     acquire();

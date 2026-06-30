@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildRecipeDraft, scoreRecipeOverlap, rankRecipeSuggestions, getRecipeSuggestions } from "./craftRecipe";
 import type { Prompt } from "@/types";
 
@@ -104,5 +104,36 @@ describe("rankRecipeSuggestions", () => {
 describe("getRecipeSuggestions (dev mode)", () => {
   it("resolves to empty array in dev mode", async () => {
     await expect(getRecipeSuggestions(["studio"])).resolves.toEqual([]);
+  });
+});
+
+describe("getRecipeSuggestions (tauri mode)", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("loads recipe prompts without reading the full prompt library", async () => {
+    vi.resetModules();
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    const getRecipePrompts = vi.fn(async () => [
+      makeRecipe({ id: "r1", prompt_text: "studio product shot" }),
+      makeRecipe({ id: "r2", prompt_text: "forest mist panorama" }),
+    ]);
+    const getPrompts = vi.fn(async () => []);
+
+    vi.doMock("./db", () => ({
+      getRecipePrompts,
+      getPrompts,
+    }));
+
+    const { getRecipeSuggestions: getSuggestions } = await import("./craftRecipe");
+    const suggestions = await getSuggestions(["studio"], 2);
+
+    expect(getRecipePrompts).toHaveBeenCalledTimes(1);
+    expect(getPrompts).not.toHaveBeenCalled();
+    expect(suggestions).toHaveLength(1);
+    expect(suggestions[0].recipe.id).toBe("r1");
   });
 });

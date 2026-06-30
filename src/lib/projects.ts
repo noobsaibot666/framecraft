@@ -83,38 +83,68 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
 
   if (isTauri) {
     const db = await getDb();
-    await db.execute(
-      `INSERT INTO projects
-        (id, title, client, campaign, campaign_id, status, project_type, intended_output,
-         image_needs, video_needs, aspect_ratios, provider_targets,
-         visual_direction, constraints, creative_goals, brief_text,
-         production_goal, category, tags, notes, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
-      [
-        id,
-        data.title,
-        data.client ?? null,
-        data.campaign ?? null,
-        data.campaign_id ?? null,
-        data.status ?? "draft",
-        data.project_type ?? null,
-        data.intended_output ?? null,
-        data.image_needs ?? null,
-        data.video_needs ?? null,
-        data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null,
-        data.provider_targets ? JSON.stringify(data.provider_targets) : null,
-        data.visual_direction ?? null,
-        data.constraints ?? null,
-        data.creative_goals ?? null,
-        data.brief_text ?? null,
-        data.production_goal ?? null,
-        data.category ?? null,
-        data.tags ? JSON.stringify(data.tags) : null,
-        data.notes ?? null,
-        ts,
-        ts,
-      ]
-    );
+    // INSERT only the original migration-010 columns — always safe
+    try {
+      await db.execute(
+        `INSERT INTO projects
+          (id, title, client, campaign, status, brief_text, production_goal,
+           category, tags, notes, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          id,
+          data.title,
+          data.client ?? null,
+          data.campaign ?? null,
+          data.status ?? "draft",
+          data.brief_text ?? null,
+          data.production_goal ?? null,
+          data.category ?? null,
+          data.tags ? JSON.stringify(data.tags) : null,
+          data.notes ?? null,
+          ts,
+          ts,
+        ]
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[createProject] INSERT failed:", msg);
+      throw new Error(msg);
+    }
+    // Extended columns from migration 014 — non-fatal if columns don't exist yet
+    try {
+      await db.execute(
+        `UPDATE projects SET
+           project_type = $1, intended_output = $2, image_needs = $3,
+           video_needs = $4, aspect_ratios = $5, provider_targets = $6,
+           visual_direction = $7, constraints = $8, creative_goals = $9
+         WHERE id = $10`,
+        [
+          data.project_type ?? null,
+          data.intended_output ?? null,
+          data.image_needs ?? null,
+          data.video_needs ?? null,
+          data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null,
+          data.provider_targets ? JSON.stringify(data.provider_targets) : null,
+          data.visual_direction ?? null,
+          data.constraints ?? null,
+          data.creative_goals ?? null,
+          id,
+        ]
+      );
+    } catch {
+      // migration 014 columns not yet applied — non-fatal, data saved via base INSERT
+    }
+    // campaign_id from migration 018 — non-fatal if column doesn't exist yet
+    if (data.campaign_id) {
+      try {
+        await db.execute(
+          `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
+          [data.campaign_id, ts, id]
+        );
+      } catch {
+        // migration 018 column not yet applied — non-fatal
+      }
+    }
     return id;
   }
 
@@ -235,31 +265,65 @@ export async function updateProject(id: string, data: Partial<CreateProjectInput
 
   if (isTauri) {
     const db = await getDb();
-    const sets: string[] = [];
-    const values: unknown[] = [];
-    const add = (col: string, val: unknown) => { values.push(val); sets.push(`${col} = $${values.length + 1}`); };
 
-    if ("title" in data && data.title != null) add("title", data.title);
-    if ("client" in data) add("client", data.client ?? null);
-    if ("campaign" in data) add("campaign", data.campaign ?? null);
-    if ("status" in data && data.status != null) add("status", data.status);
-    if ("project_type" in data) add("project_type", data.project_type ?? null);
-    if ("intended_output" in data) add("intended_output", data.intended_output ?? null);
-    if ("image_needs" in data) add("image_needs", data.image_needs ?? null);
-    if ("video_needs" in data) add("video_needs", data.video_needs ?? null);
-    if ("aspect_ratios" in data) add("aspect_ratios", data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null);
-    if ("provider_targets" in data) add("provider_targets", data.provider_targets ? JSON.stringify(data.provider_targets) : null);
-    if ("visual_direction" in data) add("visual_direction", data.visual_direction ?? null);
-    if ("constraints" in data) add("constraints", data.constraints ?? null);
-    if ("creative_goals" in data) add("creative_goals", data.creative_goals ?? null);
-    if ("brief_text" in data) add("brief_text", data.brief_text ?? null);
-    if ("production_goal" in data) add("production_goal", data.production_goal ?? null);
-    if ("category" in data) add("category", data.category ?? null);
-    if ("tags" in data) add("tags", data.tags ? JSON.stringify(data.tags) : null);
-    if ("notes" in data) add("notes", data.notes ?? null);
-    add("updated_at", ts);
+    // ── Base columns (migration 010 — always exist) ────────────
+    {
+      const sets: string[] = ["updated_at = $1"];
+      const values: unknown[] = [ts];
+      const add = (col: string, val: unknown) => { values.push(val); sets.push(`${col} = $${values.length}`); };
 
-    await db.execute(`UPDATE projects SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
+      if ("title" in data && data.title != null) add("title", data.title);
+      if ("client" in data) add("client", data.client ?? null);
+      if ("campaign" in data) add("campaign", data.campaign ?? null);
+      if ("status" in data && data.status != null) add("status", data.status);
+      if ("brief_text" in data) add("brief_text", data.brief_text ?? null);
+      if ("production_goal" in data) add("production_goal", data.production_goal ?? null);
+      if ("category" in data) add("category", data.category ?? null);
+      if ("tags" in data) add("tags", data.tags ? JSON.stringify(data.tags) : null);
+      if ("notes" in data) add("notes", data.notes ?? null);
+
+      values.push(id);
+      await db.execute(`UPDATE projects SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+    }
+
+    // ── Extended columns (migration 014) ───────────────────────
+    const ext014Keys = ["project_type","intended_output","image_needs","video_needs","aspect_ratios","provider_targets","visual_direction","constraints","creative_goals"] as const;
+    if (ext014Keys.some((k) => k in data)) {
+      try {
+        const sets: string[] = [];
+        const values: unknown[] = [];
+        const add = (col: string, val: unknown) => { values.push(val); sets.push(`${col} = $${values.length}`); };
+
+        if ("project_type" in data) add("project_type", data.project_type ?? null);
+        if ("intended_output" in data) add("intended_output", data.intended_output ?? null);
+        if ("image_needs" in data) add("image_needs", data.image_needs ?? null);
+        if ("video_needs" in data) add("video_needs", data.video_needs ?? null);
+        if ("aspect_ratios" in data) add("aspect_ratios", data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null);
+        if ("provider_targets" in data) add("provider_targets", data.provider_targets ? JSON.stringify(data.provider_targets) : null);
+        if ("visual_direction" in data) add("visual_direction", data.visual_direction ?? null);
+        if ("constraints" in data) add("constraints", data.constraints ?? null);
+        if ("creative_goals" in data) add("creative_goals", data.creative_goals ?? null);
+
+        if (sets.length) {
+          values.push(id);
+          await db.execute(`UPDATE projects SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+        }
+      } catch {
+        // migration 014 columns not yet applied — base fields already saved above
+      }
+    }
+
+    // ── campaign_id (migration 018) ────────────────────────────
+    if ("campaign_id" in data) {
+      try {
+        await db.execute(
+          `UPDATE projects SET campaign_id = $1 WHERE id = $2`,
+          [data.campaign_id ?? null, id]
+        );
+      } catch {
+        // migration 018 column not yet applied
+      }
+    }
     return;
   }
 
@@ -399,28 +463,7 @@ async function executeProjectResetTransaction(db: {
   execute(sql: string, values?: unknown[]): Promise<unknown>;
   executeBatch?: (sql: string) => Promise<void>;
 }, projectId: string, updatedAt: string): Promise<void> {
-  const quotedProjectId = sqlQuote(projectId);
-  const quotedUpdatedAt = sqlQuote(updatedAt);
-  const batchSql = `
-    BEGIN;
-    DELETE FROM project_prompts WHERE project_id = ${quotedProjectId};
-    DELETE FROM project_results WHERE project_id = ${quotedProjectId};
-    DELETE FROM project_references WHERE project_id = ${quotedProjectId};
-    DELETE FROM project_deliverables WHERE project_id = ${quotedProjectId};
-    DELETE FROM assistant_threads WHERE project_id = ${quotedProjectId};
-    DELETE FROM comparison_sessions WHERE project_id = ${quotedProjectId};
-    DELETE FROM creative_directions WHERE project_id = ${quotedProjectId};
-    DELETE FROM export_presets WHERE project_id = ${quotedProjectId};
-    UPDATE projects
-       SET brief_text = NULL,
-           production_goal = NULL,
-           category = NULL,
-           notes = NULL,
-           tags = NULL,
-           updated_at = ${quotedUpdatedAt}
-     WHERE id = ${quotedProjectId};
-    COMMIT;
-  `;
+  const batchSql = buildProjectResetBatchSql(projectId, updatedAt);
 
   if (typeof db.executeBatch === "function") {
     await db.executeBatch(batchSql);
@@ -453,6 +496,33 @@ async function executeProjectResetTransaction(db: {
     await db.execute("ROLLBACK").catch(() => undefined);
     throw error;
   }
+}
+
+export function buildProjectResetBatchSql(projectId: string, updatedAt: string): string {
+  // executeBatch has no bind-parameter API. Every interpolated value must pass
+  // through sqlQuote; raw interpolation here would create an SQL-injection risk.
+  const quotedProjectId = sqlQuote(projectId);
+  const quotedUpdatedAt = sqlQuote(updatedAt);
+  return `
+    BEGIN;
+    DELETE FROM project_prompts WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_results WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_references WHERE project_id = ${quotedProjectId};
+    DELETE FROM project_deliverables WHERE project_id = ${quotedProjectId};
+    DELETE FROM assistant_threads WHERE project_id = ${quotedProjectId};
+    DELETE FROM comparison_sessions WHERE project_id = ${quotedProjectId};
+    DELETE FROM creative_directions WHERE project_id = ${quotedProjectId};
+    DELETE FROM export_presets WHERE project_id = ${quotedProjectId};
+    UPDATE projects
+       SET brief_text = NULL,
+           production_goal = NULL,
+           category = NULL,
+           notes = NULL,
+           tags = NULL,
+           updated_at = ${quotedUpdatedAt}
+     WHERE id = ${quotedProjectId};
+    COMMIT;
+  `;
 }
 
 function sqlQuote(value: string): string {

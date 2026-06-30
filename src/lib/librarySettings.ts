@@ -97,9 +97,14 @@ export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
   const appDir = isTauri() ? await appDataDir() : "localStorage";
   const selection = getActiveLibrarySelection();
   const paths = getActiveLibraryPaths(appDir);
-  const validation = selection.path && isTauri()
+  let validation = selection.path && isTauri()
     ? await validateLibraryPackageNative(selection.path)
     : null;
+  // Silently repair missing dirs / schema gaps introduced by new migrations so that
+  // the user never sees a stale "Missing database schema" error after an app update.
+  if (validation && !validation.ok && validation.errors.every(isRepairableLibraryPackageError)) {
+    validation = await repairLibraryDatabaseSchemaNative(paths.baseDir).catch(() => validation);
+  }
   const activeLock = selection.path && isTauri()
     ? await getLibraryLockStatusNative(paths.baseDir).catch(() => null)
     : null;

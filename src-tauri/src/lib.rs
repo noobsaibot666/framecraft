@@ -135,6 +135,18 @@ pub fn run() {
             sql: include_str!("../migrations/021_prompt_analysis_fields.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 22,
+            description: "nano_banana_library",
+            sql: include_str!("../migrations/022_nano_banana_library.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 23,
+            description: "prompt_thumbnail",
+            sql: include_str!("../migrations/023_prompt_thumbnail.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

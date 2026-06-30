@@ -4,8 +4,10 @@ import { Plus, Archive, ArchiveRestore, Trash2, X, FolderKanban } from "lucide-r
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getProjects, searchProjects, createProject, updateProject, deleteProject } from "@/lib/projects";
+import { getCampaigns } from "@/lib/campaigns";
+import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
-import type { Project, ProjectStatus, ProjectFilters } from "@/types";
+import type { Campaign, Project, ProjectStatus, ProjectFilters } from "@/types";
 
 // ─── Constants ────────────────────────────────────────────────
 
@@ -35,17 +37,44 @@ const STATUS_TABS: { value: string; label: string }[] = [
 
 const PROJECT_TYPE_OPTIONS = [
   { value: "", label: "Select type" },
-  { value: "campaign", label: "Campaign" },
-  { value: "image-series", label: "Image series" },
-  { value: "video-sequence", label: "Video sequence" },
-  { value: "brand-system", label: "Brand system" },
-  { value: "research", label: "Research" },
+  { value: "campaign",        label: "Campaign" },
+  { value: "image-series",    label: "Image series" },
+  { value: "video-sequence",  label: "Video sequence" },
+  { value: "brand-system",    label: "Brand system" },
+  { value: "research",        label: "Research" },
 ];
 
-const ASPECT_RATIO_OPTIONS = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
+const ASPECT_RATIO_OPTIONS   = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
 const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
 
-// ─── Sub-components ───────────────────────────────────────────
+// ─── Toggle pill — accent rule: stroke + transparent fill ─────
+
+function TogglePill({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise border",
+        active
+          ? "text-cyan border-cyan/55 bg-cyan/10"
+          : "text-readable border-white/18 hover:text-white hover:border-white/30"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ─── Project card ─────────────────────────────────────────────
 
 function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   project: Project;
@@ -59,18 +88,16 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 p-5 rounded-card cursor-pointer group transition-all duration-150",
-        "hover:ring-1 hover:ring-cyan/35",
+        "flex flex-col gap-4 p-5 rounded-card group transition-all duration-150",
+        "border border-white/22 bg-white/7 hover:bg-white/10 hover:border-white/30",
         isArchived && "opacity-50"
       )}
-      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+      style={{ cursor: "pointer" }}
       onClick={onClick}
     >
       {/* Header row */}
       <div className="flex items-start gap-3">
-        {/* Status dot */}
         <span className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", STATUS_DOT[project.status])} />
-
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <span className={cn("font-sans text-[15px] font-semibold leading-snug", STATUS_COLORS[project.status])}>
@@ -93,8 +120,6 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
               )}
             </div>
           </div>
-
-          {/* Client / Campaign */}
           {(project.client || project.campaign) && (
             <p className="font-mono text-[11px] text-readable mt-1 truncate">
               {[project.client, project.campaign].filter(Boolean).join(" · ")}
@@ -107,8 +132,8 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
       {project.tags && project.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {project.tags.slice(0, 4).map((tag) => (
-            <span key={tag} className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-muted"
-              style={{ border: "var(--border-dim)" }}>
+            <span key={tag}
+              className="font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-muted border border-white/10">
               {tag}
             </span>
           ))}
@@ -123,7 +148,7 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
       )}
 
       {/* Counts */}
-      <div className="flex items-center gap-5 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+      <div className="flex items-center gap-5 pt-2 border-t border-white/12">
         {[
           { label: "prompts", val: project.prompt_count ?? 0 },
           { label: "results", val: project.result_count ?? 0 },
@@ -141,55 +166,69 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
   );
 }
 
-// ─── Guided create form ───────────────────────────────────────
+// ─── Create form ──────────────────────────────────────────────
 
 function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose: () => void }) {
-  const [title, setTitle] = useState("");
-  const [client, setClient] = useState("");
-  const [campaign, setCampaign] = useState("");
-  const [projectType, setProjectType] = useState("");
-  const [intendedOutput, setIntendedOutput] = useState("");
-  const [briefText, setBriefText] = useState("");
-  const [creativeGoals, setCreativeGoals] = useState("");
+  const toast = useToastStore((s) => s.add);
+  const [title,           setTitle]           = useState("");
+  const [client,          setClient]          = useState("");
+  const [campaignId,      setCampaignId]      = useState("");
+  const [campaignName,    setCampaignName]    = useState("");
+  const [campaigns,       setCampaigns]       = useState<Campaign[]>([]);
+  const [projectType,     setProjectType]     = useState("");
+  const [intendedOutput,  setIntendedOutput]  = useState("");
+  const [briefText,       setBriefText]       = useState("");
+  const [creativeGoals,   setCreativeGoals]   = useState("");
   const [visualDirection, setVisualDirection] = useState("");
-  const [imageNeeds, setImageNeeds] = useState("");
-  const [videoNeeds, setVideoNeeds] = useState("");
-  const [aspectRatios, setAspectRatios] = useState<string[]>(["16:9"]);
+  const [imageNeeds,      setImageNeeds]      = useState("");
+  const [videoNeeds,      setVideoNeeds]      = useState("");
+  const [aspectRatios,    setAspectRatios]    = useState<string[]>(["16:9"]);
   const [providerTargets, setProviderTargets] = useState<string[]>(["midjourney"]);
-  const [saving, setSaving] = useState(false);
+  const [saving,          setSaving]          = useState(false);
 
-  const toggleValue = (value: string, values: string[], setValues: (next: string[]) => void) => {
-    setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
-  };
+  useEffect(() => {
+    getCampaigns().then(setCampaigns).catch(() => {});
+  }, []);
+
+  const toggle = (val: string, list: string[], set: (n: string[]) => void) =>
+    set(list.includes(val) ? list.filter((v) => v !== val) : [...list, val]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
     setSaving(true);
     try {
       const id = await createProject({
-        title: title.trim(),
-        client: client.trim() || undefined,
-        campaign: campaign.trim() || undefined,
-        status: "draft",
-        project_type: projectType || undefined,
-        intended_output: intendedOutput.trim() || undefined,
-        image_needs: imageNeeds.trim() || undefined,
-        video_needs: videoNeeds.trim() || undefined,
-        aspect_ratios: aspectRatios,
+        title:           title.trim(),
+        client:          client.trim() || undefined,
+        campaign:        campaignName || undefined,
+        campaign_id:     campaignId   || undefined,
+        status:          "draft",
+        project_type:    projectType  || undefined,
+        intended_output: intendedOutput.trim()  || undefined,
+        image_needs:     imageNeeds.trim()      || undefined,
+        video_needs:     videoNeeds.trim()      || undefined,
+        aspect_ratios:   aspectRatios,
         provider_targets: providerTargets,
-        brief_text: briefText.trim() || undefined,
+        brief_text:      briefText.trim()       || undefined,
         visual_direction: visualDirection.trim() || undefined,
-        creative_goals: creativeGoals.trim() || undefined,
+        creative_goals:  creativeGoals.trim()   || undefined,
       });
+      toast(`"${title.trim()}" created`, "success");
       onSave(id);
+    } catch (err) {
+      console.error("createProject failed:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast(msg || "Failed to create project", "error");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-7 p-7 rounded-card mb-7"
-      style={{ border: "var(--border-strong)", background: "var(--surface-card)" }}>
+    <div
+      className="flex flex-col gap-7 p-7 rounded-card mb-7"
+      style={{ border: "var(--border-strong)", background: "var(--surface-card)" }}
+    >
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <span className="system-label">NEW PROJECT SETUP</span>
@@ -201,6 +240,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-6 gap-5">
+        {/* Title */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">TITLE</label>
           <input
@@ -213,6 +253,8 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }}
           />
         </div>
+
+        {/* Project type */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">PROJECT TYPE</label>
           <select
@@ -221,11 +263,13 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             className="h-10 px-3 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           >
-            {PROJECT_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value} className="bg-panel text-white">{option.label}</option>
+            {PROJECT_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>
             ))}
           </select>
         </div>
+
+        {/* Client */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">CLIENT</label>
           <input
@@ -236,17 +280,29 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
+
+        {/* Campaign — dropdown of existing campaigns */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">CAMPAIGN</label>
-          <input
-            value={campaign}
-            onChange={(e) => setCampaign(e.target.value)}
-            placeholder="Campaign name…"
-            className="h-10 px-3 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+          <select
+            value={campaignId}
+            onChange={(e) => {
+              const id = e.target.value;
+              const found = campaigns.find((c) => c.id === id);
+              setCampaignId(id);
+              setCampaignName(found?.title ?? "");
+            }}
+            className="h-10 px-3 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
-          />
+          >
+            <option value="" className="bg-panel text-dim/60">No campaign</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id} className="bg-panel text-white">{c.title}</option>
+            ))}
+          </select>
         </div>
 
+        {/* Intended output */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">INTENDED OUTPUT</label>
           <textarea
@@ -258,6 +314,8 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
+
+        {/* Brief */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">BRIEF / CONTEXT</label>
           <textarea
@@ -270,45 +328,37 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
           />
         </div>
 
+        {/* Aspect ratios */}
         <div className="flex flex-col gap-2 xl:col-span-3">
           <label className="system-label">ASPECT RATIOS</label>
           <div className="flex flex-wrap gap-2">
             {ASPECT_RATIO_OPTIONS.map((ratio) => (
-              <button
+              <TogglePill
                 key={ratio}
-                type="button"
-                onClick={() => toggleValue(ratio, aspectRatios, setAspectRatios)}
-                className={cn(
-                  "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
-                  aspectRatios.includes(ratio) ? "text-black bg-cyan" : "text-readable hover:text-white"
-                )}
-                style={aspectRatios.includes(ratio) ? undefined : { border: "var(--border-default)" }}
-              >
-                {ratio}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 xl:col-span-3">
-          <label className="system-label">PROVIDER TARGETS</label>
-          <div className="flex flex-wrap gap-2">
-            {PROVIDER_TARGET_OPTIONS.map((provider) => (
-              <button
-                key={provider}
-                type="button"
-                onClick={() => toggleValue(provider, providerTargets, setProviderTargets)}
-                className={cn(
-                  "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
-                  providerTargets.includes(provider) ? "text-black bg-cyan" : "text-readable hover:text-white"
-                )}
-                style={providerTargets.includes(provider) ? undefined : { border: "var(--border-default)" }}
-              >
-                {provider}
-              </button>
+                label={ratio}
+                active={aspectRatios.includes(ratio)}
+                onClick={() => toggle(ratio, aspectRatios, setAspectRatios)}
+              />
             ))}
           </div>
         </div>
 
+        {/* Provider targets */}
+        <div className="flex flex-col gap-2 xl:col-span-3">
+          <label className="system-label">PROVIDER TARGETS</label>
+          <div className="flex flex-wrap gap-2">
+            {PROVIDER_TARGET_OPTIONS.map((p) => (
+              <TogglePill
+                key={p}
+                label={p}
+                active={providerTargets.includes(p)}
+                onClick={() => toggle(p, providerTargets, setProviderTargets)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* Image / Video / Visual */}
         <div className="flex flex-col gap-1.5 xl:col-span-2">
           <label className="system-label">IMAGE NEEDS</label>
           <textarea
@@ -343,6 +393,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
           />
         </div>
 
+        {/* Creative goals */}
         <div className="flex flex-col gap-1.5 xl:col-span-6">
           <label className="system-label">CREATIVE GOALS</label>
           <textarea
@@ -366,16 +417,17 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────
+// ─── Main page ────────────────────────────────────────────────
 
 export function ProjectLibrary({ initialCreate = false }: { initialCreate?: boolean }) {
-  const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const navigate  = useNavigate();
+  const toast     = useToastStore((s) => s.add);
+  const [projects,     setProjects]     = useState<Project[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [search,       setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [view, setView] = useState<"active" | "archived">("active");
-  const [showCreate, setShowCreate] = useState(initialCreate);
+  const [view,         setView]         = useState<"active" | "archived">("active");
+  const [showCreate,   setShowCreate]   = useState(initialCreate);
 
   const buildFilters = (): ProjectFilters => {
     const f: ProjectFilters = {};
@@ -395,7 +447,10 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
       const results = search.trim()
         ? await searchProjects(search.trim(), filters)
         : await getProjects(filters);
-      setProjects(view === "active" ? results.filter((project) => project.status !== "archived") : results);
+      setProjects(view === "active" ? results.filter((p) => p.status !== "archived") : results);
+    } catch (err) {
+      console.error("getProjects failed:", err);
+      toast("Failed to load projects", "error");
     } finally {
       setLoading(false);
     }
@@ -405,15 +460,25 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
 
   const handleArchive = async (project: Project) => {
     const nextStatus: ProjectStatus = project.status === "archived" ? "draft" : "archived";
-    await updateProject(project.id, { status: nextStatus });
-    setProjects((prev) => prev.filter((p) => p.id !== project.id));
+    try {
+      await updateProject(project.id, { status: nextStatus });
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      toast(nextStatus === "archived" ? "Project archived" : "Project restored", "info");
+    } catch {
+      toast("Failed to update project", "error");
+    }
   };
 
   const handleDelete = async (project: Project) => {
     if (project.status !== "archived") return;
     if (!window.confirm(`Delete archived project "${project.title}" permanently?`)) return;
-    await deleteProject(project.id);
-    setProjects((prev) => prev.filter((p) => p.id !== project.id));
+    try {
+      await deleteProject(project.id);
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      toast("Project deleted", "info");
+    } catch {
+      toast("Failed to delete project", "error");
+    }
   };
 
   const handleCreated = (id: string) => {
@@ -446,21 +511,22 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
         </div>
       }
     >
-      {/* Toolbar */}
+      {/* Toolbar — search on the right */}
       <div className="flex flex-col gap-3 mb-7">
         <div className="flex items-center gap-4 flex-wrap">
+          <span className="font-mono text-[11px] text-readable shrink-0">
+            {projects.length} {view === "archived" ? "archived" : "active"} project{projects.length !== 1 ? "s" : ""}
+          </span>
+          <div className="flex-1" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title, client, campaign…"
-            className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
+            className="h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-64"
             style={{ border: "var(--border-default)" }}
           />
-          <div className="flex-1" />
-          <span className="font-mono text-[11px] text-readable">
-            {projects.length} {view === "archived" ? "archived" : "active"} projects
-          </span>
         </div>
+
         {view === "active" && (
           <div className="flex items-center gap-1.5">
             {STATUS_TABS.map((tab) => (
@@ -469,12 +535,11 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
                 type="button"
                 onClick={() => setStatusFilter(tab.value)}
                 className={cn(
-                  "h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise",
+                  "h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border",
                   statusFilter === tab.value
-                    ? "text-black bg-cyan"
-                    : "text-readable hover:text-white"
+                    ? "text-cyan border-cyan/55 bg-cyan/10"
+                    : "text-readable border-white/10 hover:text-white hover:border-white/25"
                 )}
-                style={statusFilter === tab.value ? undefined : { border: "var(--border-dim)" }}
               >
                 {tab.label}
               </button>
@@ -488,8 +553,9 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
 
       {/* List */}
       {loading ? (
-        <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[11px] text-muted">Loading...</span>
+        <div className="flex items-center gap-3 h-40 justify-center">
+          <span className="font-ndot text-[20px] text-dim/30 animate-pulse">···</span>
+          <span className="font-mono text-[11px] text-muted">Loading projects…</span>
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">

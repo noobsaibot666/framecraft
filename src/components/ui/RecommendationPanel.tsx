@@ -224,7 +224,10 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!context.provider && !context.category) return;
+    if (!context.provider && !context.category) {
+      setRecs(null);
+      return;
+    }
     setLoading(true);
     try {
       setRecs(await getRecommendations(context));
@@ -233,7 +236,13 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
     }
   }, [context.provider, context.category, context.excludePromptId, context.projectId, context.promptText]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const handleCopyToken = (text: string) => {
     navigator.clipboard.writeText(text);

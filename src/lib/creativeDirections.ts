@@ -56,19 +56,23 @@ export async function createCreativeDirection(input: CreateCreativeDirectionInpu
   };
 
   if (isTauri) {
-    const db = await getFramecraftDb();
-    await db.execute(
-      `INSERT INTO creative_directions
-       (id, project_id, title, campaign_idea, rationale, visual_aesthetic,
-        brand_connection, product_message, tone, prompt_direction, is_selected, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12)`,
-      [
-        direction.id, direction.project_id, direction.title, direction.campaign_idea,
-        direction.rationale, direction.visual_aesthetic, direction.brand_connection,
-        direction.product_message, direction.tone, direction.prompt_direction,
-        direction.created_at, direction.updated_at,
-      ]
-    );
+    try {
+      const db = await getFramecraftDb();
+      await db.execute(
+        `INSERT INTO creative_directions
+         (id, project_id, title, campaign_idea, rationale, visual_aesthetic,
+          brand_connection, product_message, tone, prompt_direction, is_selected, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,0,$11,$12)`,
+        [
+          direction.id, direction.project_id, direction.title, direction.campaign_idea,
+          direction.rationale, direction.visual_aesthetic, direction.brand_connection,
+          direction.product_message, direction.tone, direction.prompt_direction,
+          direction.created_at, direction.updated_at,
+        ]
+      );
+    } catch (err) {
+      throw new Error(String(err));
+    }
   } else {
     developmentDirections.unshift(direction);
   }
@@ -77,12 +81,16 @@ export async function createCreativeDirection(input: CreateCreativeDirectionInpu
 
 export async function getCreativeDirections(projectId: string): Promise<CreativeDirection[]> {
   if (isTauri) {
-    const db = await getFramecraftDb();
-    const rows = await db.select(
-      "SELECT * FROM creative_directions WHERE project_id = $1 ORDER BY updated_at DESC",
-      [projectId]
-    ) as Record<string, unknown>[];
-    return rows.map(rowToDirection);
+    try {
+      const db = await getFramecraftDb();
+      const rows = await db.select(
+        "SELECT * FROM creative_directions WHERE project_id = $1 ORDER BY updated_at DESC",
+        [projectId]
+      ) as Record<string, unknown>[];
+      return rows.map(rowToDirection);
+    } catch {
+      return [];
+    }
   }
   return developmentDirections
     .filter((direction) => direction.project_id === projectId)
@@ -104,15 +112,19 @@ export async function updateCreativeDirection(
   const timestamp = now();
 
   if (isTauri) {
-    const db = await getFramecraftDb();
-    const values: unknown[] = [timestamp];
-    const sets = ["updated_at = $1"];
-    for (const [key, value] of entries) {
-      values.push(value);
-      sets.push(`${key} = $${values.length}`);
+    try {
+      const db = await getFramecraftDb();
+      const values: unknown[] = [timestamp];
+      const sets = ["updated_at = $1"];
+      for (const [key, value] of entries) {
+        values.push(value);
+        sets.push(`${key} = $${values.length}`);
+      }
+      values.push(id);
+      await db.execute(`UPDATE creative_directions SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+    } catch (err) {
+      throw new Error(String(err));
     }
-    values.push(id);
-    await db.execute(`UPDATE creative_directions SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
   } else {
     const index = developmentDirections.findIndex((direction) => direction.id === id);
     if (index >= 0) developmentDirections[index] = { ...developmentDirections[index], ...input, updated_at: timestamp };
@@ -122,13 +134,17 @@ export async function updateCreativeDirection(
 export async function selectCreativeDirection(projectId: string, id: string): Promise<void> {
   const timestamp = now();
   if (isTauri) {
-    const db = await getFramecraftDb();
-    await db.execute(
-      `UPDATE creative_directions
-       SET is_selected = CASE WHEN id = $1 THEN 1 ELSE 0 END, updated_at = $2
-       WHERE project_id = $3`,
-      [id, timestamp, projectId]
-    );
+    try {
+      const db = await getFramecraftDb();
+      await db.execute(
+        `UPDATE creative_directions
+         SET is_selected = CASE WHEN id = $1 THEN 1 ELSE 0 END, updated_at = $2
+         WHERE project_id = $3`,
+        [id, timestamp, projectId]
+      );
+    } catch (err) {
+      throw new Error(String(err));
+    }
   } else {
     for (const direction of developmentDirections) {
       if (direction.project_id === projectId) {
@@ -141,8 +157,12 @@ export async function selectCreativeDirection(projectId: string, id: string): Pr
 
 export async function deleteCreativeDirection(id: string): Promise<void> {
   if (isTauri) {
-    const db = await getFramecraftDb();
-    await db.execute("DELETE FROM creative_directions WHERE id = $1", [id]);
+    try {
+      const db = await getFramecraftDb();
+      await db.execute("DELETE FROM creative_directions WHERE id = $1", [id]);
+    } catch (err) {
+      throw new Error(String(err));
+    }
   } else {
     const index = developmentDirections.findIndex((direction) => direction.id === id);
     if (index >= 0) developmentDirections.splice(index, 1);

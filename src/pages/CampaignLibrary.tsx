@@ -4,10 +4,12 @@ import { Plus, Briefcase, Archive, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getCampaigns, createCampaign, updateCampaign, deleteCampaign } from "@/lib/campaigns";
+import { useToastStore } from "@/stores/useToastStore";
 import type { Campaign } from "@/types";
 
 export function CampaignLibrary() {
   const navigate = useNavigate();
+  const toast = useToastStore((s) => s.add);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -17,28 +19,48 @@ export function CampaignLibrary() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    setCampaigns(await getCampaigns());
+    try {
+      setCampaigns(await getCampaigns());
+    } catch {
+      toast("Failed to load campaigns", "error");
+    }
   }
 
   async function handleCreate() {
     if (!newTitle.trim()) return;
     setCreating(true);
-    const c = await createCampaign({ title: newTitle.trim(), client: newClient.trim() || undefined });
-    setNewTitle("");
-    setNewClient("");
-    setShowCreate(false);
-    setCreating(false);
-    navigate(`/campaigns/${c.id}`);
+    try {
+      const c = await createCampaign({ title: newTitle.trim(), client: newClient.trim() || undefined });
+      setNewTitle("");
+      setNewClient("");
+      setShowCreate(false);
+      toast(`"${c.title}" created`, "success");
+      navigate(`/campaigns/${c.id}`);
+    } catch {
+      toast("Failed to create campaign", "error");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleArchive(c: Campaign) {
-    await updateCampaign(c.id, { status: c.status === "archived" ? "active" : "archived" });
-    load();
+    try {
+      await updateCampaign(c.id, { status: c.status === "archived" ? "active" : "archived" });
+      toast(c.status === "archived" ? "Campaign restored" : "Campaign archived", "info");
+      load();
+    } catch {
+      toast("Failed to update campaign", "error");
+    }
   }
 
   async function handleDelete(c: Campaign) {
-    await deleteCampaign(c.id);
-    load();
+    try {
+      await deleteCampaign(c.id);
+      toast("Campaign deleted", "info");
+      load();
+    } catch {
+      toast("Failed to delete campaign", "error");
+    }
   }
 
   const active = campaigns.filter((c) => c.status === "active");
@@ -46,9 +68,9 @@ export function CampaignLibrary() {
 
   return (
     <PageContainer title="Campaigns" subtitle="JOB ORGANIZATION">
-      <div className="flex flex-col gap-8 max-w-5xl">
+      <div className="flex flex-col gap-8 w-full">
 
-        {/* Header action */}
+        {/* Header row */}
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] text-readable tracking-widest uppercase">
             {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""}
@@ -60,8 +82,10 @@ export function CampaignLibrary() {
 
         {/* Create form */}
         {showCreate && (
-          <div className="flex flex-col gap-4 p-6 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+          <div
+            className="flex flex-col gap-4 p-6 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
             <span className="font-sans text-[13px] font-semibold text-white tracking-wide">NEW CAMPAIGN</span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
@@ -90,7 +114,7 @@ export function CampaignLibrary() {
             </div>
             <div className="flex items-center gap-3">
               <Button variant="primary" size="sm" onClick={handleCreate} disabled={!newTitle.trim() || creating}>
-                Create
+                {creating ? "Creating…" : "Create"}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => { setShowCreate(false); setNewTitle(""); setNewClient(""); }}>
                 Cancel
@@ -99,20 +123,9 @@ export function CampaignLibrary() {
           </div>
         )}
 
-        {/* Active campaigns */}
-        {active.length > 0 && (
-          <div className="flex flex-col gap-3">
-            {active.map((c) => (
-              <CampaignCard key={c.id} campaign={c}
-                onClick={() => navigate(`/campaigns/${c.id}`)}
-                onArchive={() => handleArchive(c)}
-                onDelete={() => handleDelete(c)} />
-            ))}
-          </div>
-        )}
-
+        {/* Empty state — centered in full width */}
         {campaigns.length === 0 && !showCreate && (
-          <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <div className="flex flex-col items-center justify-center gap-4 py-24 text-center w-full">
             <Briefcase size={28} className="text-readable" />
             <p className="font-mono text-[12px] text-readable leading-relaxed max-w-xs">
               Campaigns group projects under a single client job. Create one to get started.
@@ -123,15 +136,34 @@ export function CampaignLibrary() {
           </div>
         )}
 
+        {/* Active campaigns */}
+        {active.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {active.map((c) => (
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                onClick={() => navigate(`/campaigns/${c.id}`)}
+                onArchive={() => handleArchive(c)}
+                onDelete={() => handleDelete(c)}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Archived */}
         {archived.length > 0 && (
           <div className="flex flex-col gap-3">
             <span className="font-mono text-[10px] text-muted tracking-widest uppercase">Archived</span>
             {archived.map((c) => (
-              <CampaignCard key={c.id} campaign={c} dimmed
+              <CampaignCard
+                key={c.id}
+                campaign={c}
+                dimmed
                 onClick={() => navigate(`/campaigns/${c.id}`)}
                 onArchive={() => handleArchive(c)}
-                onDelete={() => handleDelete(c)} />
+                onDelete={() => handleDelete(c)}
+              />
             ))}
           </div>
         )}
@@ -154,12 +186,17 @@ function CampaignCard({
 
   return (
     <div
-      className={`flex items-center gap-5 p-5 rounded-card cursor-pointer group transition-precise ${dimmed ? "opacity-50 hover:opacity-75" : "hover:opacity-90"}`}
-      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+      className={`flex items-start gap-5 p-5 rounded-card group transition-precise
+        border border-white/22 bg-white/7
+        hover:bg-white/10 hover:border-white/30
+        ${dimmed ? "opacity-50 hover:opacity-80" : ""}`}
+      style={{ cursor: "pointer" }}
       onClick={onClick}
     >
-      <Briefcase size={15} className="text-readable shrink-0" />
+      {/* Icon aligned with first line of text */}
+      <Briefcase size={15} className="text-readable shrink-0 mt-0.5" />
 
+      {/* Title + client */}
       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
         <span className="font-sans text-[14px] font-semibold text-white truncate">{campaign.title}</span>
         {campaign.client && (
@@ -167,17 +204,20 @@ function CampaignCard({
         )}
       </div>
 
-      <div className="flex items-center gap-5 shrink-0">
+      {/* Right side: project count + actions */}
+      <div className="flex items-start gap-5 shrink-0">
         <div className="flex flex-col items-end gap-0.5">
-          <span className="font-mono text-[16px] text-white">{campaign.project_count ?? 0}</span>
+          <span className="font-mono text-[16px] text-white leading-none">{campaign.project_count ?? 0}</span>
           <span className="font-mono text-[9px] text-muted tracking-widest uppercase">projects</span>
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise"
-          onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             onClick={onArchive}
-            className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-white transition-precise"
+            className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-white hover:bg-white/10 transition-precise"
             title={campaign.status === "archived" ? "Restore" : "Archive"}
           >
             <Archive size={12} />
@@ -187,16 +227,20 @@ function CampaignCard({
               <button
                 onClick={() => { onDelete(); setConfirmDelete(false); }}
                 className="flex items-center justify-center px-2 h-7 rounded-sm font-mono text-[10px] text-red hover:bg-red/10 transition-precise"
-              >Delete</button>
+              >
+                Delete
+              </button>
               <button
                 onClick={() => setConfirmDelete(false)}
                 className="flex items-center justify-center px-2 h-7 rounded-sm font-mono text-[10px] text-readable hover:text-white transition-precise"
-              >Cancel</button>
+              >
+                Cancel
+              </button>
             </>
           ) : (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-red transition-precise"
+              className="flex items-center justify-center w-7 h-7 rounded-sm text-readable hover:text-red hover:bg-red/8 transition-precise"
               title="Delete campaign"
             >
               <Trash2 size={12} />

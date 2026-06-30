@@ -59,6 +59,8 @@ export interface Prompt {
   risk_notes?: string;
   version: number;
   parent_id?: string;
+  source_url?: string;
+  thumbnail_data?: string;
   created_at: string;
   updated_at: string;
 }

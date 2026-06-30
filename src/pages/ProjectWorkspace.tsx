@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
-  Star, AlertTriangle, Check, Image, FileText, Upload,
+  Star, AlertTriangle, Check, Image, FileText, Upload, Sparkles,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -74,7 +74,15 @@ const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seed
 
 // ─── Shared field atoms ───────────────────────────────────────
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ children, ai }: { children: React.ReactNode; ai?: boolean }) {
+  if (ai) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <label className="system-label text-[11px] text-muted">{children}</label>
+        <Sparkles size={9} className="text-cyan/55" />
+      </div>
+    );
+  }
   return <label className="system-label text-[11px] text-muted">{children}</label>;
 }
 
@@ -137,10 +145,11 @@ function PillToggleGroup({ values, options, onChange }: {
             type="button"
             onClick={() => toggle(option)}
             className={cn(
-              "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise",
-              selected ? "text-black bg-cyan" : "text-readable hover:text-white"
+              "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise border",
+              selected
+                ? "text-cyan border-cyan/55 bg-cyan/10"
+                : "text-readable border-white/18 hover:text-white hover:border-white/30"
             )}
-            style={selected ? undefined : { border: "var(--border-default)" }}
           >
             {option}
           </button>
@@ -553,8 +562,9 @@ export function ProjectWorkspace() {
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
       toast.success("Project saved");
-    } catch {
-      toast.error("Failed to save project");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(msg || "Failed to save project");
     } finally {
       setSaving(false);
     }
@@ -570,6 +580,10 @@ export function ProjectWorkspace() {
         .then(() => {
           setSaved(true);
           window.setTimeout(() => setSaved(false), 1200);
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          toast.error(msg || "Auto-save failed");
         })
         .finally(() => setSaving(false));
     }, 650);
@@ -801,7 +815,12 @@ export function ProjectWorkspace() {
               {allCampaigns.length > 0 ? (
                 <select
                   value={campaignId}
-                  onChange={(e) => setCampaignId(e.target.value)}
+                  onChange={(e) => {
+                    const newId = e.target.value;
+                    const found = allCampaigns.find((c) => c.id === newId);
+                    setCampaignId(newId);
+                    setCampaign(found?.title ?? "");
+                  }}
                   className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 >
@@ -820,7 +839,7 @@ export function ProjectWorkspace() {
           <Panel title="SETUP">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>PROJECT TYPE</FieldLabel>
+                <FieldLabel ai>PROJECT TYPE</FieldLabel>
                 <FieldSelect<string>
                   value={projectType}
                   onChange={setProjectType}
@@ -829,15 +848,15 @@ export function ProjectWorkspace() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>INTENDED OUTPUT</FieldLabel>
+                <FieldLabel ai>INTENDED OUTPUT</FieldLabel>
                 <FieldTextarea value={intendedOutput} onChange={setIntendedOutput} placeholder="Final assets, prompt systems, boards, videos..." rows={3} />
               </div>
               <div className="flex flex-col gap-2">
-                <FieldLabel>ASPECT RATIOS</FieldLabel>
+                <FieldLabel ai>ASPECT RATIOS</FieldLabel>
                 <PillToggleGroup values={aspectRatios} options={ASPECT_RATIO_OPTIONS} onChange={setAspectRatios} />
               </div>
               <div className="flex flex-col gap-2">
-                <FieldLabel>PROVIDER TARGETS</FieldLabel>
+                <FieldLabel ai>PROVIDER TARGETS</FieldLabel>
                 <PillToggleGroup values={providerTargets} options={PROVIDER_TARGET_OPTIONS} onChange={setProviderTargets} />
               </div>
             </div>
@@ -847,14 +866,14 @@ export function ProjectWorkspace() {
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-1.5">
               <FileText size={9} className="text-dim/40" />
-              <FieldLabel>BRIEF</FieldLabel>
+              <FieldLabel ai>BRIEF</FieldLabel>
             </div>
             <FieldTextarea value={briefText} onChange={setBriefText} placeholder="Paste brief, goals, or creative direction…" rows={5} />
           </div>
 
           {/* Production goal */}
           <div className="flex flex-col gap-1.5">
-            <FieldLabel>PRODUCTION GOAL</FieldLabel>
+            <FieldLabel ai>PRODUCTION GOAL</FieldLabel>
             <FieldTextarea value={productionGoal} onChange={setProductionGoal} placeholder="What does success look like for this production?" rows={3} />
           </div>
 
@@ -899,23 +918,23 @@ export function ProjectWorkspace() {
           >
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>VISUAL DIRECTION</FieldLabel>
+                <FieldLabel ai>VISUAL DIRECTION</FieldLabel>
                 <FieldTextarea value={visualDirection} onChange={setVisualDirection} placeholder="Look, style, realism level..." rows={4} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>IMAGE NEEDS</FieldLabel>
+                <FieldLabel ai>IMAGE NEEDS</FieldLabel>
                 <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>VIDEO NEEDS</FieldLabel>
+                <FieldLabel ai>VIDEO NEEDS</FieldLabel>
                 <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
               </div>
               <div className="flex flex-col gap-1.5 lg:col-span-2">
-                <FieldLabel>CREATIVE GOALS</FieldLabel>
+                <FieldLabel ai>CREATIVE GOALS</FieldLabel>
                 <FieldTextarea value={creativeGoals} onChange={setCreativeGoals} placeholder="What good looks like, what to avoid, and what should become reusable..." rows={3} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <FieldLabel>CONSTRAINTS</FieldLabel>
+                <FieldLabel ai>CONSTRAINTS</FieldLabel>
                 <FieldTextarea value={constraints} onChange={setConstraints} placeholder="Brand, legal, AI-look, or production limits..." rows={3} />
               </div>
             </div>

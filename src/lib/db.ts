@@ -70,6 +70,8 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     risk_notes: row.risk_notes as string | undefined,
     version: (row.version as number) ?? 1,
     parent_id: row.parent_id as string | undefined,
+    source_url: row.source_url as string | undefined,
+    thumbnail_data: row.thumbnail_data as string | undefined,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
@@ -107,6 +109,8 @@ export interface CreatePromptInput {
   risk_notes?: string;
   parent_id?: string;
   version?: number;
+  source_url?: string;
+  thumbnail_data?: string;
 }
 
 export type CreateRecipeInput = Omit<CreatePromptInput, "is_recipe">;
@@ -172,10 +176,11 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
       `INSERT INTO prompts
         (id, title, description, provider, category, use_case, prompt_text,
          avoidance_text, aspect_ratio, model_version, camera, lens, lighting,
-         style_ref, parameters,
+         style_ref, character_ref, image_ref, parameters,
          tags, rating, ai_look_risk, reuse_potential, is_recipe, is_winner, is_failed,
-         failure_notes, notes, best_use, risk_notes, version, parent_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,0,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`,
+         failure_notes, notes, best_use, risk_notes, version, parent_id,
+         source_url, thumbnail_data, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,0,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)`,
       [
         id,
         data.title,
@@ -191,6 +196,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.lens ?? null,
         data.lighting ?? null,
         data.style_ref ?? null,
+        data.character_ref ?? null,
+        data.image_ref ?? null,
         data.parameters ? JSON.stringify(data.parameters) : null,
         data.tags ? JSON.stringify(data.tags) : null,
         data.rating ?? 0,
@@ -204,6 +211,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.risk_notes ?? null,
         data.version ?? 1,
         data.parent_id ?? null,
+        data.source_url ?? null,
+        data.thumbnail_data ?? null,
         ts,
         ts,
       ]
@@ -309,6 +318,8 @@ export async function updatePrompt(
     if ("best_use" in data) add("best_use", data.best_use ?? null);
     if ("risk_notes" in data) add("risk_notes", data.risk_notes ?? null);
     if ("reuse_potential" in data && data.reuse_potential != null) add("reuse_potential", data.reuse_potential);
+    if ("source_url" in data) add("source_url", data.source_url ?? null);
+    if ("thumbnail_data" in data) add("thumbnail_data", data.thumbnail_data ?? null);
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
@@ -330,7 +341,10 @@ export async function updatePrompt(
 export async function deletePrompt(id: string): Promise<void> {
   if (isTauri) {
     const db = await getDb();
-    await db.execute("DELETE FROM prompts WHERE id = $1", [id]);
+    const result = await db.execute("DELETE FROM prompts WHERE id = $1", [id]);
+    if (result?.rowsAffected === 0) {
+      throw new Error(`Prompt not found in database (id: ${id})`);
+    }
     return;
   }
   const store = loadMemStore();
@@ -496,7 +510,7 @@ export async function getAllTokens(sort: "quality" | "use" | "alpha" | "rating" 
     quality: "quality_score DESC, use_count DESC, text ASC",
     use: "use_count DESC, quality_score DESC, text ASC",
     alpha: "text ASC",
-    rating: "avg_rating DESC, use_count DESC, text ASC",
+    rating: "quality_score DESC, use_count DESC, text ASC",
   }[sort];
   const rows = (await db.select(
     `SELECT * FROM tokens ORDER BY ${orderBy}`
@@ -546,6 +560,7 @@ export async function createToken(text: string, categoryId: string): Promise<Tok
       "SELECT * FROM tokens WHERE text = $1 AND category_id = $2 ORDER BY rowid DESC LIMIT 1",
       [trimmed, categoryId]
     )) as Record<string, unknown>[];
+    if (!rows[0]) throw new Error("Token insert returned no row");
     return rowToToken(rows[0]);
   }
   // Dev mode: return a synthetic token
@@ -1123,6 +1138,7 @@ export async function createSREF(data: { code: string; title?: string; descripti
        RETURNING id`,
       [data.code, data.title ?? null, data.description ?? null, data.category ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
     )) as { id: string }[];
+    if (!rows[0]) throw new Error("SREF insert returned no row");
     return rows[0].id;
   }
   return crypto.randomUUID();
@@ -1158,6 +1174,7 @@ export async function createProfile(data: { code: string; title?: string; descri
        RETURNING id`,
       [data.code, data.title ?? null, data.description ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
     )) as { id: string }[];
+    if (!rows[0]) throw new Error("Profile insert returned no row");
     return rows[0].id;
   }
   return crypto.randomUUID();

@@ -37,6 +37,42 @@ const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => (
 const TokenDetail = lazy(() => import("@/pages/TokenDetail").then((m) => ({ default: m.TokenDetail })));
 const TokenLibrary = lazy(() => import("@/pages/TokenLibrary").then((m) => ({ default: m.TokenLibrary })));
 
+// Warm the lazy-chunk module cache immediately at module-evaluation time.
+// Tauri serves assets from local disk so all 31 imports resolve in <50ms total.
+// This fires before React even initialises, guaranteeing Suspense never visibly
+// triggers when the router first renders after the library-lock check.
+void import("@/pages/Dashboard");
+void import("@/pages/PromptLibrary");
+void import("@/pages/PromptDetail");
+void import("@/pages/CraftPrompt");
+void import("@/pages/ManualImport");
+void import("@/pages/ResultReview");
+void import("@/pages/SREFLibrary");
+void import("@/pages/RecipeLibrary");
+void import("@/pages/RecipeApply");
+void import("@/pages/RecipeEditor");
+void import("@/pages/GenerationQueue");
+void import("@/pages/Settings");
+void import("@/pages/ImageAnalyzer");
+void import("@/pages/BriefAnalyzer");
+void import("@/pages/VideoFrames");
+void import("@/pages/ReferenceLibrary");
+void import("@/pages/ReferenceDetail");
+void import("@/pages/ProjectLibrary");
+void import("@/pages/ProjectWorkspace");
+void import("@/pages/LineageView");
+void import("@/pages/ComparisonLab");
+void import("@/pages/ProjectBoard");
+void import("@/pages/ProjectAssistant");
+void import("@/pages/ProjectExport");
+void import("@/pages/ProjectSequence");
+void import("@/pages/ResultGallery");
+void import("@/pages/ResultDetail");
+void import("@/pages/CampaignLibrary");
+void import("@/pages/CampaignDetail");
+void import("@/pages/TokenDetail");
+void import("@/pages/TokenLibrary");
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -46,18 +82,11 @@ const queryClient = new QueryClient({
   },
 });
 
-function RouteFallback() {
-  return (
-    <div className="flex min-h-full items-center justify-center p-8">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-dim/50">Loading</span>
-    </div>
-  );
-}
-
 function routeElement(element: ReactNode) {
   return (
     <ErrorBoundary>
-      <Suspense fallback={<RouteFallback />}>{element}</Suspense>
+      {/* Fallback is null — pages preload eagerly so Suspense never visibly triggers. */}
+      <Suspense fallback={null}>{element}</Suspense>
     </ErrorBoundary>
   );
 }

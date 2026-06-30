@@ -1,7 +1,14 @@
 /**
  * Deterministic production intelligence layer.
- * All recommendations are derived from local SQL aggregation + existing ratings.
+ * All recommendations derive from local SQL aggregation + existing ratings + gallery results.
  * No ML, no network, no AI key required.
+ *
+ * What the system learns from:
+ *   tokens       — quality_score updated after each result is scored
+ *   results      — win_count + avg_score fed into prompt + recipe ranking
+ *   result_references — references used in winning gallery results surface first
+ *   prompt_references — references attached to high-rated prompts are also boosted
+ *   avoidance_patterns + failed results — surfaced as "Watch Out For"
  */
 
 import type { Prompt, Token, SREF, Profile, Reference, Recipe } from "@/types";
@@ -228,12 +235,15 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
   }));
 }
 
-/** Related prompts: same provider + category, high rating, winner preference. */
+/**
+ * Related prompts: same provider + category, sorted by actual gallery win count
+ * then avg result score, then user rating. Gallery wins trump manual ratings.
+ */
 export async function recommendPrompts(ctx: RecommendationContext, limit = 4): Promise<PromptRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
 
-  const conditions: string[] = ["p.rating >= 3", "p.is_failed = 0"];
+  const conditions: string[] = ["p.rating >= 3", "p.is_failed = 0", "p.is_recipe = 0"];
   const values: unknown[] = [];
 
   if (ctx.excludePromptId) {
@@ -250,27 +260,41 @@ export async function recommendPrompts(ctx: RecommendationContext, limit = 4): P
   }
 
   const rows = (await db.select(
-    `SELECT p.* FROM prompts p
+    `SELECT p.*,
+       COUNT(r.id) AS result_count,
+       SUM(CASE WHEN r.is_winner = 1 THEN 1 ELSE 0 END) AS win_count,
+       COALESCE(AVG(CASE WHEN r.score_overall > 0 THEN r.score_overall END), 0) AS avg_score
+     FROM prompts p
+     LEFT JOIN results r ON r.prompt_id = p.id
      WHERE ${conditions.join(" AND ")}
-     ORDER BY p.is_winner DESC, p.rating DESC, p.reuse_potential DESC
+     GROUP BY p.id
+     ORDER BY win_count DESC, avg_score DESC, p.is_winner DESC, p.rating DESC, p.reuse_potential DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
 
   return rows.map((row) => {
     const p = rowToPrompt(row);
-    return {
-      prompt: p,
-      reason: p.is_winner
-        ? "Winner in same category"
-        : p.rating >= 4
-          ? `Rated ${p.rating}/5 — same provider`
-          : "High reuse potential",
-    };
+    const winCount = (row.win_count as number) ?? 0;
+    const avgScore = (row.avg_score as number) ?? 0;
+    const resultCount = (row.result_count as number) ?? 0;
+    const reason = winCount > 0
+      ? `${winCount} winning result${winCount !== 1 ? "s" : ""} in gallery`
+      : resultCount > 0
+        ? `${resultCount} result${resultCount !== 1 ? "s" : ""} · avg score ${avgScore.toFixed(1)}`
+        : p.is_winner
+          ? "Winner in same category"
+          : p.rating >= 4
+            ? `Rated ${p.rating}/5 — same provider`
+            : "High reuse potential";
+    return { prompt: p, reason };
   });
 }
 
-/** Recipes: same category, high rating, most reused. */
+/**
+ * Recipes: same category, sorted by gallery wins produced then rating.
+ * Recipes that actually generated winning results surface first.
+ */
 export async function recommendRecipes(ctx: RecommendationContext, limit = 3): Promise<RecipeRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
@@ -288,15 +312,26 @@ export async function recommendRecipes(ctx: RecommendationContext, limit = 3): P
   }
 
   const rows = (await db.select(
-    `SELECT r.* FROM prompts r
+    `SELECT r.*,
+       SUM(CASE WHEN res.is_winner = 1 THEN 1 ELSE 0 END) AS win_count,
+       COALESCE(AVG(CASE WHEN res.score_overall > 0 THEN res.score_overall END), 0) AS avg_score
+     FROM prompts r
+     LEFT JOIN results res ON res.prompt_id = r.id
      WHERE r.is_recipe = 1 AND ${conditions.join(" AND ")}
-     ORDER BY r.rating DESC, r.reuse_potential DESC
+     GROUP BY r.id
+     ORDER BY win_count DESC, avg_score DESC, r.rating DESC, r.reuse_potential DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
 
   return rows.map((row) => {
     const p = rowToPrompt(row);
+    const winCount = (row.win_count as number) ?? 0;
+    const reason = winCount > 0
+      ? `Generated ${winCount} winning result${winCount !== 1 ? "s" : ""}`
+      : p.rating >= 4
+        ? `Rated ${p.rating}/5 — ${ctx.category ?? "all"}`
+        : "Frequently reused structure";
     return {
       recipe: {
         id: p.id,
@@ -313,7 +348,7 @@ export async function recommendRecipes(ctx: RecommendationContext, limit = 3): P
         created_at: p.created_at,
         updated_at: p.updated_at,
       } as Recipe,
-      reason: p.rating >= 4 ? `Rated ${p.rating}/5 — ${ctx.category ?? "all"}` : "Frequently reused structure",
+      reason,
     };
   });
 }
@@ -458,55 +493,106 @@ export async function recommendProfiles(ctx: RecommendationContext, limit = 3): 
   });
 }
 
-/** Reference suggestions: same category/tags, high rated, matching kind. */
+/**
+ * Reference suggestions — learned from three signals:
+ *   1. result_references: references used in actual winning gallery results (strongest signal)
+ *   2. prompt_references: references attached to high-rated/winner prompts
+ *   3. user rating + tag overlap with current prompt context
+ *
+ * References with no results yet but a solid rating are still shown,
+ * ranked below those proven by gallery data.
+ */
 export async function recommendReferences(ctx: RecommendationContext, limit = 4): Promise<ReferenceRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
 
-  const conditions: string[] = ["r.rating >= 3"];
+  const whereConditions: string[] = [];
   const values: unknown[] = [];
 
   if (ctx.category) {
     values.push(ctx.category);
-    conditions.push(`(r.category = $${values.length} OR r.category IS NULL)`);
+    whereConditions.push(`(r.category = $${values.length} OR r.category IS NULL)`);
   }
 
-  // Tag overlap: check if any of the context tags appear in the reference tags string
-  if (ctx.tags && ctx.tags.length > 0) {
-    const tagConditions = ctx.tags.slice(0, 3).map((tag) => {
-      values.push(`%${tag}%`);
-      return `lower(r.tags) LIKE $${values.length}`;
-    });
-    // tag match boosts but is not required — handled via ORDER BY below
-    void tagConditions; // used in ORDER BY scoring only
-  }
+  // Build tag match expression for ORDER BY boost (context tags ↔ reference tags)
+  const tagMatchExpr = ctx.tags && ctx.tags.length > 0
+    ? (() => {
+        const clauses = ctx.tags.slice(0, 3).map((tag) => {
+          values.push(`%${tag}%`);
+          return `lower(r.tags) LIKE $${values.length}`;
+        });
+        return `CASE WHEN ${clauses.join(" OR ")} THEN 1 ELSE 0 END`;
+      })()
+    : "0";
+
+  // Include refs with rating >= 2 OR proven by any winning gallery/prompt link
+  const qualityFilter = "("
+    + "r.rating >= 2"
+    + " OR COALESCE(rr_agg.result_win_count, 0) > 0"
+    + " OR COALESCE(pr_agg.prompt_win_count, 0) > 0"
+    + ")";
+
+  const whereClause = [qualityFilter, ...whereConditions].join(" AND ");
 
   const rows = (await db.select(
-    `SELECT r.* FROM "references" r
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY r.rating DESC, r.created_at DESC
+    `SELECT r.*,
+       COALESCE(rr_agg.result_win_count,  0) AS result_win_count,
+       COALESCE(rr_agg.result_appearances, 0) AS result_appearances,
+       COALESCE(pr_agg.prompt_win_count,  0) AS prompt_win_count,
+       ${tagMatchExpr} AS tag_match
+     FROM "references" r
+     LEFT JOIN (
+       SELECT rr.reference_id,
+         COUNT(DISTINCT rr.result_id) AS result_appearances,
+         COUNT(DISTINCT CASE WHEN res.is_winner = 1 THEN res.id END) AS result_win_count
+       FROM result_references rr
+       JOIN results res ON res.id = rr.result_id
+       GROUP BY rr.reference_id
+     ) rr_agg ON rr_agg.reference_id = r.id
+     LEFT JOIN (
+       SELECT pr.reference_id,
+         COUNT(DISTINCT CASE WHEN p.is_winner = 1 OR p.rating >= 4 THEN p.id END) AS prompt_win_count
+       FROM prompt_references pr
+       JOIN prompts p ON p.id = pr.prompt_id
+       GROUP BY pr.reference_id
+     ) pr_agg ON pr_agg.reference_id = r.id
+     WHERE ${whereClause}
+     ORDER BY tag_match DESC, result_win_count DESC, prompt_win_count DESC, r.rating DESC, r.created_at DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
 
   return rows.map((row) => {
     const ref = rowToReference(row);
-    return {
-      reference: ref,
-      reason: ref.best_use
-        ? `Best for: ${ref.best_use.slice(0, 50)}`
-        : ref.rating >= 4
-          ? `Rated ${ref.rating}/5`
-          : "Highly rated reference",
-    };
+    const resultWins   = (row.result_win_count  as number) ?? 0;
+    const promptWins   = (row.prompt_win_count  as number) ?? 0;
+    const tagMatch     = Boolean(row.tag_match);
+    const reason = resultWins > 0
+      ? `In ${resultWins} winning result${resultWins !== 1 ? "s" : ""} in gallery`
+      : promptWins > 0
+        ? `Used in ${promptWins} high-rated prompt${promptWins !== 1 ? "s" : ""}`
+        : tagMatch
+          ? "Matches current tags"
+          : ref.best_use
+            ? `Best for: ${ref.best_use.slice(0, 50)}`
+            : ref.rating >= 4
+              ? `Rated ${ref.rating}/5`
+              : "In your reference library";
+    return { reference: ref, reason };
   });
 }
 
-/** Run all recommendation scorers in parallel. */
+const _recCache = new Map<string, { result: RecommendationSet; ts: number }>();
+
+/** Run all recommendation scorers in parallel, with a 30s in-memory cache per context key. */
 export async function getRecommendations(ctx: RecommendationContext): Promise<RecommendationSet> {
   if (!isTauri) {
     return { tokens: [], prompts: [], recipes: [], srefs: [], profiles: [], references: [], avoidance: [] };
   }
+
+  const key = `${ctx.provider ?? ""}|${ctx.category ?? ""}|${ctx.projectId ?? ""}|${ctx.excludePromptId ?? ""}`;
+  const cached = _recCache.get(key);
+  if (cached && Date.now() - cached.ts < 30_000) return cached.result;
 
   const [tokens, prompts, recipes, srefs, profiles, references, avoidance] = await Promise.all([
     recommendTokens(ctx),
@@ -518,5 +604,7 @@ export async function getRecommendations(ctx: RecommendationContext): Promise<Re
     recommendAvoidance(ctx),
   ]);
 
-  return { tokens, prompts, recipes, srefs, profiles, references, avoidance };
+  const result = { tokens, prompts, recipes, srefs, profiles, references, avoidance };
+  _recCache.set(key, { result, ts: Date.now() });
+  return result;
 }

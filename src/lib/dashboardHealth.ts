@@ -118,7 +118,7 @@ export async function getDashboardHealth(): Promise<ProductionHealth> {
     ) as Promise<(ActiveProject & Record<string, unknown>)[]>,
 
     db.select(
-      `SELECT COUNT(*) AS n FROM queue WHERE status = 'pending'`
+      `SELECT COUNT(*) AS n FROM generation_queue WHERE status = 'pending'`
     ) as Promise<{ n: number }[]>,
 
     db.select(

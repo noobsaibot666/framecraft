@@ -1102,7 +1102,7 @@ fn upgrade_previous_release_schema(db_path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 21] {
+fn migration_sql() -> [&'static str; 23] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1125,6 +1125,8 @@ fn migration_sql() -> [&'static str; 21] {
         include_str!("../migrations/019_queue_pin.sql"),
         include_str!("../migrations/020_recipe_use_count.sql"),
         include_str!("../migrations/021_prompt_analysis_fields.sql"),
+        include_str!("../migrations/022_nano_banana_library.sql"),
+        include_str!("../migrations/023_prompt_thumbnail.sql"),
     ]
 }
 

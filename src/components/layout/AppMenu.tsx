@@ -300,7 +300,7 @@ export function AppMenu() {
 
           {/* Preferences / About */}
           <MenuGroup label="App">
-            <MenuItem icon={<Settings size={12} />} label="Preferences" onClick={() => openModal("preferences")} />
+            <MenuItem icon={<Settings size={12} />} label="Preferences" onClick={() => go("/settings")} />
             <MenuItem icon={<Info size={12} />} label="About Framecraft" onClick={() => openModal("about")} />
           </MenuGroup>
         </div>

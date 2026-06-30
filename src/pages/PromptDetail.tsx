@@ -20,11 +20,10 @@ import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/p
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analyzePrompt";
-import type { Project } from "@/types";
+import type { Project, Prompt, Result } from "@/types";
 
 registerShortcutLabel("cmd+e", "Edit prompt (Prompt Detail)");
 registerShortcutLabel("cmd+enter", "Add to queue (Prompt Detail)");
-import type { Prompt, Result } from "@/types";
 
 function providerUrl(provider: string): string {
   switch (provider) {

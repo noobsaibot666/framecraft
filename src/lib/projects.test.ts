@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProjectResetBatchSql,
   createProject,
   getProjects,
   getProjectById,
@@ -132,5 +133,16 @@ describe("projects in-memory CRUD", () => {
     const all = await getProjects();
     const searched = await searchProjects("");
     expect(searched.length).toBe(all.length);
+  });
+});
+
+describe("project reset SQL", () => {
+  it("keeps SQL-shaped project IDs inside escaped batch literals", () => {
+    const projectId = "project'; DELETE FROM projects; --";
+    const sql = buildProjectResetBatchSql(projectId, "2026-06-30T10:15:00.000Z");
+
+    expect(sql.match(/'project''; DELETE FROM projects; --'/g)).toHaveLength(9);
+    expect(sql).toContain("updated_at = '2026-06-30T10:15:00.000Z'");
+    expect(sql.trim()).toMatch(/^BEGIN;[\s\S]*COMMIT;$/);
   });
 });

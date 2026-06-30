@@ -30,7 +30,7 @@ function StatModule({ label, value, sub }: { label: string; value: number | stri
 function HealthChip({ label, value, unit, alert }: { label: string; value: number | string; unit?: string; alert?: boolean }) {
   return (
     <div
-      className="flex flex-col gap-2 px-4 py-3.5 rounded-sm flex-1"
+      className="flex flex-col gap-2 px-4 py-5 rounded-sm flex-1"
       style={{
         border: alert ? "1px solid rgba(215,25,33,0.25)" : "var(--border-dim)",
         background: alert ? "rgba(215,25,33,0.04)" : "var(--surface-card)",
@@ -47,11 +47,38 @@ function HealthChip({ label, value, unit, alert }: { label: string; value: numbe
   );
 }
 
+function ActivityChip({ data }: { data: DayActivity[] }) {
+  if (!data.length || data.every((d) => d.prompts === 0 && d.results === 0)) return null;
+  const maxVal = Math.max(1, ...data.flatMap((d) => [d.prompts, d.results]));
+  const H = 28;
+  const BAR_W = 4;
+  return (
+    <div
+      className="flex flex-col gap-2 px-4 py-5 rounded-sm min-w-[140px]"
+      style={{ border: "var(--border-dim)", background: "var(--surface-card)" }}
+    >
+      <span className="system-label text-[9px] text-muted">7-DAY ACTIVITY</span>
+      <div className="flex items-end gap-0.5 mt-auto">
+        {data.map((d, i) => {
+          const ph = Math.max(1, Math.round((d.prompts / maxVal) * H));
+          const rh = Math.max(d.results > 0 ? 1 : 0, Math.round((d.results / maxVal) * H));
+          return (
+            <div key={i} className="flex items-end gap-px">
+              <div className="rounded-sm" style={{ width: BAR_W, height: ph, background: "rgba(72,229,232,0.55)" }} />
+              <div className="rounded-sm" style={{ width: BAR_W, height: rh, background: "rgba(255,255,255,0.18)" }} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PromptRow({ prompt, onClick }: { prompt: Prompt; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center justify-between gap-4 px-4 py-3.5 rounded-sm text-left transition-precise hover:bg-white/6"
+      className="w-full flex items-center justify-between gap-4 px-4 py-3.5 rounded-sm text-left transition-precise hover:bg-cyan/6 hover:text-cyan"
       style={{ borderBottom: "var(--border-dim)" }}
     >
       <div className="flex flex-col gap-0.5 min-w-0">
@@ -103,7 +130,7 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
   return (
     <button
       onClick={() => navigate(`/library/${promptId}`)}
-      className="flex items-center gap-4 w-full px-4 py-3.5 text-left transition-precise hover:bg-white/6 rounded-sm"
+      className="flex items-center gap-4 w-full px-4 py-3.5 text-left transition-precise hover:bg-cyan/6 rounded-sm"
       style={{ borderBottom: "var(--border-dim)" }}
     >
       <div className="w-14 h-14 rounded-sm overflow-hidden shrink-0 bg-black/30 flex items-center justify-center" style={{ border: "var(--border-default)" }}>
@@ -199,61 +226,6 @@ function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: (
   );
 }
 
-// ─── Activity Chart ───────────────────────────────────────────
-
-function ActivityChart({ data }: { data: DayActivity[] }) {
-  if (!data.length || data.every((d) => d.prompts === 0 && d.results === 0)) return null;
-  const maxVal = Math.max(1, ...data.flatMap((d) => [d.prompts, d.results]));
-  const H = 32;
-  const BAR_W = 7;
-  const GAP = 1;
-  const GROUP_W = BAR_W * 2 + GAP + 6;
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-end gap-px">
-        {data.map((d, i) => {
-          const ph = Math.max(1, Math.round((d.prompts / maxVal) * H));
-          const rh = Math.max(d.results > 0 ? 1 : 0, Math.round((d.results / maxVal) * H));
-          return (
-            <div key={i} className="flex flex-col items-center gap-px" style={{ width: GROUP_W }}>
-              <div className="flex items-end gap-px">
-                <div
-                  className="rounded-sm"
-                  style={{ width: BAR_W, height: ph, background: "rgba(72,229,232,0.55)" }}
-                  title={`${d.prompts} prompt${d.prompts !== 1 ? "s" : ""}`}
-                />
-                <div
-                  className="rounded-sm"
-                  style={{ width: BAR_W, height: rh, background: "rgba(255,255,255,0.18)" }}
-                  title={`${d.results} result${d.results !== 1 ? "s" : ""}`}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex">
-        {data.map((d, i) => (
-          <span key={i} className="font-mono text-center" style={{ width: GROUP_W, fontSize: 7, color: "rgba(255,255,255,0.25)" }}>
-            {d.label.slice(0, 2)}
-          </span>
-        ))}
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(72,229,232,0.55)" }} />
-          <span className="font-mono text-[8px] text-dim/50">Prompts</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-sm" style={{ background: "rgba(255,255,255,0.18)" }} />
-          <span className="font-mono text-[8px] text-dim/50">Results</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Page ──────────────────────────────────────────────────────
 
 export function Dashboard() {
@@ -271,14 +243,14 @@ export function Dashboard() {
   const [recentPromptsOpen, setRecentPromptsOpen] = useState(true);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
-  useEffect(() => { getRecentResults(6).then(setRecentResults); }, []);
-  useEffect(() => { getRecentWins(4).then(setRecentWins); }, []);
-  useEffect(() => { getResultStats().then(setResultStats); }, []);
-  useEffect(() => { getTopTags(12).then(setTopTags); }, []);
-  useEffect(() => { getPromptsWithoutResultsCount().then(setPromptsWithoutResults); }, []);
-  useEffect(() => { getProviderStats().then(setProviderStats); }, []);
-  useEffect(() => { getDashboardHealth().then(setHealth); }, []);
-  useEffect(() => { getWeeklyActivity().then(setWeeklyActivity); }, []);
+  useEffect(() => { getRecentResults(6).then(setRecentResults).catch(console.error); }, []);
+  useEffect(() => { getRecentWins(4).then(setRecentWins).catch(console.error); }, []);
+  useEffect(() => { getResultStats().then(setResultStats).catch(console.error); }, []);
+  useEffect(() => { getTopTags(12).then(setTopTags).catch(console.error); }, []);
+  useEffect(() => { getPromptsWithoutResultsCount().then(setPromptsWithoutResults).catch(console.error); }, []);
+  useEffect(() => { getProviderStats().then(setProviderStats).catch(console.error); }, []);
+  useEffect(() => { getDashboardHealth().then(setHealth).catch(console.error); }, []);
+  useEffect(() => { getWeeklyActivity().then(setWeeklyActivity).catch(console.error); }, []);
 
   const q = search.trim().toLowerCase();
   const recentPrompts = q
@@ -316,7 +288,7 @@ export function Dashboard() {
         </div>
       }
     >
-      <div className="flex flex-col gap-8 min-w-0">
+      <div className="flex flex-col gap-12 min-w-0">
         <div className="flex items-center justify-end gap-2">
           <div className="relative">
             <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -409,11 +381,11 @@ export function Dashboard() {
                   key={tag}
                   type="button"
                   onClick={() => navigate(`/library?tag=${encodeURIComponent(tag)}`)}
-                  className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-white transition-precise"
+                  className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-cyan hover:border-cyan/35 transition-precise"
                   style={{ border: "var(--border-dim)" }}
                 >
                   {tag}
-                  <span className="text-dim/40 text-[8px]">{count}</span>
+                  <span className="text-dim/40 text-[9px]">{count}</span>
                 </button>
               ))}
             </div>
@@ -434,7 +406,7 @@ export function Dashboard() {
                   key={provider}
                   type="button"
                   onClick={() => navigate(`/library?provider=${encodeURIComponent(provider)}`)}
-                  className="flex flex-col gap-2 p-3 rounded-card text-left transition-precise hover:bg-white/4 group"
+                  className="flex flex-col gap-2 p-3 rounded-card text-left transition-precise hover:bg-cyan/6 hover:border-cyan/30 group"
                   style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
                 >
                   <ProviderBadge provider={provider as import("@/types").Provider} />
@@ -480,18 +452,8 @@ export function Dashboard() {
             />
             <HealthChip label="ACTIVE PROJECTS" value={health.activeProjectCount} unit="projects" />
             <HealthChip label="QUEUE DEPTH" value={health.queueDepth} unit="pending" alert={health.queueDepth > 5} />
+            <ActivityChip data={weeklyActivity} />
           </div>
-          {weeklyActivity.length > 0 && (
-            <div
-              className="flex items-center gap-6 px-4 py-3 rounded-sm"
-              style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
-            >
-              <div className="flex flex-col gap-0.5 shrink-0">
-                <span className="system-label text-[10px] text-muted">7-DAY ACTIVITY</span>
-              </div>
-              <ActivityChart data={weeklyActivity} />
-            </div>
-          )}
         </div>
 
         {/* Continue where you left off */}
@@ -499,7 +461,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => navigate(`/library/${health.lastTouchedPrompt!.id}`)}
-            className="flex items-center justify-between gap-4 w-full px-5 py-4 rounded-card text-left transition-precise hover:bg-white/4 group"
+            className="flex items-center justify-between gap-4 w-full px-5 py-4 rounded-card text-left transition-precise hover:bg-cyan/6 hover:border-cyan/30 group"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <div className="flex flex-col gap-1 min-w-0">
@@ -570,6 +532,30 @@ export function Dashboard() {
 
           {/* Right column */}
           <div className="flex flex-col gap-5">
+            {/* Recent Results — top, aligns with Recent Prompts */}
+            <Card>
+              <CardHeader
+                label="Recent Results"
+                action={<StatusDot active={recentResults.length > 0} />}
+              />
+              <CardBody>
+                {filteredResults.length > 0 ? (
+                  <div className="flex flex-col">
+                    {filteredResults.map((r) => (
+                      <ResultThumb key={r.id} result={r} promptId={r.prompt_id} />
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<ImageOff size={16} className="text-dim" />}
+                    label="No results yet"
+                    action="Add outputs from Prompt Detail pages."
+                    compact
+                  />
+                )}
+              </CardBody>
+            </Card>
+
             {/* Active Projects */}
             {health.activeProjects.length > 0 && (
               <Card>
@@ -589,7 +575,7 @@ export function Dashboard() {
                         key={p.id}
                         type="button"
                         onClick={() => navigate(`/projects/${p.id}`)}
-                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-white/6 rounded-sm"
+                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-cyan/6 hover:text-cyan rounded-sm"
                         style={{ borderBottom: "var(--border-dim)" }}
                       >
                         <div className="flex flex-col gap-0.5 min-w-0">
@@ -621,7 +607,7 @@ export function Dashboard() {
                         key={r.id}
                         type="button"
                         onClick={() => navigate(`/results/${r.prompt_id}`)}
-                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-white/6 rounded-sm"
+                        className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-cyan/6 hover:text-cyan rounded-sm"
                         style={{ borderBottom: "var(--border-dim)" }}
                       >
                         <span className="font-sans text-[12px] text-white/80 truncate">{r.prompt_title}</span>
@@ -707,30 +693,6 @@ export function Dashboard() {
                   <EmptyState
                     icon={<Star size={16} className="text-dim" />}
                     label="Rate your results"
-                    compact
-                  />
-                )}
-              </CardBody>
-            </Card>
-
-            {/* Recent Results */}
-            <Card>
-              <CardHeader
-                label="Recent Results"
-                action={<StatusDot active={recentResults.length > 0} />}
-              />
-              <CardBody>
-                {filteredResults.length > 0 ? (
-                  <div className="flex flex-col">
-                    {filteredResults.map((r) => (
-                      <ResultThumb key={r.id} result={r} promptId={r.prompt_id} />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<ImageOff size={16} className="text-dim" />}
-                    label="No results yet"
-                    action="Add outputs from Prompt Detail pages."
                     compact
                   />
                 )}

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -249,7 +249,7 @@ const SD_SAMPLERS = [
   { value: "LMS", label: "LMS" },
 ];
 
-function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref }: {
+const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref }: {
   p: MJParams;
   set: (k: keyof MJParams, v: string | boolean) => void;
   selectedSrefTitle?: string | null;
@@ -320,9 +320,9 @@ function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref
       </div>
     </>
   );
-}
+});
 
-function DalleParamsPanel({ p, set }: { p: DalleParams; set: (k: keyof DalleParams, v: string) => void }) {
+const DalleParamsPanel = memo(function DalleParamsPanel({ p, set }: { p: DalleParams; set: (k: keyof DalleParams, v: string) => void }) {
   return (
     <>
       <FieldSelect label="SIZE" value={p.size} onChange={(v) => set("size", v)} options={DALLE_SIZES} />
@@ -330,9 +330,9 @@ function DalleParamsPanel({ p, set }: { p: DalleParams; set: (k: keyof DallePara
       <FieldSelect label="STYLE" value={p.style} onChange={(v) => set("style", v)} options={DALLE_STYLE_OPTS} />
     </>
   );
-}
+});
 
-function SDParamsPanel({ p, set }: { p: SDParams; set: (k: keyof SDParams, v: string) => void }) {
+const SDParamsPanel = memo(function SDParamsPanel({ p, set }: { p: SDParams; set: (k: keyof SDParams, v: string) => void }) {
   return (
     <>
       <FieldInput label="STEPS" value={p.steps} onChange={(v) => set("steps", v)} placeholder="30" hint="20–60" />
@@ -352,7 +352,7 @@ function SDParamsPanel({ p, set }: { p: SDParams; set: (k: keyof SDParams, v: st
       </div>
     </>
   );
-}
+});
 
 // ─── Prompt assembly ──────────────────────────────────────────
 
@@ -406,6 +406,176 @@ function assembleGeneric(f: Fields): string {
     .map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
+// ─── Nano Banana ───────────────────────────────────────────────
+
+function buildNanaBananaJson(f: Fields, assembled: string, aspectRatio: string): string {
+  const exclusions = f.avoidance_text
+    ? f.avoidance_text.split(",").map((s) => s.trim()).filter(Boolean)
+    : ["text", "logos", "watermarks", "filters", "heavy retouching"];
+  return JSON.stringify({
+    model: "gemini-2.5-flash-image",
+    task_type: "generation",
+    priority: {
+      primary: assembled || f.subject || "",
+      secondary: [f.environment, f.camera, f.lighting].filter(Boolean).join(", ") || "Capture realistic texture and natural detail",
+    },
+    task: "generate_image",
+    subject: {
+      main: f.subject || assembled || "",
+      attributes: {
+        physical: f.realism || f.subject || assembled || "",
+        pose: "natural state",
+        expression: "neutral, calm",
+      },
+    },
+    environment: {
+      setting: f.environment || "macro photography studio",
+      time: "controlled lighting session",
+      weather: "not applicable",
+      lighting: {
+        type: "artificial",
+        direction: f.lighting || "side and slightly top",
+        quality: "soft, diffused lighting that reveals texture without harsh shadows",
+      },
+    },
+    style: {
+      artistic: "photorealistic",
+      camera: {
+        angle: f.camera || "extreme close-up",
+        lens: f.lens || "macro",
+        aperture: "shallow depth of field",
+      },
+      mood: f.mood || "clean, intimate, clinical realism",
+      color_palette: "natural tones",
+    },
+    technical: {
+      resolution: "high",
+      aspect_ratio: aspectRatio || "9:16",
+      quality: "maximum",
+    },
+    constraints: {
+      framing: "extreme macro crop filling most of the frame",
+      focus: "sharp focus on primary subject with gentle falloff toward edges",
+      exclusions,
+    },
+    context_awareness: {
+      real_world_logic: true,
+      physics_accurate: true,
+    },
+    output_specs: {
+      use_case: f.use_case || "realism study, editorial macro detail",
+      success_criteria: "clearly visible natural texture with realistic lighting",
+    },
+    ...(f.variation.trim() ? { sequence_delta: { instruction: f.variation.trim(), base_consistent: true } } : {}),
+  }, null, 2);
+}
+
+interface NanaBananaTemplate {
+  id: string;
+  label: string;
+  subject: string;
+  environment: string;
+  camera: string;
+  lens: string;
+  lighting: string;
+  mood: string;
+  avoidance_text: string;
+  keyElements: string[];
+}
+
+const NANO_BANANA_TEMPLATES: NanaBananaTemplate[] = [
+  {
+    id: "skin",
+    label: "SKIN",
+    subject: "human skin with visible pores, fine lines, and natural texture",
+    environment: "macro photography studio",
+    camera: "extreme close-up",
+    lens: "macro",
+    lighting: "soft, diffused from side and slightly top",
+    mood: "clean, intimate, clinical realism",
+    avoidance_text: "heavy makeup, foundation, skin smoothing, retouching, filters, text, logos, watermarks",
+    keyElements: ["visible pores + fine lines", "diffused side-top lighting", "no retouching"],
+  },
+  {
+    id: "eye",
+    label: "EYE",
+    subject: "human eye with complex iris radial patterns, dark pupil, visible sclera veins, eye open looking straight toward camera",
+    environment: "macro photography studio",
+    camera: "eye-level extreme close-up",
+    lens: "macro",
+    lighting: "soft, even from front and slightly top with subtle catchlight reflection in the pupil",
+    mood: "clean, intimate, highly realistic",
+    avoidance_text: "heavy makeup, eyeliner, mascara clumps, retouching, text, logos, watermarks",
+    keyElements: ["iris radial patterns", "catchlight in pupil", "sclera veins visible"],
+  },
+  {
+    id: "lip",
+    label: "LIPS",
+    subject: "slightly parted woman lips with visible fine lines, pores, and subtle dryness texture",
+    environment: "studio macro photography",
+    camera: "extreme close-up",
+    lens: "macro",
+    lighting: "soft but directional from side and top, emphasizing texture depth",
+    mood: "intimate, raw, organic",
+    avoidance_text: "eyes, full nose, full face, makeup, lipstick, gloss, filters, text, logos, watermarks",
+    keyElements: ["fine lines + pores", "slight teeth reveal", "raw organic mood"],
+  },
+  {
+    id: "tongue",
+    label: "TONGUE",
+    subject: "human tongue with pinkish surface, clearly visible taste buds, granular texture, natural moisture, tongue extended forward slightly curved",
+    environment: "macro photography studio",
+    camera: "extreme close-up",
+    lens: "macro",
+    lighting: "soft but directional from side and top, highlighting surface texture",
+    mood: "clinical, organic, highly detailed",
+    avoidance_text: "lips, teeth, full face, makeup, piercings, food, text, logos, watermarks",
+    keyElements: ["visible papillae", "natural moisture", "clinical documentary"],
+  },
+];
+
+function NanaBananaParamsPanel({ onUseTemplate }: { onUseTemplate: (t: NanaBananaTemplate) => void }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="font-mono text-[10px] text-readable leading-relaxed">
+        Structured JSON for Gemini realism generation. Fill the fields above, then copy the generated JSON from the output panel.
+      </p>
+      <span className="font-mono text-[8px] uppercase tracking-widest text-amber/50">Realism Formula References</span>
+      <div className="grid grid-cols-2 gap-2">
+        {NANO_BANANA_TEMPLATES.map((t) => (
+          <div
+            key={t.id}
+            className="flex flex-col gap-2 p-3 rounded-[6px]"
+            style={{ border: "1px solid rgba(246,173,85,0.18)", background: "rgba(246,173,85,0.03)" }}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: "rgba(246,173,85,0.7)" }}>{t.label}</span>
+              <button
+                type="button"
+                onClick={() => onUseTemplate(t)}
+                className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm transition-precise"
+                style={{ border: "1px solid rgba(246,173,85,0.25)", color: "rgba(246,173,85,0.6)" }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(246,173,85,0.9)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(246,173,85,0.08)"; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(246,173,85,0.6)"; (e.currentTarget as HTMLButtonElement).style.background = ""; }}
+              >
+                Use
+              </button>
+            </div>
+            <ul className="flex flex-col gap-0.5">
+              {t.keyElements.map((el) => (
+                <li key={el} className="flex items-start gap-1">
+                  <span className="mt-px shrink-0" style={{ color: "rgba(246,173,85,0.35)" }}>·</span>
+                  <span className="font-mono text-[9px] text-muted leading-tight">{el}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Constants ────────────────────────────────────────────────
 
 const PROVIDERS: { value: Provider; label: string }[] = [
@@ -449,6 +619,7 @@ interface Fields {
   rating: number; ai_look_risk: number;
   tags: string[]; notes: string;
   is_winner: boolean; is_failed: boolean;
+  variation: string;
 }
 
 const EMPTY: Fields = {
@@ -460,6 +631,7 @@ const EMPTY: Fields = {
   rating: 0, ai_look_risk: 0,
   tags: [], notes: "",
   is_winner: false, is_failed: false,
+  variation: "",
 };
 
 const EMPTY_MJ: MJParams = {
@@ -471,6 +643,22 @@ const EMPTY_MJ: MJParams = {
 };
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
+
+const VARIATION_PRESETS: { id: string; label: string; value: string }[] = [
+  { id: "rot90",   label: "Rotate 90°",  value: "composition rotated 90° clockwise" },
+  { id: "mirror",  label: "Mirror",      value: "horizontally mirrored composition" },
+  { id: "above",   label: "From Above",  value: "camera from above, bird's eye view" },
+  { id: "below",   label: "From Below",  value: "camera from below, worm's eye view" },
+  { id: "left",    label: "Cam Left",    value: "camera positioned to the left side" },
+  { id: "right",   label: "Cam Right",   value: "camera positioned to the right side" },
+  { id: "behind",  label: "From Behind", value: "viewed from behind the subject" },
+  { id: "night",   label: "Night",       value: "night version, artificial ambient lighting" },
+  { id: "golden",  label: "Golden Hour", value: "golden hour, warm amber and orange tones" },
+  { id: "bw",      label: "B&W",         value: "black and white, high contrast monochrome" },
+  { id: "rain",    label: "Rain",        value: "heavy rain, wet reflective surfaces" },
+  { id: "closeup", label: "Close-Up",    value: "extreme close-up crop on the primary subject" },
+  { id: "wide",    label: "Wide Shot",   value: "wide establishing shot, full environment visible" },
+];
 
 function projectProviderToPromptProvider(provider?: string): Provider | null {
   const normalized = provider?.toLowerCase().replace(/\s+/g, "_");
@@ -524,7 +712,7 @@ function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
         <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{ref_.kind}</span>
       </div>
       <div className="flex flex-col items-end shrink-0 gap-0.5">
-        <span className="font-mono text-[10px] text-amber">{ref_.winner_count}★</span>
+        <span className="font-mono text-[10px] text-amber">{ref_.result_win_count + ref_.project_winner_count}★</span>
         <span className="font-mono text-[8px] text-muted">{ref_.project_count} proj</span>
       </div>
     </button>
@@ -555,7 +743,7 @@ function ProviderFormatBlock({ label, icon, color, borderColor, bgColor, content
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
-      <pre className="font-mono text-[9px] text-soft-white/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+      <pre className="font-mono text-[10.5px] text-soft-white/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">
         {content}
       </pre>
     </div>
@@ -619,6 +807,7 @@ export function CraftPrompt() {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
+  const [insightsReady, setInsightsReady] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -667,13 +856,27 @@ export function CraftPrompt() {
   }, [id, getById]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setInsightsReady(true), 120);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     if (!projectId) {
       setProjectContext(null);
+      setImpactRefs([]);
       return;
     }
     getProjectById(projectId).then((project) => setProjectContext(project));
-    getHighImpactReferences(4, projectId).then(setImpactRefs).catch(() => {});
   }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || !insightsReady) return;
+    const timer = window.setTimeout(() => {
+      getHighImpactReferences(4, projectId).then(setImpactRefs).catch(() => {});
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [insightsReady, projectId]);
 
   useEffect(() => {
     if (id || !projectContext) return;
@@ -715,9 +918,21 @@ export function CraftPrompt() {
     setOutputOverride(null);
   };
 
-  const setMJ = (k: keyof MJParams, v: string | boolean) => { setMjParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
-  const setDalle = (k: keyof DalleParams, v: string) => { setDalleParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
-  const setSD = (k: keyof SDParams, v: string) => { setSDParams((p) => ({ ...p, [k]: v })); setOutputOverride(null); };
+  // Stable callbacks — memo on the provider panels only bails out if these are stable.
+  const setMJ = useCallback((k: keyof MJParams, v: string | boolean) => {
+    setMjParams((p) => ({ ...p, [k]: v }));
+    setOutputOverride(null);
+  }, []);
+  const setDalle = useCallback((k: keyof DalleParams, v: string) => {
+    setDalleParams((p) => ({ ...p, [k]: v }));
+    setOutputOverride(null);
+  }, []);
+  const setSD = useCallback((k: keyof SDParams, v: string) => {
+    setSDParams((p) => ({ ...p, [k]: v }));
+    setOutputOverride(null);
+  }, []);
+  const handleOpenSrefPicker = useCallback(() => setSrefPickerOpen(true), []);
+  const handleClearSref = useCallback(() => setSelectedSref(null), []);
 
   const handleTokenToggle = (token: Token) => {
     setTokenSequence((prev) => {
@@ -743,7 +958,10 @@ export function CraftPrompt() {
     setOutputOverride(null);
   };
 
-  const tokenTexts = tokenSequence.map((t) => tokenOverrides[t.id] ?? t.text);
+  const tokenTexts = useMemo(
+    () => tokenSequence.map((t) => tokenOverrides[t.id] ?? t.text),
+    [tokenSequence, tokenOverrides]
+  );
 
   const builtAssembled = (() => {
     if (mode === "manual") return fields.prompt_text;
@@ -757,11 +975,17 @@ export function CraftPrompt() {
   })();
 
   const assembled = outputOverride ?? builtAssembled;
-  const projectTokenSuggestions = buildProjectTokenSuggestions(projectContext, {
-    selectedTexts: tokenTexts,
-    promptText: assembled,
-  });
-  const suppressedTokenText = buildSuppressionText(projectContext, fields.avoidance_text);
+  const deferredAssembled = useDeferredValue(assembled);
+  const deferredProvider = useDeferredValue(fields.provider);
+  const deferredCategory = useDeferredValue(fields.category);
+  const projectTokenSuggestions = useMemo(
+    () => buildProjectTokenSuggestions(projectContext, { selectedTexts: tokenTexts, promptText: assembled }),
+    [projectContext, tokenTexts, assembled]
+  );
+  const suppressedTokenText = useMemo(
+    () => buildSuppressionText(projectContext, fields.avoidance_text),
+    [projectContext, fields.avoidance_text]
+  );
 
   // Proven combo detection + recipe suggestions + low-quality reset
   useEffect(() => {
@@ -775,27 +999,26 @@ export function CraftPrompt() {
   useEffect(() => {
     if (!allPrompts.length) return;
     const timer = setTimeout(() => {
-      if (assembled.trim().length > 30) {
-        setDuplicates(findSimilarPrompts(assembled, allPrompts, 0.55, id));
+      if (deferredAssembled.trim().length > 30) {
+        setDuplicates(findSimilarPrompts(deferredAssembled, allPrompts, 0.55, id));
         setDuplicatesDismissed(false);
       } else {
         setDuplicates([]);
       }
-      setRelatedPrompts(findRelatedPrompts(fields.category, fields.provider, id, allPrompts));
+      setRelatedPrompts(findRelatedPrompts(deferredCategory, deferredProvider, id, allPrompts));
     }, 600);
     return () => clearTimeout(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assembled, fields.category, fields.provider, allPrompts.length]);
+  }, [deferredAssembled, deferredCategory, deferredProvider, allPrompts.length, id]);
 
   // Auto-analyze when preference is enabled and draft is long enough
   useEffect(() => {
-    if (!getPreferences().autoAnalyzeDraft) return;
-    if (!validatePromptForAnalysis(assembled).valid) return;
+    if (!insightsReady || !getPreferences().autoAnalyzeDraft) return;
+    if (!validatePromptForAnalysis(deferredAssembled).valid) return;
     const timer = setTimeout(async () => {
       setAdviceLoading(true);
       setAdviceDismissed(false);
       try {
-        const result = await analyzePromptDraft({ promptText: assembled });
+        const result = await analyzePromptDraft({ promptText: deferredAssembled });
         setAdvice(result);
       } finally {
         setAdviceLoading(false);
@@ -803,15 +1026,15 @@ export function CraftPrompt() {
     }, 1800);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assembled]);
+  }, [deferredAssembled, insightsReady]);
 
   const handleSuggestTags = async () => {
-    const check = validatePromptForAnalysis(fields.prompt_text);
+    const check = validatePromptForAnalysis(assembled);
     if (!check.valid) { toast.error(check.message ?? "Prompt too short to suggest tags"); return; }
     setSuggestingTags(true);
     setTagSuggestions([]);
     try {
-      const result = await generateTagSuggestions({ promptText: fields.prompt_text, existingTags: fields.tags });
+      const result = await generateTagSuggestions({ promptText: assembled, existingTags: fields.tags });
       setTagSuggestions(result.tags);
       if (!result.tags.length) toast.error("No new tags to suggest — try a longer prompt");
     } catch {
@@ -821,20 +1044,25 @@ export function CraftPrompt() {
     }
   };
 
+  const varSuffix = fields.variation.trim() ? `, ${fields.variation.trim()}` : "";
   const fullCopyText = includeAvoidance && fields.avoidance_text
-    ? `${assembled}\n\n${fields.avoidance_text}`
-    : assembled;
+    ? `${assembled}${varSuffix}\n\n${fields.avoidance_text}`
+    : `${assembled}${varSuffix}`;
 
   const charCount = assembled.length;
 
-  // Tokens in the current sequence with a negative quality history (not overridden by user)
-  const lowQualityTokens = tokenSequence.filter(
-    (t) => !tokenOverrides[t.id] && t.quality_score < -0.1
+  const lowQualityTokens = useMemo(
+    () => tokenSequence.filter((t) => !tokenOverrides[t.id] && t.quality_score < -0.1),
+    [tokenSequence, tokenOverrides]
   );
-  const availableRecipes = allPrompts
-    .filter((prompt) => prompt.is_recipe && prompt.id !== id)
-    .filter((recipe) => !fields.category || !recipe.category || recipe.category === fields.category)
-    .slice(0, 5);
+  const availableRecipes = useMemo(
+    () =>
+      allPrompts
+        .filter((p) => p.is_recipe && p.id !== id)
+        .filter((r) => !fields.category || !r.category || r.category === fields.category)
+        .slice(0, 5),
+    [allPrompts, id, fields.category]
+  );
 
   const validate = (): boolean => {
     const errs: typeof errors = {};
@@ -905,6 +1133,28 @@ export function CraftPrompt() {
     setMode("manual");
     setOutputOverride(null);
   };
+
+  const handleReset = useCallback(() => {
+    const prefs = getPreferences();
+    setFields({
+      ...EMPTY,
+      provider: (prefs.defaultProvider as Provider) || EMPTY.provider,
+      category: prefs.defaultCategory || EMPTY.category,
+    });
+    setMjParams({ ...EMPTY_MJ, aspect_ratio: prefs.defaultAspectRatio || EMPTY_MJ.aspect_ratio });
+    setDalleParams(EMPTY_DALLE);
+    setSDParams(EMPTY_SD);
+    setErrors({});
+    setMode("builder");
+    setOutputOverride(null);
+    setAdvice(EMPTY_ADVICE);
+    setAdviceDismissed(false);
+    setLowQualityDismissed(false);
+    setTagSuggestions([]);
+    setFormatChanges([]);
+    setTokenSequence([]);
+    setTokenOverrides({});
+  }, []);
 
   const handleSave = async (asRecipe = false) => {
     if (!validate()) return;
@@ -992,6 +1242,9 @@ export function CraftPrompt() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
             <ArrowLeft size={11} /> {projectId ? "Project" : isEdit ? "Cancel" : "Library"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleReset} title="Reset all fields">
+            <RotateCcw size={11} />
           </Button>
           <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled}>
             {copied ? <Check size={10} /> : <Copy size={10} />}
@@ -1322,9 +1575,9 @@ export function CraftPrompt() {
             <SectionHeader label="AI-LOOK AVOIDANCE" />
             <div className="flex flex-col gap-3">
               <AvoidancePanel
-                promptText={assembled}
-                category={fields.category}
-                provider={fields.provider}
+                promptText={deferredAssembled}
+                category={deferredCategory}
+                provider={deferredProvider}
                 onAddCorrection={(text) => {
                   setF("avoidance_text", fields.avoidance_text ? `${fields.avoidance_text}, ${text}` : text);
                 }}
@@ -1340,6 +1593,48 @@ export function CraftPrompt() {
             </div>
           </div>
 
+          {/* Variation Axis */}
+          <div>
+            <SectionHeader label="SEQUENCE VARIATION" />
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-1.5">
+                {VARIATION_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setF("variation", fields.variation === preset.value ? "" : preset.value)}
+                    className={cn(
+                      "font-mono text-[8.5px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
+                      fields.variation === preset.value ? "text-cyan" : "text-dim hover:text-soft-white"
+                    )}
+                    style={{ border: fields.variation === preset.value ? "1px solid rgba(0,229,255,0.35)" : "var(--border-dim)" }}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={fields.variation}
+                  onChange={(e) => setF("variation", e.target.value)}
+                  placeholder="Single controlled change… (rotate 90°, night version, camera from above)"
+                  className="w-full h-9 px-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+                  style={{ border: "var(--border-default)" }}
+                />
+                {fields.variation && (
+                  <button
+                    type="button"
+                    onClick={() => setF("variation", "")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim/60 hover:text-red transition-precise text-[12px] leading-none"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Meta */}
           <div>
             <SectionHeader label="META" />
@@ -1348,7 +1643,7 @@ export function CraftPrompt() {
               <div className="flex flex-wrap items-center gap-1.5">
                 <button type="button"
                   onClick={handleSuggestTags}
-                  disabled={suggestingTags || fields.prompt_text.trim().length < 20}
+                  disabled={suggestingTags || assembled.trim().length < 20}
                   className="flex items-center gap-1.5 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white disabled:opacity-30 transition-precise"
                   style={{ border: "var(--border-dim)" }}>
                   <Wand2 size={8} />{suggestingTags ? "Suggesting…" : "Suggest Tags"}
@@ -1391,13 +1686,26 @@ export function CraftPrompt() {
                 p={mjParams}
                 set={setMJ}
                 selectedSrefTitle={selectedSref?.title ?? null}
-                onBrowseSref={() => setSrefPickerOpen(true)}
-                onClearSref={() => setSelectedSref(null)}
+                onBrowseSref={handleOpenSrefPicker}
+                onClearSref={handleClearSref}
               />
             )}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}
             {fields.provider === "stable_diffusion" && <SDParamsPanel p={sdParams} set={setSD} />}
-            {!["midjourney", "dalle", "stable_diffusion"].includes(fields.provider) && (
+            {fields.provider === "nano_banana" && (
+              <NanaBananaParamsPanel
+                onUseTemplate={(t) => {
+                  setF("subject", t.subject);
+                  setF("environment", t.environment);
+                  setF("camera", t.camera);
+                  setF("lens", t.lens);
+                  setF("lighting", t.lighting);
+                  setF("mood", t.mood);
+                  setF("avoidance_text", t.avoidance_text);
+                }}
+              />
+            )}
+            {!["midjourney", "dalle", "stable_diffusion", "nano_banana"].includes(fields.provider) && (
               <p className="font-mono text-[11px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
           </div>
@@ -1460,7 +1768,7 @@ export function CraftPrompt() {
           )}
 
           {/* High-impact references */}
-          {impactRefs.length > 0 && (
+          {insightsReady && impactRefs.length > 0 && (
             <div className="flex flex-col gap-3 p-5 rounded-card"
               style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
               <div className="flex items-center justify-between">
@@ -1480,15 +1788,21 @@ export function CraftPrompt() {
             className="flex flex-col gap-4 p-5 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <RecommendationPanel
-              context={{
-                provider: fields.provider,
-                category: fields.category || undefined,
-                excludePromptId: id,
-                projectId: projectId ?? undefined,
-                promptText: assembled,
-              }}
-            />
+            {insightsReady ? (
+              <RecommendationPanel
+                context={{
+                  provider: deferredProvider,
+                  category: deferredCategory || undefined,
+                  excludePromptId: id,
+                  projectId: projectId ?? undefined,
+                  promptText: deferredAssembled,
+                }}
+              />
+            ) : (
+              <div className="flex items-center justify-center py-6">
+                <span className="font-mono text-[10px] text-muted">Loading recommendations…</span>
+              </div>
+            )}
           </div>
 
           {/* Scoring */}
@@ -1587,9 +1901,20 @@ export function CraftPrompt() {
               </label>
             )}
 
+            {fields.variation && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-sm"
+                style={{ border: "1px solid rgba(0,229,255,0.2)", background: "rgba(0,229,255,0.05)" }}>
+                <GitBranch size={10} className="text-cyan/60 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/60">Variation delta</span>
+                  <p className="font-mono text-[10px] text-soft-white/80 leading-snug mt-0.5 wrap-break-word">{fields.variation}</p>
+                </div>
+              </div>
+            )}
+
             <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">
               {copied ? <Check size={10} /> : <Copy size={10} />}
-              {copied ? "Copied!" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
+              {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
             </Button>
           </div>
 
@@ -1601,11 +1926,7 @@ export function CraftPrompt() {
               color="rgba(246,173,85,0.7)"
               borderColor="rgba(246,173,85,0.2)"
               bgColor="rgba(246,173,85,0.04)"
-              content={JSON.stringify({
-                prompt: assembled,
-                aspect_ratio: mjParams.aspect_ratio || "1:1",
-                model: "nano-banana-v1",
-              }, null, 2)}
+              content={buildNanaBananaJson(fields, assembled, mjParams.aspect_ratio)}
             />
           )}
           {(["seedance", "kling", "runway", "higgsfield"] as const).includes(fields.provider as "seedance" | "kling" | "runway" | "higgsfield") && assembled && (
@@ -1651,23 +1972,33 @@ export function CraftPrompt() {
 
           {/* AI Prompt Advisor */}
           {(() => {
-            const canAnalyze = validatePromptForAnalysis(fields.prompt_text).valid;
-            const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0) && !adviceDismissed;
+            const analyzeCheck = validatePromptForAnalysis(assembled);
+            const canAnalyze = analyzeCheck.valid;
+            const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0 || advice.improvements.length > 0) && !adviceDismissed;
             return (
               <div className="flex flex-col gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   disabled={!canAnalyze || adviceLoading}
-                  title={!canAnalyze ? validatePromptForAnalysis(fields.prompt_text).message : "Analyze with Claude Haiku"}
+                  title={!canAnalyze ? analyzeCheck.message : "Analyze with Claude Haiku"}
                   onClick={async () => {
                     setAdviceLoading(true);
                     setAdviceDismissed(false);
                     try {
                       const result = await analyzePromptDraft({
-                        promptText: fields.prompt_text,
+                        promptText: assembled,
                         brief: projectContext?.brief_text,
                         provenTokens: tokenSequence.filter(t => t.quality_score > 0.3).map(t => t.text).slice(0, 5),
+                        fields: mode === "builder" ? {
+                          subject: fields.subject || undefined,
+                          environment: fields.environment || undefined,
+                          camera: fields.camera || undefined,
+                          lens: fields.lens || undefined,
+                          lighting: fields.lighting || undefined,
+                          mood: fields.mood || undefined,
+                          realism: fields.realism || undefined,
+                        } : undefined,
                       });
                       setAdvice(result);
                     } catch {
@@ -1700,6 +2031,28 @@ export function CraftPrompt() {
                         <span className="font-mono text-[9px] text-red/60 leading-relaxed">{r}</span>
                       </div>
                     ))}
+                    {advice.improvements.length > 0 && (
+                      <div className="flex flex-col gap-1.5 pt-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                        <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50">Apply improvements</span>
+                        {advice.improvements.map((imp, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="font-mono text-[7.5px] uppercase tracking-widest text-white/35 shrink-0 w-14 truncate">{imp.label}</span>
+                            <span className="font-mono text-[9px] text-white/55 flex-1 min-w-0 truncate">{imp.value}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFields((f) => ({ ...f, [imp.field]: imp.value }));
+                                if (mode !== "builder") setMode("builder");
+                              }}
+                              className="font-mono text-[7.5px] uppercase tracking-widest text-cyan/60 hover:text-cyan transition-precise shrink-0 px-1.5 py-0.5 rounded-sm"
+                              style={{ border: "1px solid rgba(0,229,255,0.2)" }}
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

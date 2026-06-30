@@ -113,10 +113,16 @@
   }
 
   html {
-    font-size: 17px;
+    font-size: 18px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    cursor: pointer;
   }
 
   body {

@@ -3,26 +3,39 @@ import { AI_KEY_ANTHROPIC, getApiKey, validateApiKey } from "./aiConfig";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export type AdviceFieldKey = "subject" | "environment" | "camera" | "lens" | "lighting" | "mood" | "realism" | "avoidance_text";
+
+export interface FieldImprovement {
+  field: AdviceFieldKey;
+  label: string;
+  value: string;
+}
+
 export interface PromptAdvice {
   suggestions: string[];
   risks: string[];
+  improvements: FieldImprovement[];
 }
 
-export const EMPTY_ADVICE: PromptAdvice = { suggestions: [], risks: [] };
+export const EMPTY_ADVICE: PromptAdvice = { suggestions: [], risks: [], improvements: [] };
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
+
+const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "environment", "camera", "lens", "lighting", "mood", "realism", "avoidance_text"];
 
 function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
   const parts: string[] = [
     "You are an expert AI image prompt engineer for advertising-grade production.",
-    "Analyze the draft prompt and return ONLY a valid JSON object:",
+    "Analyze the draft prompt (and current field values when provided) and return ONLY a valid JSON object:",
     `{
-  "suggestions": ["specific improvement (max 3 items)"],
-  "risks": ["specific risk or issue (max 2 items)"]
+  "suggestions": ["concrete actionable improvement (max 2 items, each starts with a verb)"],
+  "risks": ["specific risk — AI-look, generic phrasing, conflicts, missing params (max 2 items)"],
+  "improvements": [
+    { "field": "subject|environment|camera|lens|lighting|mood|realism|avoidance_text", "label": "Subject|Environment|Camera|Lens|Lighting|Mood|Realism|Avoidance", "value": "ready-to-use replacement text for that field only" }
+  ]
 }`,
     "",
-    "suggestions: concrete, actionable improvements — add missing elements, improve specificity, suggest better ordering or phrasing. Each item starts with an action verb.",
-    "risks: potential issues — generic phrasing, AI-look risks, conflicting instructions, missing critical parameters.",
+    "improvements: 0–3 items max. Only include a field if you have a meaningful, specific improvement. Each value must be concise, directly applicable text for that single field. Do NOT repeat the full prompt in a value.",
     "Return only the JSON — no markdown fences, no preamble.",
   ];
 
@@ -38,10 +51,17 @@ function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
 
 function parseAdvice(raw: string): PromptAdvice {
   try {
-    const json = JSON.parse(raw.trim()) as Partial<PromptAdvice>;
+    const json = JSON.parse(raw.trim()) as Record<string, unknown>;
+    const improvements: FieldImprovement[] = Array.isArray(json.improvements)
+      ? (json.improvements as Record<string, string>[])
+          .filter((imp) => VALID_FIELD_KEYS.includes(imp.field as AdviceFieldKey) && imp.value?.trim())
+          .slice(0, 3)
+          .map((imp) => ({ field: imp.field as AdviceFieldKey, label: imp.label || imp.field, value: imp.value.trim() }))
+      : [];
     return {
-      suggestions: Array.isArray(json.suggestions) ? json.suggestions.slice(0, 3) : [],
-      risks: Array.isArray(json.risks) ? json.risks.slice(0, 2) : [],
+      suggestions: Array.isArray(json.suggestions) ? (json.suggestions as string[]).slice(0, 2) : [],
+      risks: Array.isArray(json.risks) ? (json.risks as string[]).slice(0, 2) : [],
+      improvements,
     };
   } catch {
     return EMPTY_ADVICE;
@@ -190,6 +210,7 @@ export async function analyzePromptDraft(opts: {
   promptText: string;
   brief?: string;
   provenTokens?: string[];
+  fields?: Partial<Record<AdviceFieldKey, string>>;
 }): Promise<PromptAdvice> {
   if (!isTauri) return EMPTY_ADVICE;
 
@@ -197,7 +218,17 @@ export async function analyzePromptDraft(opts: {
   requireValidApiKey("anthropic", apiKey);
 
   const systemPrompt = buildSystemPrompt(opts.brief, opts.provenTokens);
-  const userMessage = `Draft prompt:\n${opts.promptText.trim()}`;
+
+  const fieldLines = opts.fields
+    ? Object.entries(opts.fields)
+        .filter(([, v]) => v?.trim())
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n")
+    : "";
+
+  const userMessage = fieldLines
+    ? `Draft prompt:\n${opts.promptText.trim()}\n\nCurrent field values:\n${fieldLines}`
+    : `Draft prompt:\n${opts.promptText.trim()}`;
 
   const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
     "anthropic",
@@ -212,7 +243,7 @@ export async function analyzePromptDraft(opts: {
       },
       body: JSON.stringify({
         model: HAIKU_MODEL,
-        max_tokens: 512,
+        max_tokens: 768,
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
       }),

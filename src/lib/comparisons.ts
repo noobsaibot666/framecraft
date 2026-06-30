@@ -94,23 +94,27 @@ export async function createSession(data: CreateSessionInput): Promise<string> {
   const ts = now();
 
   if (isTauri) {
-    const db = await getDb();
-    await db.execute(
-      `INSERT INTO comparison_sessions
-         (id, title, project_id, notes, comparison_type, outcome_summary, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        id,
-        data.title,
-        data.project_id ?? null,
-        data.notes ?? null,
-        data.comparison_type ?? "result_result",
-        data.outcome_summary ?? null,
-        ts,
-        ts,
-      ]
-    );
-    return id;
+    try {
+      const db = await getDb();
+      await db.execute(
+        `INSERT INTO comparison_sessions
+           (id, title, project_id, notes, comparison_type, outcome_summary, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          id,
+          data.title,
+          data.project_id ?? null,
+          data.notes ?? null,
+          data.comparison_type ?? "result_result",
+          data.outcome_summary ?? null,
+          ts,
+          ts,
+        ]
+      );
+      return id;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
 
   _devSessions.unshift({
@@ -124,17 +128,21 @@ export async function createSession(data: CreateSessionInput): Promise<string> {
 
 export async function getSessions(projectId?: string): Promise<ComparisonSession[]> {
   if (isTauri) {
-    const db = await getDb();
-    const where = projectId ? "WHERE cs.project_id = $1" : "";
-    const rows = (await db.select(
-      `SELECT cs.*,
-         (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id) as item_count,
-         (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id AND ci.is_winner = 1) as winner_count
-       FROM comparison_sessions cs ${where}
-       ORDER BY cs.updated_at DESC`,
-      projectId ? [projectId] : []
-    )) as Record<string, unknown>[];
-    return rows.map(rowToSession);
+    try {
+      const db = await getDb();
+      const where = projectId ? "WHERE cs.project_id = $1" : "";
+      const rows = (await db.select(
+        `SELECT cs.*,
+           (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id) as item_count,
+           (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id AND ci.is_winner = 1) as winner_count
+         FROM comparison_sessions cs ${where}
+         ORDER BY cs.updated_at DESC`,
+        projectId ? [projectId] : []
+      )) as Record<string, unknown>[];
+      return rows.map(rowToSession);
+    } catch {
+      return [];
+    }
   }
 
   let list = [..._devSessions];
@@ -144,15 +152,19 @@ export async function getSessions(projectId?: string): Promise<ComparisonSession
 
 export async function getSessionById(id: string): Promise<ComparisonSession | null> {
   if (isTauri) {
-    const db = await getDb();
-    const rows = (await db.select(
-      `SELECT cs.*,
-         (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id) as item_count,
-         (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id AND ci.is_winner = 1) as winner_count
-       FROM comparison_sessions cs WHERE cs.id = $1`,
-      [id]
-    )) as Record<string, unknown>[];
-    return rows[0] ? rowToSession(rows[0]) : null;
+    try {
+      const db = await getDb();
+      const rows = (await db.select(
+        `SELECT cs.*,
+           (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id) as item_count,
+           (SELECT COUNT(*) FROM comparison_items ci WHERE ci.session_id = cs.id AND ci.is_winner = 1) as winner_count
+         FROM comparison_sessions cs WHERE cs.id = $1`,
+        [id]
+      )) as Record<string, unknown>[];
+      return rows[0] ? rowToSession(rows[0]) : null;
+    } catch {
+      return null;
+    }
   }
   return _devSessions.find((s) => s.id === id) ?? null;
 }
@@ -160,16 +172,20 @@ export async function getSessionById(id: string): Promise<ComparisonSession | nu
 export async function updateSession(id: string, data: Partial<CreateSessionInput>): Promise<void> {
   const ts = now();
   if (isTauri) {
-    const db = await getDb();
-    const sets: string[] = ["updated_at = $1"];
-    const values: unknown[] = [ts];
-    if (data.title !== undefined) { values.push(data.title); sets.push(`title = $${values.length}`); }
-    if (data.notes !== undefined) { values.push(data.notes); sets.push(`notes = $${values.length}`); }
-    if (data.comparison_type !== undefined) { values.push(data.comparison_type); sets.push(`comparison_type = $${values.length}`); }
-    if (data.outcome_summary !== undefined) { values.push(data.outcome_summary); sets.push(`outcome_summary = $${values.length}`); }
-    values.push(id);
-    await db.execute(`UPDATE comparison_sessions SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
-    return;
+    try {
+      const db = await getDb();
+      const sets: string[] = ["updated_at = $1"];
+      const values: unknown[] = [ts];
+      if (data.title !== undefined) { values.push(data.title); sets.push(`title = $${values.length}`); }
+      if (data.notes !== undefined) { values.push(data.notes); sets.push(`notes = $${values.length}`); }
+      if (data.comparison_type !== undefined) { values.push(data.comparison_type); sets.push(`comparison_type = $${values.length}`); }
+      if (data.outcome_summary !== undefined) { values.push(data.outcome_summary); sets.push(`outcome_summary = $${values.length}`); }
+      values.push(id);
+      await db.execute(`UPDATE comparison_sessions SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   const idx = _devSessions.findIndex((s) => s.id === id);
   if (idx !== -1) _devSessions[idx] = { ..._devSessions[idx], ...data, updated_at: ts };
@@ -177,9 +193,13 @@ export async function updateSession(id: string, data: Partial<CreateSessionInput
 
 export async function deleteSession(id: string): Promise<void> {
   if (isTauri) {
-    const db = await getDb();
-    await db.execute("DELETE FROM comparison_sessions WHERE id = $1", [id]);
-    return;
+    try {
+      const db = await getDb();
+      await db.execute("DELETE FROM comparison_sessions WHERE id = $1", [id]);
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   const idx = _devSessions.findIndex((s) => s.id === id);
   if (idx !== -1) _devSessions.splice(idx, 1);
@@ -197,18 +217,22 @@ export async function addItemToSession(
   const ts = now();
 
   if (isTauri) {
-    const db = await getDb();
-    await db.execute(
-      `INSERT OR IGNORE INTO comparison_items
-         (id, session_id, result_id, position, source_role, is_winner, is_rejected, created_at)
-       VALUES ($1, $2, $3, $4, $5, 0, 0, $6)`,
-      [id, sessionId, resultId, position, sourceRole, ts]
-    );
-    await db.execute(
-      "UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2",
-      [ts, sessionId]
-    );
-    return id;
+    try {
+      const db = await getDb();
+      await db.execute(
+        `INSERT OR IGNORE INTO comparison_items
+           (id, session_id, result_id, position, source_role, is_winner, is_rejected, created_at)
+         VALUES ($1, $2, $3, $4, $5, 0, 0, $6)`,
+        [id, sessionId, resultId, position, sourceRole, ts]
+      );
+      await db.execute(
+        "UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2",
+        [ts, sessionId]
+      );
+      return id;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
 
   if (!_devItems.some((i) => i.session_id === sessionId && i.result_id === resultId)) {
@@ -233,13 +257,17 @@ export async function addItemToSession(
 
 export async function removeItemFromSession(itemId: string): Promise<void> {
   if (isTauri) {
-    const db = await getDb();
-    const rows = (await db.select("SELECT session_id FROM comparison_items WHERE id = $1", [itemId])) as { session_id: string }[];
-    await db.execute("DELETE FROM comparison_items WHERE id = $1", [itemId]);
-    if (rows[0]) {
-      await db.execute("UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2", [now(), rows[0].session_id]);
+    try {
+      const db = await getDb();
+      const rows = (await db.select("SELECT session_id FROM comparison_items WHERE id = $1", [itemId])) as { session_id: string }[];
+      await db.execute("DELETE FROM comparison_items WHERE id = $1", [itemId]);
+      if (rows[0]) {
+        await db.execute("UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2", [now(), rows[0].session_id]);
+      }
+      return;
+    } catch (err) {
+      throw new Error(String(err));
     }
-    return;
   }
   const idx = _devItems.findIndex((i) => i.id === itemId);
   if (idx !== -1) _devItems.splice(idx, 1);
@@ -247,12 +275,16 @@ export async function removeItemFromSession(itemId: string): Promise<void> {
 
 export async function getItemsForSession(sessionId: string): Promise<ComparisonItem[]> {
   if (isTauri) {
-    const db = await getDb();
-    const rows = (await db.select(
-      "SELECT * FROM comparison_items WHERE session_id = $1 ORDER BY position ASC, created_at ASC",
-      [sessionId]
-    )) as Record<string, unknown>[];
-    return rows.map(rowToItem);
+    try {
+      const db = await getDb();
+      const rows = (await db.select(
+        "SELECT * FROM comparison_items WHERE session_id = $1 ORDER BY position ASC, created_at ASC",
+        [sessionId]
+      )) as Record<string, unknown>[];
+      return rows.map(rowToItem);
+    } catch {
+      return [];
+    }
   }
   return _devItems.filter((i) => i.session_id === sessionId).sort((a, b) => a.position - b.position);
 }
@@ -260,17 +292,21 @@ export async function getItemsForSession(sessionId: string): Promise<ComparisonI
 export async function setItemWinner(itemId: string, sessionId: string): Promise<void> {
   const ts = now();
   if (isTauri) {
-    const db = await getDb();
-    await db.execute(
-      "UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1",
-      [sessionId]
-    );
-    await db.execute(
-      "UPDATE comparison_items SET is_winner = 1, is_rejected = 0 WHERE id = $1",
-      [itemId]
-    );
-    await db.execute("UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2", [ts, sessionId]);
-    return;
+    try {
+      const db = await getDb();
+      await db.execute(
+        "UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1",
+        [sessionId]
+      );
+      await db.execute(
+        "UPDATE comparison_items SET is_winner = 1, is_rejected = 0 WHERE id = $1",
+        [itemId]
+      );
+      await db.execute("UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2", [ts, sessionId]);
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   _devItems.filter((i) => i.session_id === sessionId).forEach((i) => { i.is_winner = false; });
   const item = _devItems.find((i) => i.id === itemId);
@@ -279,21 +315,29 @@ export async function setItemWinner(itemId: string, sessionId: string): Promise<
 
 export async function clearItemWinner(sessionId: string): Promise<void> {
   if (isTauri) {
-    const db = await getDb();
-    await db.execute("UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1", [sessionId]);
-    return;
+    try {
+      const db = await getDb();
+      await db.execute("UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1", [sessionId]);
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   _devItems.filter((i) => i.session_id === sessionId).forEach((i) => { i.is_winner = false; });
 }
 
 export async function setItemRejected(itemId: string, isRejected: boolean): Promise<void> {
   if (isTauri) {
-    const db = await getDb();
-    await db.execute(
-      "UPDATE comparison_items SET is_rejected = $1, is_winner = 0 WHERE id = $2",
-      [isRejected ? 1 : 0, itemId]
-    );
-    return;
+    try {
+      const db = await getDb();
+      await db.execute(
+        "UPDATE comparison_items SET is_rejected = $1, is_winner = 0 WHERE id = $2",
+        [isRejected ? 1 : 0, itemId]
+      );
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   const item = _devItems.find((i) => i.id === itemId);
   if (item) { item.is_rejected = isRejected; if (isRejected) item.is_winner = false; }
@@ -301,9 +345,13 @@ export async function setItemRejected(itemId: string, isRejected: boolean): Prom
 
 export async function updateItemNotes(itemId: string, notes: string): Promise<void> {
   if (isTauri) {
-    const db = await getDb();
-    await db.execute("UPDATE comparison_items SET notes = $1 WHERE id = $2", [notes, itemId]);
-    return;
+    try {
+      const db = await getDb();
+      await db.execute("UPDATE comparison_items SET notes = $1 WHERE id = $2", [notes, itemId]);
+      return;
+    } catch (err) {
+      throw new Error(String(err));
+    }
   }
   const item = _devItems.find((i) => i.id === itemId);
   if (item) item.notes = notes;
@@ -314,40 +362,44 @@ export async function updateItemNotes(itemId: string, notes: string): Promise<vo
 /** Load all results for a project, enriched with prompt metadata. */
 export async function loadProjectResults(projectId: string): Promise<ComparisonResult[]> {
   if (!isTauri) return [];
-  const db = await getDb();
-  const rows = (await db.select(
-    `SELECT
-       r.id as result_id,
-       r.prompt_id,
-       p.title as prompt_title,
-       p.provider as prompt_provider,
-       p.version as prompt_version,
-       r.thumbnail_path,
-       r.file_path,
-       r.score_overall,
-       r.score_realism,
-       r.score_brand_fit,
-       r.score_composition,
-       r.score_lighting,
-       r.score_ai_risk,
-       r.is_winner,
-       r.is_failed,
-       r.artifacts,
-       r.created_at
-     FROM results r
-     JOIN prompts p ON p.id = r.prompt_id
-     WHERE EXISTS (
-       SELECT 1 FROM project_results pr
-       WHERE pr.project_id = $1 AND pr.result_id = r.id
-     )
-     OR EXISTS (
-       SELECT 1 FROM project_prompts pp
-       WHERE pp.project_id = $1 AND pp.prompt_id = r.prompt_id
-     )
-     ORDER BY r.created_at DESC`,
-    [projectId]
-  )) as Record<string, unknown>[];
-  return rows.map(rowToComparisonResult);
+  try {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT
+         r.id as result_id,
+         r.prompt_id,
+         p.title as prompt_title,
+         p.provider as prompt_provider,
+         p.version as prompt_version,
+         r.thumbnail_path,
+         r.file_path,
+         r.score_overall,
+         r.score_realism,
+         r.score_brand_fit,
+         r.score_composition,
+         r.score_lighting,
+         r.score_ai_risk,
+         r.is_winner,
+         r.is_failed,
+         r.artifacts,
+         r.created_at
+       FROM results r
+       JOIN prompts p ON p.id = r.prompt_id
+       WHERE EXISTS (
+         SELECT 1 FROM project_results pr
+         WHERE pr.project_id = $1 AND pr.result_id = r.id
+       )
+       OR EXISTS (
+         SELECT 1 FROM project_prompts pp
+         WHERE pp.project_id = $1 AND pp.prompt_id = r.prompt_id
+       )
+       ORDER BY r.created_at DESC`,
+      [projectId]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToComparisonResult);
+  } catch {
+    return [];
+  }
 }
 
 // ─── Decision sync ────────────────────────────────────────────
@@ -358,24 +410,28 @@ export async function loadProjectResults(projectId: string): Promise<ComparisonR
  */
 export async function syncDecisionsToResults(sessionId: string): Promise<number> {
   if (!isTauri) return 0;
-  const db = await getDb();
+  try {
+    const db = await getDb();
 
-  const items = (await db.select(
-    "SELECT result_id, is_winner, is_rejected FROM comparison_items WHERE session_id = $1",
-    [sessionId]
-  )) as { result_id: string; is_winner: number; is_rejected: number }[];
+    const items = (await db.select(
+      "SELECT result_id, is_winner, is_rejected FROM comparison_items WHERE session_id = $1",
+      [sessionId]
+    )) as { result_id: string; is_winner: number; is_rejected: number }[];
 
-  let count = 0;
-  for (const item of items) {
-    if (item.is_winner || item.is_rejected) {
-      await db.execute(
-        "UPDATE results SET is_winner = $1, is_failed = $2 WHERE id = $3",
-        [item.is_winner ? 1 : 0, item.is_rejected ? 1 : 0, item.result_id]
-      );
-      count++;
+    let count = 0;
+    for (const item of items) {
+      if (item.is_winner || item.is_rejected) {
+        await db.execute(
+          "UPDATE results SET is_winner = $1, is_failed = $2 WHERE id = $3",
+          [item.is_winner ? 1 : 0, item.is_rejected ? 1 : 0, item.result_id]
+        );
+        count++;
+      }
     }
+    return count;
+  } catch (err) {
+    throw new Error(String(err));
   }
-  return count;
 }
 
 // ─── Decision support ─────────────────────────────────────────

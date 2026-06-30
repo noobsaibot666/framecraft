@@ -1,8 +1,8 @@
-import { useCallback, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { TopBar } from "./TopBar";
 import { Sidebar } from "./Sidebar";
+import { PageTransition } from "./PageTransition";
 import { CommandSearch } from "@/components/ui/CommandSearch";
 import { ToastContainer } from "@/components/ui/ToastContainer";
 import { useShortcut, registerShortcutLabel, getRegisteredShortcuts, formatShortcutKeys } from "@/lib/shortcuts";
@@ -14,6 +14,15 @@ export function AppShell() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
+  // Warm the DB connection at startup so the first data page loads instantly.
+  useEffect(() => {
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      import("@/lib/dbConnection").then(({ getFramecraftDb }) => {
+        getFramecraftDb().catch(() => {});
+      });
+    }
+  }, []);
+
   const openSearch = useCallback(() => setSearchOpen((open) => !open), []);
   useShortcut("cmd+k", openSearch);
   useShortcut("cmd+/", () => setShortcutsOpen((v) => !v));
@@ -24,7 +33,7 @@ export function AppShell() {
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-          <Outlet />
+          <PageTransition />
         </main>
       </div>
       {searchOpen && <CommandSearch onClose={() => setSearchOpen(false)} />}

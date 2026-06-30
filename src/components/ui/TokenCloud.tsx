@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Plus, Search, Star } from "lucide-react";
 import { getTokenCategories, getTokensByCategory, createToken, toggleTokenFavorite } from "@/lib/db";
+import { createTokenCategoryCache, filterTokensForProvider } from "@/lib/tokenCloudCache";
 import { cn } from "@/lib/utils";
 import type { TokenCategory, Token } from "@/types";
 
@@ -30,10 +31,14 @@ interface TokenCloudProps {
 }
 
 export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressedText }: TokenCloudProps) {
+  const tokenCacheRef = useRef(createTokenCategoryCache(getTokensByCategory));
   const [categories, setCategories] = useState<TokenCategory[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string>("");
-  const [tokens, setTokens] = useState<Token[]>([]);
+  // rawTokens holds all tokens for the active category (unfiltered).
+  // Provider filtering is applied synchronously via useMemo so switching
+  // provider never triggers a loading spinner.
+  const [rawTokens, setRawTokens] = useState<Token[]>([]);
   const [loadingCats, setLoadingCats] = useState(true);
   const [loadingTokens, setLoadingTokens] = useState(false);
   const [search, setSearch] = useState("");
@@ -55,23 +60,23 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
       .finally(() => setLoadingCats(false));
   }, []);
 
+  // Only fetches from DB/cache when the category changes — not when providerFilter changes.
   const loadTokens = useCallback(async (categoryId: string) => {
     setLoadingTokens(true);
-    setSearch("");
     try {
-      const raw = await getTokensByCategory(categoryId);
-      const filtered = providerFilter
-        ? raw.filter((t) => !t.provider || t.provider === providerFilter)
-        : raw;
-      setTokens(filtered);
+      const raw = await tokenCacheRef.current.get(categoryId);
+      setRawTokens(raw);
     } finally {
       setLoadingTokens(false);
     }
-  }, [providerFilter]);
+  }, []);
 
   useEffect(() => {
-    if (activeCategoryId) loadTokens(activeCategoryId);
+    if (activeCategoryId) void loadTokens(activeCategoryId);
   }, [activeCategoryId, loadTokens]);
+
+  // Provider filter applied synchronously — no DB call, no loading flash.
+  const tokens = useMemo(() => filterTokensForProvider(rawTokens, providerFilter), [rawTokens, providerFilter]);
 
   useEffect(() => {
     if (addingNew) newInputRef.current?.focus();
@@ -89,7 +94,9 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
     setSavingNew(true);
     try {
       const token = await createToken(newTokenText.trim(), activeCategoryId);
-      setTokens((prev) => [token, ...prev]);
+      await tokenCacheRef.current.mutate(activeCategoryId, (prev) => [token, ...prev]);
+      const next = await tokenCacheRef.current.get(activeCategoryId);
+      setRawTokens(next);
       onToggle(token);
       setNewTokenText("");
       setAddingNew(false);
@@ -101,7 +108,10 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
   const handleToggleFavorite = async (e: React.MouseEvent, token: Token) => {
     e.stopPropagation();
     const next = !token.is_favorite;
-    setTokens((prev) => prev.map((t) => t.id === token.id ? { ...t, is_favorite: next } : t));
+    setRawTokens((prev) => prev.map((t) => t.id === token.id ? { ...t, is_favorite: next } : t));
+    await tokenCacheRef.current.mutate(token.category_id, (prev) =>
+      prev.map((current) => current.id === token.id ? { ...current, is_favorite: next } : current)
+    );
     await toggleTokenFavorite(token.id, next);
   };
 

@@ -111,7 +111,7 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
       await reload();
       setNotice(`${direction.title} applied to Project Craft.`);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to apply creative direction.");
+      setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setApplyingId(null);
     }

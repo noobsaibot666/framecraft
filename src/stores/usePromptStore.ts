@@ -70,13 +70,17 @@ export const usePromptStore = create<PromptState>((set, get) => ({
 
   create: async (data) => {
     const id = await createPrompt(data);
-    await get().fetchPrompts();
+    // Fetch only the new prompt and prepend — avoids a full library re-scan.
+    const newPrompt = await getPromptById(id);
+    if (newPrompt) set((s) => ({ prompts: [newPrompt, ...s.prompts] }));
     return id;
   },
 
   update: async (id, data) => {
     await updatePrompt(id, data);
-    await get().fetchPrompts();
+    // Refresh only the changed record in-place.
+    const updated = await getPromptById(id);
+    if (updated) set((s) => ({ prompts: s.prompts.map((p) => (p.id === id ? updated : p)) }));
   },
 
   remove: async (id) => {

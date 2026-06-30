@@ -116,9 +116,21 @@ function uniqueTags(values: string[]): string[] | undefined {
 }
 
 function detectProvider(text: string): Provider {
-  if (text.includes("--v ") || text.includes("--sref") || text.includes("--ar")) return "midjourney";
-  if (text.toLowerCase().includes("dall-e") || text.toLowerCase().includes("dalle")) return "dalle";
-  return "midjourney";
+  const lower = text.toLowerCase();
+  if (text.includes("--v ") || text.includes("--sref") || text.includes("--stylize") || text.includes("--chaos")) return "midjourney";
+  if (lower.includes("gemini-2.5-flash-image") || lower.includes("nano_banana") || lower.includes("nano-banana")) return "nano_banana";
+  if (text.includes("--steps") || text.includes("--cfg")) return "stable_diffusion";
+  if (lower.includes("adobe firefly")) return "firefly";
+  if (lower.includes("ideogram")) return "ideogram";
+  if (lower.includes("flux")) return "flux";
+  if (lower.includes("gpt-image") || lower.includes("gpt image")) return "gpt_image";
+  if (lower.includes("seedance")) return "seedance";
+  if (lower.includes("kling")) return "kling";
+  if (lower.includes("runway")) return "runway";
+  if (lower.includes("higgsfield")) return "higgsfield";
+  if (lower.includes("dall-e") || lower.includes("dalle")) return "dalle";
+  if (text.includes("--ar")) return "midjourney";
+  return "other";
 }
 
 // ─── Batch Import ─────────────────────────────────────────────
@@ -191,30 +203,69 @@ function FieldSelect({ label, value, onChange, options }: {
   );
 }
 
-function SourceInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData }: {
+  sourceUrl: string; onSourceUrl: (v: string) => void;
+  thumbnailData: string; onThumbnailData: (v: string) => void;
+}) {
   const [copied, setCopied] = useState(false);
-  const isUrl = value.startsWith("http");
+  const isUrl = sourceUrl.startsWith("http");
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(value);
+    navigator.clipboard.writeText(sourceUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
-  return (
-    <div className="relative">
-      <input value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder="Midjourney community, X, personal…"
-        className={cn(
-          "w-full h-8 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
-          isUrl ? "pl-3 pr-8" : "px-3"
-        )}
-        style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
-      {isUrl && (
-        <button type="button" onClick={handleCopy}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise"
-          title="Copy URL">
-          {copied ? <Check size={10} className="text-white/60" /> : <Link size={10} />}
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      onThumbnailData(reader.result as string);
+      onSourceUrl("");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  if (thumbnailData) {
+    return (
+      <div className="flex items-center gap-2 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+        <img src={thumbnailData} alt="Source" className="w-12 h-12 object-cover rounded-sm shrink-0" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+        <div className="flex-1 min-w-0">
+          <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">Uploaded image</span>
+          <p className="font-mono text-[8px] text-dim/40 mt-0.5">Saved as prompt thumbnail</p>
+        </div>
+        <button type="button" onClick={() => onThumbnailData("")} className="text-dim/40 hover:text-red transition-precise shrink-0">
+          <X size={10} />
         </button>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="relative">
+        <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
+          placeholder="Paste URL or upload image…"
+          className={cn(
+            "w-full h-8 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
+            isUrl ? "pl-3 pr-8" : "px-3"
+          )}
+          style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+        {isUrl && (
+          <button type="button" onClick={handleCopy}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise"
+            title="Copy URL">
+            {copied ? <Check size={10} className="text-white/60" /> : <Link size={10} />}
+          </button>
+        )}
+      </div>
+      <label className="flex items-center gap-1 cursor-pointer w-fit">
+        <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+        <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-cyan transition-precise">
+          + Upload image
+        </span>
+      </label>
     </div>
   );
 }
@@ -323,6 +374,12 @@ export function ManualImport() {
   const [availableProjects, setAvailableProjects] = useState<Project[]>([]);
   const [importType, setImportType] = useState<"text" | "nano_banana_json">("text");
   const [nbJson, setNbJson] = useState("");
+  const [thumbnailData, setThumbnailData] = useState("");
+  const [nbCamera, setNbCamera] = useState("");
+  const [nbLens, setNbLens] = useState("");
+  const [nbLighting, setNbLighting] = useState("");
+  const [nbMood, setNbMood] = useState("");
+  const [nbAvoidance, setNbAvoidance] = useState("");
 
   useEffect(() => { getProjects({ excludeArchived: true }).then(setAvailableProjects).catch(() => {}); }, []);
 
@@ -392,14 +449,18 @@ export function ManualImport() {
         }).catch(() => {});
       }
       const notes = buildImportLearningNotes(source, learned);
+      const isNbMode = importType === "nano_banana_json";
       const id = await create({
         title: title.trim(),
         provider,
-        prompt_text: clean || raw,
-        aspect_ratio: params.aspect_ratio,
-        model_version: params.model_version,
-        style_ref: params.sref,
-        avoidance_text: learned.avoidanceText,
+        prompt_text: isNbMode ? raw : (clean || raw),
+        aspect_ratio: isNbMode ? (detected.aspect_ratio || undefined) : params.aspect_ratio,
+        model_version: isNbMode ? undefined : params.model_version,
+        style_ref: isNbMode ? undefined : params.sref,
+        camera: isNbMode ? (nbCamera || undefined) : undefined,
+        lens: isNbMode ? (nbLens || undefined) : undefined,
+        lighting: isNbMode ? (nbLighting || undefined) : undefined,
+        avoidance_text: isNbMode ? (nbAvoidance || learned.avoidanceText) : learned.avoidanceText,
         parameters: Object.keys(extraParams).length ? extraParams : undefined,
         tags: uniqueTags([...tags, ...learned.tags]),
         notes,
@@ -407,6 +468,8 @@ export function ManualImport() {
         risk_notes: riskNotes.trim() || undefined,
         failure_notes: aiLookNotes.trim() || undefined,
         is_recipe: asRecipe,
+        source_url: source.trim() || undefined,
+        thumbnail_data: thumbnailData || undefined,
       });
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});
@@ -530,9 +593,44 @@ export function ManualImport() {
                   <Button variant="ghost" size="sm" disabled={!nbJson.trim()} onClick={() => {
                     try {
                       const obj = JSON.parse(nbJson) as Record<string, unknown>;
-                      const promptText = (obj.prompt ?? obj.prompt_text ?? obj.text ?? "") as string;
-                      const ar = (obj.aspect_ratio ?? obj.ar ?? "") as string;
-                      if (promptText) { setRaw(promptText); if (ar) setDetected((d) => ({ ...d, aspect_ratio: ar })); setProvider("nano_banana"); setAnalyzed(true); }
+                      const priority = obj.priority as Record<string, unknown> | undefined;
+                      const technical = obj.technical as Record<string, unknown> | undefined;
+                      const constraints = obj.constraints as Record<string, unknown> | undefined;
+                      const style = obj.style as Record<string, unknown> | undefined;
+                      const env = obj.environment as Record<string, unknown> | undefined;
+                      const subject = obj.subject as Record<string, unknown> | undefined;
+
+                      const promptText = (
+                        (priority?.primary as string | undefined) ||
+                        (obj.prompt as string | undefined) ||
+                        (obj.prompt_text as string | undefined) ||
+                        (obj.text as string | undefined) ||
+                        (subject?.main ? `${String(subject.main)}${env?.setting ? ` in ${String(env.setting)}` : ""}` : "") ||
+                        ""
+                      );
+                      const ar = (technical?.aspect_ratio ?? obj.aspect_ratio ?? obj.ar ?? "") as string;
+                      const exclusions = constraints?.exclusions;
+                      const avoidance = Array.isArray(exclusions)
+                        ? exclusions.join(", ")
+                        : typeof exclusions === "string" ? exclusions : "";
+                      const cameraObj = style?.camera as Record<string, unknown> | undefined;
+                      const camera = (cameraObj?.angle ?? "") as string;
+                      const lens = (cameraObj?.lens ?? "") as string;
+                      const lightingObj = env?.lighting as Record<string, unknown> | undefined;
+                      const lighting = (lightingObj?.direction ?? "") as string;
+                      const mood = (style?.mood ?? "") as string;
+
+                      if (promptText) {
+                        setRaw(promptText);
+                        if (ar) setDetected((d) => ({ ...d, aspect_ratio: ar }));
+                        setNbCamera(camera);
+                        setNbLens(lens);
+                        setNbLighting(lighting);
+                        setNbMood(mood);
+                        setNbAvoidance(avoidance);
+                        setProvider("nano_banana");
+                        setAnalyzed(true);
+                      }
                     } catch { /* invalid JSON */ }
                   }}>
                     Extract Prompt
@@ -546,6 +644,16 @@ export function ManualImport() {
                     style={{ border: "1px solid rgba(246,173,85,0.2)", background: "rgba(246,173,85,0.04)" }}>
                     <span className="font-mono text-[8px] uppercase tracking-widest text-amber/60">Extracted prompt</span>
                     <span className="font-mono text-[10px] text-soft-white/80 line-clamp-3">{raw}</span>
+                    {(detected.aspect_ratio || nbCamera || nbLens || nbLighting || nbMood || nbAvoidance) && (
+                      <div className="flex flex-col gap-0.5 mt-1.5 pt-1.5" style={{ borderTop: "1px solid rgba(246,173,85,0.12)" }}>
+                        {detected.aspect_ratio && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">ar</span> {detected.aspect_ratio}</span>}
+                        {nbCamera && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">camera</span> {nbCamera}</span>}
+                        {nbLens && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">lens</span> {nbLens}</span>}
+                        {nbLighting && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">lighting</span> {nbLighting}</span>}
+                        {nbMood && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">mood</span> {nbMood}</span>}
+                        {nbAvoidance && <span className="font-mono text-[8px] text-amber/50"><span className="text-white/30">avoid</span> {nbAvoidance}</span>}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -690,8 +798,8 @@ export function ManualImport() {
               <FieldSelect label="PROVIDER" value={provider} onChange={(v) => setProvider(v as Provider)} options={PROVIDERS} />
               <div className="flex flex-col gap-1.5">
                 <label className="system-label">SOURCE</label>
-                <SourceInput value={source} onChange={setSource} />
-                {mjSource && (
+                <DualSourceInput sourceUrl={source} onSourceUrl={setSource} thumbnailData={thumbnailData} onThumbnailData={setThumbnailData} />
+                {mjSource && !thumbnailData && (
                   <div className="flex items-start gap-3 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <img
                       src={mjSource.cdnUrl}

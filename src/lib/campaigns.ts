@@ -27,34 +27,42 @@ function rowToCampaign(row: Record<string, unknown>): Campaign {
 
 export async function getCampaigns(): Promise<Campaign[]> {
   if (!isTauri) return [];
-  const db = await getFramecraftDb();
-  const rows = await db.select(
-    `SELECT c.*,
-            COUNT(DISTINCT p.id) AS project_count,
-            SUM(CASE WHEN p.status = 'delivered' THEN 1 ELSE 0 END) AS winner_count
-     FROM campaigns c
-     LEFT JOIN projects p ON p.campaign_id = c.id
-     GROUP BY c.id
-     ORDER BY c.created_at DESC`
-  );
-  return (rows as Record<string, unknown>[]).map(rowToCampaign);
+  try {
+    const db = await getFramecraftDb();
+    const rows = await db.select(
+      `SELECT c.*,
+              COUNT(DISTINCT p.id) AS project_count,
+              SUM(CASE WHEN p.status = 'delivered' THEN 1 ELSE 0 END) AS winner_count
+       FROM campaigns c
+       LEFT JOIN projects p ON p.campaign_id = c.id
+       GROUP BY c.id
+       ORDER BY c.created_at DESC`
+    );
+    return (rows as Record<string, unknown>[]).map(rowToCampaign);
+  } catch {
+    return [];
+  }
 }
 
 export async function getCampaign(id: string): Promise<Campaign | null> {
   if (!isTauri) return null;
-  const db = await getFramecraftDb();
-  const rows = await db.select(
-    `SELECT c.*,
-            COUNT(DISTINCT p.id) AS project_count,
-            SUM(CASE WHEN p.status = 'delivered' THEN 1 ELSE 0 END) AS winner_count
-     FROM campaigns c
-     LEFT JOIN projects p ON p.campaign_id = c.id
-     WHERE c.id = $1
-     GROUP BY c.id`,
-    [id]
-  );
-  const typed = rows as Record<string, unknown>[];
-  return typed.length > 0 ? rowToCampaign(typed[0]) : null;
+  try {
+    const db = await getFramecraftDb();
+    const rows = await db.select(
+      `SELECT c.*,
+              COUNT(DISTINCT p.id) AS project_count,
+              SUM(CASE WHEN p.status = 'delivered' THEN 1 ELSE 0 END) AS winner_count
+       FROM campaigns c
+       LEFT JOIN projects p ON p.campaign_id = c.id
+       WHERE c.id = $1
+       GROUP BY c.id`,
+      [id]
+    );
+    const typed = rows as Record<string, unknown>[];
+    return typed.length > 0 ? rowToCampaign(typed[0]) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function createCampaign(input: {
@@ -62,28 +70,31 @@ export async function createCampaign(input: {
   client?: string;
   brief?: string;
 }): Promise<Campaign> {
-  if (!isTauri) {
-    return {
-      id: generateId(),
-      title: input.title,
-      client: input.client,
-      brief: input.brief,
-      status: "active",
-      created_at: now(),
-      updated_at: now(),
-      project_count: 0,
-      winner_count: 0,
-    };
-  }
-  const db = await getFramecraftDb();
   const id = generateId();
   const ts = now();
-  await db.execute(
-    `INSERT INTO campaigns (id, title, client, brief, status, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, 'active', $5, $6)`,
-    [id, input.title, input.client ?? null, input.brief ?? null, ts, ts]
-  );
-  return (await getCampaign(id))!;
+  const result: Campaign = {
+    id,
+    title: input.title,
+    client: input.client,
+    brief: input.brief,
+    status: "active",
+    created_at: ts,
+    updated_at: ts,
+    project_count: 0,
+    winner_count: 0,
+  };
+  if (!isTauri) return result;
+  const db = await getFramecraftDb();
+  try {
+    await db.execute(
+      `INSERT INTO campaigns (id, title, client, brief, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'active', $5, $6)`,
+      [id, input.title, input.client ?? null, input.brief ?? null, ts, ts]
+    );
+  } catch (err) {
+    throw new Error(String(err));
+  }
+  return result;
 }
 
 export async function updateCampaign(
@@ -101,30 +112,39 @@ export async function updateCampaign(
   if (patch.brief !== undefined) { sets.push(`brief = $${i++}`); vals.push(patch.brief); }
   if (patch.status !== undefined) { sets.push(`status = $${i++}`); vals.push(patch.status); }
   vals.push(id);
-  await db.execute(`UPDATE campaigns SET ${sets.join(", ")} WHERE id = $${i}`, vals);
+  try {
+    await db.execute(`UPDATE campaigns SET ${sets.join(", ")} WHERE id = $${i}`, vals);
+  } catch (err) {
+    throw new Error(String(err));
+  }
 }
 
 export async function deleteCampaign(id: string): Promise<void> {
   if (!isTauri) return;
   const db = await getFramecraftDb();
-  // Projects with this campaign_id are set NULL by the FK ON DELETE SET NULL
-  await db.execute("DELETE FROM campaigns WHERE id = $1", [id]);
+  try {
+    // Projects with this campaign_id are set NULL by the FK ON DELETE SET NULL
+    await db.execute("DELETE FROM campaigns WHERE id = $1", [id]);
+  } catch (err) {
+    throw new Error(String(err));
+  }
 }
 
 export async function getProjectsForCampaign(campaignId: string): Promise<Project[]> {
   if (!isTauri) return [];
-  const db = await getFramecraftDb();
-  const rows = await db.select(
-    `SELECT p.*,
-            (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) AS prompt_count,
-            (SELECT COUNT(*) FROM project_results pr WHERE pr.project_id = p.id) AS result_count,
-            (SELECT COUNT(*) FROM prompts pm WHERE pm.project_id = p.id AND pm.is_winner = 1) AS winner_count
-     FROM projects p
-     WHERE p.campaign_id = $1
-     ORDER BY p.created_at DESC`,
-    [campaignId]
-  );
-  return (rows as Record<string, unknown>[]).map((r) => ({
+  try {
+    const db = await getFramecraftDb();
+    const rows = await db.select(
+      `SELECT p.*,
+              (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) AS prompt_count,
+              (SELECT COUNT(*) FROM project_results pr WHERE pr.project_id = p.id) AS result_count,
+              (SELECT COUNT(*) FROM project_prompts pp2 JOIN prompts pm ON pp2.prompt_id = pm.id WHERE pp2.project_id = p.id AND pm.is_winner = 1) AS winner_count
+       FROM projects p
+       WHERE p.campaign_id = $1
+       ORDER BY p.created_at DESC`,
+      [campaignId]
+    );
+    return (rows as Record<string, unknown>[]).map((r) => ({
     id: r.id as string,
     title: r.title as string,
     client: r.client as string | undefined,
@@ -141,20 +161,27 @@ export async function getProjectsForCampaign(campaignId: string): Promise<Projec
     result_count: (r.result_count as number) ?? 0,
     winner_count: (r.winner_count as number) ?? 0,
   }));
+  } catch {
+    return [];
+  }
 }
 
 export async function searchCampaigns(query: string): Promise<Campaign[]> {
   if (!isTauri) return [];
   const q = query.toLowerCase().trim();
   if (!q) return getCampaigns();
-  const db = await getFramecraftDb();
-  const rows = (await db.select(
-    `SELECT * FROM campaigns
-     WHERE lower(title) LIKE $1 OR lower(client) LIKE $1
-     ORDER BY created_at DESC LIMIT 10`,
-    [`%${q}%`]
-  )) as Record<string, unknown>[];
-  return rows.map(rowToCampaign);
+  try {
+    const db = await getFramecraftDb();
+    const rows = (await db.select(
+      `SELECT * FROM campaigns
+       WHERE lower(title) LIKE $1 OR lower(client) LIKE $1
+       ORDER BY created_at DESC LIMIT 10`,
+      [`%${q}%`]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToCampaign);
+  } catch {
+    return [];
+  }
 }
 
 export async function setProjectCampaign(
@@ -162,9 +189,13 @@ export async function setProjectCampaign(
   campaignId: string | null
 ): Promise<void> {
   if (!isTauri) return;
-  const db = await getFramecraftDb();
-  await db.execute(
-    `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
-    [campaignId, now(), projectId]
-  );
+  try {
+    const db = await getFramecraftDb();
+    await db.execute(
+      `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
+      [campaignId, now(), projectId]
+    );
+  } catch {
+    // migration 018 column not yet applied — non-fatal
+  }
 }

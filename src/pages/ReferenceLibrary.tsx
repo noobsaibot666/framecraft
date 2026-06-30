@@ -221,7 +221,7 @@ export function ReferenceLibrary() {
       setRefs(filtered);
 
       getHighImpactReferences(500).then((scores) => {
-        setImpactMap(new Map(scores.map((s) => [s.id, s.winner_count])));
+        setImpactMap(new Map(scores.map((s) => [s.id, s.result_win_count + s.project_winner_count])));
       }).catch(() => {});
     } finally {
       setLoading(false);

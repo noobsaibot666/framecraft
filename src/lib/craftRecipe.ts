@@ -1,7 +1,9 @@
 import type { Prompt } from "@/types";
-import { getPrompts } from "./db";
+import { getRecipePrompts } from "./db";
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+function isTauriEnvironment(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 export function buildRecipeDraft(recipe: Prompt) {
   return {
@@ -49,8 +51,7 @@ export async function getRecipeSuggestions(
   tokenTexts: string[],
   limit = 2
 ): Promise<RecipeSuggestion[]> {
-  if (!isTauri || tokenTexts.length === 0) return [];
-  const all = await getPrompts();
-  const recipes = all.filter((p) => p.is_recipe);
+  if (!isTauriEnvironment() || tokenTexts.length === 0) return [];
+  const recipes = await getRecipePrompts();
   return rankRecipeSuggestions(tokenTexts, recipes, limit);
 }

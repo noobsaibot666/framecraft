@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -108,7 +108,7 @@ function PromptCardThumb({ src }: { src: string }) {
   );
 }
 
-function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index }: {
+function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index, pendingDelete }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   coverImage?: string;
@@ -120,6 +120,7 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
   selected: boolean;
   onSelect: (id: string, selected: boolean, index: number, shiftHeld: boolean) => void;
   index: number;
+  pendingDelete: boolean;
 }) {
   const navigate = useNavigate();
 
@@ -207,7 +208,7 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 opacity-100 transition-precise md:opacity-0 md:group-hover:opacity-100">
+        <div className={cn("flex items-center gap-1.5 transition-precise md:opacity-0 md:group-hover:opacity-100", pendingDelete && "md:opacity-100")}>
           <button
             className="rounded-[5px] border border-white/14 p-2 text-readable hover:border-cyan/45 hover:text-cyan transition-precise"
             onClick={(e) => { e.stopPropagation(); onQueue(prompt); }}
@@ -223,9 +224,14 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
             <Copy size={13} />
           </button>
           <button
-            className="rounded-[5px] border border-white/14 p-2 text-readable hover:border-red/45 hover:text-red transition-precise"
+            className={cn(
+              "rounded-[5px] border p-2 transition-precise",
+              pendingDelete
+                ? "border-red/60 text-red opacity-100"
+                : "border-white/14 text-readable hover:border-red/45 hover:text-red"
+            )}
             onClick={(e) => { e.stopPropagation(); onDelete(prompt); }}
-            title="Delete prompt"
+            title={pendingDelete ? "Click again to confirm delete" : "Delete prompt"}
           >
             <Trash2 size={13} />
           </button>
@@ -297,6 +303,11 @@ export function PromptLibrary() {
 
   const [searchVal, setSearchVal] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Prompt | null>(null);
+  // Ref mirrors confirmDelete for synchronous reads inside callbacks.
+  // State alone is unsafe: if the user clicks twice before React re-renders,
+  // the second click still sees the stale closure where confirmDelete is null,
+  // enters the else-branch, and never actually deletes.
+  const confirmDeleteRef = useRef<string | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
   const [coverMap, setCoverMap] = useState<Record<string, string>>({});
   const [batchMode, setBatchMode] = useState(false);
@@ -345,14 +356,26 @@ export function PromptLibrary() {
   }, []);
 
   const handleDelete = useCallback(async (prompt: Prompt) => {
-    if (confirmDelete?.id === prompt.id) {
-      await remove(prompt.id);
+    if (confirmDeleteRef.current === prompt.id) {
+      // Second click — confirmed. Clear synchronously before await so a third
+      // rapid click cannot fire a second delete.
+      confirmDeleteRef.current = null;
       setConfirmDelete(null);
+      try {
+        await remove(prompt.id);
+      } catch {
+        toast.error("Failed to delete — check library connection");
+      }
     } else {
+      // First click — arm confirmation.
+      confirmDeleteRef.current = prompt.id;
       setConfirmDelete(prompt);
-      setTimeout(() => setConfirmDelete(null), 3000);
+      setTimeout(() => {
+        confirmDeleteRef.current = null;
+        setConfirmDelete(null);
+      }, 5000);
     }
-  }, [confirmDelete, remove]);
+  }, [remove]); // remove is stable; confirmDeleteRef is a ref, not a dep
 
   const handleQueue = useCallback(async (prompt: Prompt) => {
     try {
@@ -781,7 +804,7 @@ export function PromptLibrary() {
                   key={p.id}
                   prompt={p}
                   resultSummary={resultMap[p.id]}
-                  coverImage={coverMap[p.id]}
+                  coverImage={coverMap[p.id] ?? p.thumbnail_data}
                   onCopy={handleCopy}
                   onDelete={handleDelete}
                   onQueue={handleQueue}
@@ -790,6 +813,7 @@ export function PromptLibrary() {
                   selected={selectedIds.has(p.id)}
                   onSelect={handleSelect}
                   index={i}
+                  pendingDelete={confirmDelete?.id === p.id}
                 />
               ))}
             </div>

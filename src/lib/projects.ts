@@ -26,6 +26,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     title: row.title as string,
     client: row.client as string | undefined,
     campaign: row.campaign as string | undefined,
+    campaign_id: row.campaign_id as string | undefined,
     status: (row.status as ProjectStatus) ?? "draft",
     project_type: row.project_type as string | undefined,
     intended_output: row.intended_output as string | undefined,
@@ -141,8 +142,8 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
           `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
           [data.campaign_id, ts, id]
         );
-      } catch {
-        // migration 018 column not yet applied — non-fatal
+      } catch (err) {
+        console.warn("[createProject] campaign_id UPDATE failed (migration 018 not yet applied?):", err);
       }
     }
     return id;
@@ -317,11 +318,11 @@ export async function updateProject(id: string, data: Partial<CreateProjectInput
     if ("campaign_id" in data) {
       try {
         await db.execute(
-          `UPDATE projects SET campaign_id = $1 WHERE id = $2`,
-          [data.campaign_id ?? null, id]
+          `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
+          [data.campaign_id ?? null, ts, id]
         );
-      } catch {
-        // migration 018 column not yet applied
+      } catch (err) {
+        console.warn("[updateProject] campaign_id UPDATE failed (migration 018 not yet applied?):", err);
       }
     }
     return;

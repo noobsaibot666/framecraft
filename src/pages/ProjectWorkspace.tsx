@@ -742,7 +742,7 @@ export function ProjectWorkspace() {
     }, 650);
     return () => window.clearTimeout(timer);
   }, [
-    id, loading, title, client, campaign, status, projectType, intendedOutput,
+    id, loading, title, client, campaign, campaignId, status, projectType, intendedOutput,
     imageNeeds, videoNeeds, aspectRatios, providerTargets, visualDirection,
     constraints, creativeGoals, briefText, productionGoal, category, tags, notes,
   ]);

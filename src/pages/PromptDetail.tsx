@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, CheckCircle, Plus, ImageOff, GitBranch, BookOpen,
+  ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, Plus, ImageOff, GitBranch, BookOpen,
   Layers, ListPlus, Shuffle, X, FolderOpen,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -47,7 +47,7 @@ function MetaRow({ label, value }: { label: string; value?: string | number }) {
   return (
     <div className="flex items-baseline gap-3">
       <span className="system-label w-28 shrink-0">{label}</span>
-      <span className="font-mono text-[11px] text-soft-white">{value}</span>
+      <span className="font-mono text-[12px] text-soft-white">{value}</span>
     </div>
   );
 }
@@ -71,10 +71,12 @@ export function PromptDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [showExtractRecipe, setShowExtractRecipe] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [variations, setVariations] = useState<string[]>([]);
   const [variationsLoading, setVariationsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
+  const [enlargedResult, setEnlargedResult] = useState<string | null>(null);
   const [versions, setVersions] = useState<VersionNode[]>([]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState("");
@@ -388,7 +390,7 @@ export function PromptDetail() {
     return (
       <PageContainer title="Not Found">
         <div className="flex flex-col items-center gap-4 py-20">
-          <span className="font-mono text-[12px] text-dim">Prompt not found.</span>
+          <span className="font-mono text-[13px] text-dim">Prompt not found.</span>
           <Button variant="ghost" size="sm" onClick={() => navigate("/library")}>
             <ArrowLeft size={11} /> Back to Library
           </Button>
@@ -406,56 +408,109 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={() => navigate("/library")}>
             <ArrowLeft size={11} /> Library
           </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
+            <Edit2 size={11} /> Edit
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+            <Plus size={11} /> Add Result
+          </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={toggleWinner}
-            className={prompt.is_winner ? "text-white" : "text-dim"}
+            className={prompt.is_winner ? "text-amber" : "text-dim"}
           >
-            <Star size={11} />
+            <Star size={11} className={prompt.is_winner ? "fill-amber/40" : ""} />
             {prompt.is_winner ? "Winner" : "Mark Winner"}
           </Button>
-          {prompt.is_winner && (
-            <Button variant="ghost" size="sm" onClick={() => setShowExtractRecipe((v) => !v)}>
-              <BookOpen size={11} /> Extract Recipe
+          {/* Export dropdown */}
+          <div className="relative">
+            <Button variant="ghost" size="sm" onClick={() => setShowExportMenu((v) => !v)}>
+              <Download size={11} /> Export
             </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
-            <Edit2 size={11} /> Edit
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleDuplicate}>
-            <CopyPlus size={11} /> Duplicate
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleCopyAsJson}>
-            <Braces size={11} /> JSON
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleGenerateVariations} disabled={variationsLoading}>
-            <Shuffle size={11} /> Variations
-          </Button>
-          {prompt.is_recipe ? (
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/recipes/${prompt.id}/edit`)}>
-              <Layers size={11} /> Edit Recipe
-            </Button>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={handlePromoteToRecipe}>
-              <Layers size={11} /> Save as Recipe
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
-            <Plus size={11} /> Add Result
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleAddToQueue}>
-            <ListPlus size={11} /> Add to Queue
-          </Button>
-          {providerUrl(prompt.provider) && (
-            <Button variant="ghost" size="sm" onClick={() => {
-              navigator.clipboard.writeText(prompt.prompt_text);
-              window.open(providerUrl(prompt.provider), "_blank");
-              toast.info("Prompt copied — paste in the generator");
-            }}>
-              <ExternalLink size={11} /> Open in {prompt.provider.replace(/_/g, " ")}
-            </Button>
-          )}
+            {showExportMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 flex flex-col min-w-44 rounded-sm py-1"
+                  style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+                  <button type="button"
+                    onClick={() => { handleCopy(); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <Copy size={10} /> {copied ? "Copied!" : "Copy prompt"}
+                  </button>
+                  {getSupportedFormatterProviders().includes(prompt.provider) && (
+                    <button type="button"
+                      onClick={() => { handleCopyFormatted(); setShowExportMenu(false); }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <Copy size={10} /> {copiedFormatted ? "Copied!" : `Copy for ${prompt.provider.replace(/_/g, " ")}`}
+                    </button>
+                  )}
+                  {providerUrl(prompt.provider) && (
+                    <button type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(prompt.prompt_text);
+                        window.open(providerUrl(prompt.provider), "_blank");
+                        toast.info("Prompt copied — paste in the generator");
+                        setShowExportMenu(false);
+                      }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <ExternalLink size={10} /> Open in {prompt.provider.replace(/_/g, " ")}
+                    </button>
+                  )}
+                  <div className="my-1 border-t border-white/8" />
+                  <button type="button"
+                    onClick={() => { handleCopyAsJson(); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <Braces size={10} /> Copy as JSON
+                  </button>
+                  {results.length > 0 && (
+                    <button type="button"
+                      onClick={() => { handleExportResultsCSV(); setShowExportMenu(false); }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <Download size={10} /> Export results CSV
+                    </button>
+                  )}
+                  <div className="my-1 border-t border-white/8" />
+                  <button type="button"
+                    onClick={() => { handleDuplicate(); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <CopyPlus size={10} /> Duplicate
+                  </button>
+                  <button type="button"
+                    onClick={() => { handleGenerateVariations(); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <Shuffle size={10} /> Generate variations
+                  </button>
+                  {prompt.is_recipe ? (
+                    <button type="button"
+                      onClick={() => { navigate(`/recipes/${prompt.id}/edit`); setShowExportMenu(false); }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <Layers size={10} /> Edit recipe
+                    </button>
+                  ) : (
+                    <button type="button"
+                      onClick={() => { handlePromoteToRecipe(); setShowExportMenu(false); }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <Layers size={10} /> Save as recipe
+                    </button>
+                  )}
+                  {prompt.is_winner && (
+                    <button type="button"
+                      onClick={() => { setShowExtractRecipe((v) => !v); setShowExportMenu(false); }}
+                      className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                      <BookOpen size={10} /> Extract recipe
+                    </button>
+                  )}
+                  <div className="my-1 border-t border-white/8" />
+                  <button type="button"
+                    onClick={() => { handleAddToQueue(); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <ListPlus size={10} /> Add to queue
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <Button
             variant={confirmDelete ? "primary" : "ghost"}
             size="sm"
@@ -493,7 +548,7 @@ export function PromptDetail() {
                 </button>
               </div>
               {!variationsLoading && variations.length === 0 && (
-                <span className="font-mono text-[11px] text-muted">Click "Variations" again to retry.</span>
+                <span className="font-mono text-[12px] text-muted">Click "Variations" again to retry.</span>
               )}
               {variations.map((v, i) => (
                 <div key={i} className="flex flex-col gap-2.5 p-3 rounded-sm" style={{ border: "var(--border-dim)" }}>
@@ -524,18 +579,6 @@ export function PromptDetail() {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="system-label">PROMPT TEXT</span>
-              <div className="flex items-center gap-1.5">
-                {getSupportedFormatterProviders().includes(prompt.provider) && (
-                  <Button variant="ghost" size="sm" onClick={handleCopyFormatted}>
-                    <Copy size={10} />
-                    {copiedFormatted ? "Copied!" : `Copy for ${prompt.provider}`}
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={handleCopy}>
-                  <Copy size={10} />
-                  {copied ? "Copied!" : "Copy"}
-                </Button>
-              </div>
             </div>
             <div
               className="p-4 rounded-card"
@@ -555,7 +598,7 @@ export function PromptDetail() {
                 className="p-4 rounded-card"
                 style={{ border: "var(--border-dim)", background: "rgba(215,25,33,0.04)" }}
               >
-                <pre className="font-mono text-[11px] text-muted/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
+                <pre className="font-mono text-[12px] text-muted/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
                   {prompt.avoidance_text}
                 </pre>
               </div>
@@ -607,7 +650,7 @@ export function PromptDetail() {
                   onChange={(e) => setNotesValue(e.target.value)}
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveNotes(); if (e.key === "Escape") setEditingNotes(false); }}
                   rows={4}
-                  className="w-full p-3 font-mono text-[11px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
+                  className="w-full p-3 font-mono text-[12px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
                   style={{ border: "1px solid rgba(255,255,255,0.18)" }}
                   placeholder="Add notes about this prompt…"
                 />
@@ -626,7 +669,7 @@ export function PromptDetail() {
                 </div>
               </div>
             ) : prompt.notes ? (
-              <p className="font-mono text-[11px] text-muted leading-relaxed cursor-pointer hover:text-readable transition-precise" onClick={handleEditNotes}>{prompt.notes}</p>
+              <p className="font-mono text-[12px] text-muted leading-relaxed cursor-pointer hover:text-readable transition-precise" onClick={handleEditNotes}>{prompt.notes}</p>
             ) : null}
           </div>
 
@@ -650,16 +693,9 @@ export function PromptDetail() {
                 )}
               </div>
               {activeTab === "results" && (
-                <div className="flex items-center gap-1.5">
-                  {results.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={handleExportResultsCSV}>
-                      <Download size={10} /> CSV
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
-                    <Plus size={10} /> Add Result
-                  </Button>
-                </div>
+                <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+                  <Plus size={10} /> Add Result
+                </Button>
               )}
               {activeTab === "versions" && (
                 <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
@@ -678,7 +714,7 @@ export function PromptDetail() {
                     onClick={() => v.id !== prompt.id && navigate(`/library/${v.id}`)}>
                     <span className="font-mono text-[10px] text-readable shrink-0 w-8">v{v.version}</span>
                     <div className="flex-1 min-w-0">
-                      <span className="font-mono text-[11px] text-white truncate block">{v.title}</span>
+                      <span className="font-mono text-[12px] text-white truncate block">{v.title}</span>
                       <span className="font-mono text-[9px] text-muted">{formatDate(v.created_at)}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -699,88 +735,67 @@ export function PromptDetail() {
                 <span className="font-mono text-[10px] text-dim/50">No results yet — add your first output</span>
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
-                {results.map((r) => (
-                  <div
-                    key={r.id}
-                    className="group flex flex-col gap-2 rounded-card overflow-hidden"
-                    style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
-                  >
-                    {/* Thumbnail */}
-                    <div className="w-full aspect-video bg-black/30 flex items-center justify-center overflow-hidden relative">
-                      <ResultImage src={r.thumbnail_path} />
-                      {/* Overlay actions */}
-                      <div className="absolute inset-0 flex items-start justify-between p-1.5 opacity-0 group-hover:opacity-100 transition-precise">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const next = !r.is_winner;
-                            await updateResult(r.id, { is_winner: next, is_failed: next ? false : r.is_failed });
-                            await recomputePromptResultSummary(prompt.id);
-                            setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, is_winner: next, is_failed: next ? false : x.is_failed } : x));
-                          }}
-                          className={cn("p-1 rounded-sm transition-precise", r.is_winner ? "text-amber" : "text-white/50 hover:text-amber")}
-                          style={{ background: "rgba(0,0,0,0.6)" }}
-                          title={r.is_winner ? "Remove winner" : "Mark winner"}
-                        >
-                          <Star size={10} className={r.is_winner ? "fill-amber/40" : ""} />
+              <>
+                {/* Enlarge overlay */}
+                {enlargedResult && (() => {
+                  const r = results.find((x) => x.id === enlargedResult);
+                  if (!r) return null;
+                  return (
+                    <div
+                      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+                      onClick={() => setEnlargedResult(null)}
+                    >
+                      <div className="relative max-w-[90vw] max-h-[90vh] rounded-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                        <ResultImage src={r.file_path ?? r.thumbnail_path} />
+                        <button type="button" onClick={() => setEnlargedResult(null)}
+                          className="absolute top-2 right-2 w-7 h-7 rounded-sm bg-black/70 text-white/60 hover:text-white flex items-center justify-center">
+                          <X size={12} />
                         </button>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/results/view/${r.id}`)}
-                            className="p-1 rounded-sm text-white/50 hover:text-cyan transition-precise"
-                            style={{ background: "rgba(0,0,0,0.6)" }}
-                            title="Edit result"
-                          >
-                            <Edit2 size={10} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await deleteResult(r.id);
-                              await recomputePromptResultSummary(prompt.id);
-                              setResults((prev) => prev.filter((x) => x.id !== r.id));
-                            }}
-                            className="p-1 rounded-sm text-white/50 hover:text-red transition-precise"
-                            style={{ background: "rgba(0,0,0,0.6)" }}
-                            title="Delete result"
-                          >
-                            <Trash2 size={10} />
-                          </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="grid grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-2">
+                  {results.map((r) => (
+                    <div key={r.id} className="group relative aspect-square rounded-sm overflow-hidden cursor-zoom-in"
+                      style={{ border: r.is_winner ? "1px solid rgba(251,191,36,0.4)" : "var(--border-dim)" }}
+                      onClick={() => setEnlargedResult(r.id)}>
+                      <ResultImage src={r.thumbnail_path} />
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 flex flex-col justify-between p-1.5 opacity-0 group-hover:opacity-100 transition-precise pointer-events-none">
+                        <div className="flex justify-end pointer-events-auto">
+                          <div className="flex gap-0.5">
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); updateResult(r.id, { is_winner: !r.is_winner, is_failed: !r.is_winner ? false : r.is_failed }).then(() => recomputePromptResultSummary(prompt.id)); setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, is_winner: !r.is_winner, is_failed: !r.is_winner ? false : x.is_failed } : x)); }}
+                              className={cn("p-1 rounded-sm transition-precise", r.is_winner ? "text-amber" : "text-white/50 hover:text-amber")}
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title={r.is_winner ? "Remove winner" : "Mark winner"}>
+                              <Star size={9} className={r.is_winner ? "fill-amber/40" : ""} />
+                            </button>
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); deleteResult(r.id).then(() => recomputePromptResultSummary(prompt.id)); setResults((prev) => prev.filter((x) => x.id !== r.id)); }}
+                              className="p-1 rounded-sm text-white/40 hover:text-red transition-precise"
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title="Delete result">
+                              <Trash2 size={9} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between pointer-events-auto">
+                          <div className="flex gap-0.5" title="Score">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <button key={i} type="button"
+                                onClick={(e) => { e.stopPropagation(); const next = i + 1 === r.score_overall ? 0 : i + 1; updateResult(r.id, { score_overall: next }); setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, score_overall: next } : x)); }}
+                                className={cn("w-1.5 h-1.5 rounded-full transition-precise", i < r.score_overall ? "bg-white/80" : "bg-white/20 hover:bg-white/50")} />
+                            ))}
+                          </div>
+                          {r.is_failed && <AlertTriangle size={9} className="text-red/70" />}
                         </div>
                       </div>
                     </div>
-                    {/* Meta */}
-                    <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-0.5" title="Click to score">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={async () => {
-                                const next = i + 1 === r.score_overall ? 0 : i + 1;
-                                await updateResult(r.id, { score_overall: next });
-                                setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, score_overall: next } : x));
-                              }}
-                              className={cn("w-1.5 h-1.5 rounded-full transition-precise hover:scale-125", i < r.score_overall ? "bg-white/60 hover:bg-amber/70" : "bg-white/10 hover:bg-white/30")}
-                            />
-                          ))}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {r.is_winner && <Star size={9} className="text-amber fill-amber/40" />}
-                          {r.is_failed && <AlertTriangle size={9} className="text-red/50" />}
-                        </div>
-                      </div>
-                      <span className="font-mono text-[8px] text-dim/50">{formatDate(r.created_at)}</span>
-                      {r.artifacts && r.artifacts.length > 0 && (
-                        <span className="font-mono text-[8px] text-red/50">{r.artifacts.length} artifact{r.artifacts.length !== 1 ? "s" : ""}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             ))}
           </div>
         </div>
@@ -788,86 +803,71 @@ export function PromptDetail() {
         {/* Sidebar */}
         <div className="flex flex-col gap-5 w-64 shrink-0">
 
-          {/* Status flags */}
+          {/* Scores + status */}
           <div
             className="flex flex-col gap-3 p-4 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <span className="system-label">STATUS</span>
-            <div className="flex flex-col gap-2">
-              {prompt.is_winner && (
-                <div className="flex items-center gap-2">
-                  <CheckCircle size={10} className="text-white/50" />
-                  <span className="font-mono text-[10px] text-white/60">WINNER</span>
-                </div>
-              )}
-              {prompt.is_failed && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle size={10} className="text-red/60" />
-                    <span className="font-mono text-[10px] text-red/60">FAILED</span>
-                    {!editingFailureNotes && (
-                      <button type="button" onClick={handleEditFailureNotes}
-                        className="ml-auto font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-red/70 px-1.5 py-0.5 rounded-sm transition-precise"
-                        style={{ border: "1px solid rgba(215,25,33,0.2)" }}>
-                        {prompt.failure_notes ? "Edit" : "+ Why"}
-                      </button>
-                    )}
-                  </div>
-                  {editingFailureNotes ? (
-                    <div className="flex flex-col gap-1.5">
-                      <textarea
-                        autoFocus
-                        value={failureNotesValue}
-                        onChange={(e) => setFailureNotesValue(e.target.value)}
-                        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveFailureNotes(); if (e.key === "Escape") setEditingFailureNotes(false); }}
-                        rows={3}
-                        className="w-full p-2 font-mono text-[10px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
-                        style={{ border: "1px solid rgba(215,25,33,0.3)" }}
-                        placeholder="Why did this fail?"
-                      />
-                      <div className="flex items-center gap-1.5">
-                        <button type="button" onClick={handleSaveFailureNotes}
-                          className="font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-red px-2 py-1 rounded-sm transition-precise"
-                          style={{ border: "1px solid rgba(215,25,33,0.3)" }}>
-                          Save
-                        </button>
-                        <button type="button" onClick={() => setEditingFailureNotes(false)}
-                          className="font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
-                          style={{ border: "var(--border-dim)" }}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : prompt.failure_notes ? (
-                    <p className="font-mono text-[10px] text-red/50 leading-relaxed cursor-pointer hover:text-red/70 transition-precise" onClick={handleEditFailureNotes}>{prompt.failure_notes}</p>
-                  ) : null}
-                </div>
-              )}
-              {prompt.is_recipe && (
-                <div className="flex items-center gap-2">
-                  <Layers size={10} className="text-cyan/60" />
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/recipes/${prompt.id}/edit`)}
-                    className="font-mono text-[10px] text-cyan/70 hover:text-cyan transition-precise"
-                  >
-                    RECIPE — Edit template
+            <div className="flex items-center justify-between">
+              <span className="system-label">SCORES</span>
+              <div className="flex items-center gap-1.5">
+                {prompt.is_winner && (
+                  <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-amber border border-amber/30 bg-amber/8">
+                    Winner
+                  </span>
+                )}
+                {prompt.is_failed && (
+                  <span className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-red/70 border border-red/30 bg-red/8">
+                    Failed
+                  </span>
+                )}
+                {prompt.is_recipe && (
+                  <button type="button" onClick={() => navigate(`/recipes/${prompt.id}/edit`)}
+                    className="font-mono text-[8px] tracking-widest uppercase px-1.5 py-0.5 rounded-sm text-cyan/70 hover:text-cyan border border-cyan/25 bg-cyan/8 transition-precise">
+                    Recipe
                   </button>
-                </div>
-              )}
-              {!prompt.is_winner && !prompt.is_failed && !prompt.is_recipe && (
-                <span className="font-mono text-[10px] text-dim">No flags set</span>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-
-          {/* Scores */}
-          <div
-            className="flex flex-col gap-3 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">SCORES</span>
+            {prompt.is_failed && (
+              <div className="flex flex-col gap-1.5">
+                {!editingFailureNotes && (
+                  <button type="button" onClick={handleEditFailureNotes}
+                    className="self-start font-mono text-[8px] tracking-widest uppercase text-dim/50 hover:text-red/70 px-1.5 py-0.5 rounded-sm transition-precise"
+                    style={{ border: "1px solid rgba(215,25,33,0.2)" }}>
+                    {prompt.failure_notes ? "Edit failure notes" : "+ Why it failed"}
+                  </button>
+                )}
+                {editingFailureNotes ? (
+                  <div className="flex flex-col gap-1.5">
+                    <textarea
+                      autoFocus
+                      value={failureNotesValue}
+                      onChange={(e) => setFailureNotesValue(e.target.value)}
+                      onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveFailureNotes(); if (e.key === "Escape") setEditingFailureNotes(false); }}
+                      rows={3}
+                      className="w-full p-2 font-mono text-[10px] text-soft-white bg-transparent rounded-sm resize-none focus:outline-none leading-relaxed"
+                      style={{ border: "1px solid rgba(215,25,33,0.3)" }}
+                      placeholder="Why did this fail?"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <button type="button" onClick={handleSaveFailureNotes}
+                        className="font-mono text-[8px] tracking-widest uppercase text-red/70 hover:text-red px-2 py-1 rounded-sm transition-precise"
+                        style={{ border: "1px solid rgba(215,25,33,0.3)" }}>
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setEditingFailureNotes(false)}
+                        className="font-mono text-[8px] tracking-widest uppercase text-dim hover:text-white px-2 py-1 rounded-sm transition-precise"
+                        style={{ border: "var(--border-dim)" }}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : prompt.failure_notes ? (
+                  <p className="font-mono text-[10px] text-red/50 leading-relaxed cursor-pointer hover:text-red/70 transition-precise" onClick={handleEditFailureNotes}>{prompt.failure_notes}</p>
+                ) : null}
+              </div>
+            )}
             {/* Interactive rating */}
             <div className="flex items-center gap-2">
               <span className="system-label w-28">RATING</span>

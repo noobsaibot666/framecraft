@@ -27,7 +27,7 @@ export function PageContainer({
                 </h1>
               )}
               {subtitle && (
-                <span className="system-label text-[11px] text-readable">{subtitle}</span>
+                <span className="system-label text-[12px] text-readable">{subtitle}</span>
               )}
             </div>
             {action && <div className="shrink-0 ml-6">{action}</div>}

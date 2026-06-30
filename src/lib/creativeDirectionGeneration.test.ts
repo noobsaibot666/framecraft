@@ -56,6 +56,6 @@ describe("buildDirectionProjectFields", () => {
     expect(fields.visual_direction).toContain("controlled highlights");
     expect(fields.creative_goals).toContain("Reveal quality through tactile details.");
     expect(fields.creative_goals).toContain("Built with intention.");
-    expect(Object.keys(fields)).toEqual(["visual_direction", "creative_goals"]);
+    expect(Object.keys(fields)).toEqual(["visual_direction", "creative_goals", "constraints"]);
   });
 });

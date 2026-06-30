@@ -43,7 +43,8 @@ export function CampaignDetail() {
   const [newProjectBrief, setNewProjectBrief] = useState("");
 
   const load = useCallback(async (cid: string) => {
-    setLoadState("loading");
+    // Only show loading spinner on first load — don't blank existing data on refetch
+    setLoadState((prev) => prev === "ready" ? "ready" : "loading");
     try {
       const [c, ps] = await Promise.all([getCampaign(cid), getProjectsForCampaign(cid)]);
       if (!c) {
@@ -128,7 +129,7 @@ export function CampaignDetail() {
       <PageContainer title="Campaign" subtitle="LOADING">
         <div className="flex items-center gap-3 py-8">
           <span className="font-ndot text-[20px] text-dim/30 animate-pulse">···</span>
-          <span className="font-mono text-[11px] text-muted">Loading campaign…</span>
+          <span className="font-mono text-[12px] text-muted">Loading campaign…</span>
         </div>
       </PageContainer>
     );
@@ -140,7 +141,7 @@ export function CampaignDetail() {
       <PageContainer title="Campaign" subtitle="NOT FOUND">
         <div className="flex flex-col items-center gap-4 py-20 text-center">
           <AlertCircle size={24} className="text-readable" />
-          <p className="font-mono text-[12px] text-readable">Campaign not found or has been deleted.</p>
+          <p className="font-mono text-[13px] text-readable">Campaign not found or has been deleted.</p>
           <Button variant="ghost" size="sm" onClick={() => navigate("/campaigns")}>
             <ArrowLeft size={11} /> Back to Campaigns
           </Button>
@@ -155,7 +156,7 @@ export function CampaignDetail() {
       <PageContainer title="Campaign" subtitle="ERROR">
         <div className="flex flex-col items-center gap-4 py-20 text-center">
           <AlertCircle size={24} className="text-red/60" />
-          <p className="font-mono text-[12px] text-readable">Failed to load campaign data.</p>
+          <p className="font-mono text-[13px] text-readable">Failed to load campaign data.</p>
           {errorMsg && (
             <p className="font-mono text-[10px] text-red/60 max-w-sm wrap-break-word">{errorMsg}</p>
           )}
@@ -220,7 +221,7 @@ export function CampaignDetail() {
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 />
               </div>
@@ -229,7 +230,7 @@ export function CampaignDetail() {
                 <input
                   value={editClient}
                   onChange={(e) => setEditClient(e.target.value)}
-                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 />
               </div>
@@ -240,7 +241,7 @@ export function CampaignDetail() {
                 value={editBrief}
                 onChange={(e) => setEditBrief(e.target.value)}
                 rows={3}
-                className="px-3 py-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none resize-none"
+                className="px-3 py-2 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none resize-none"
                 style={{ border: "1px solid rgba(255,255,255,0.24)" }}
               />
             </div>
@@ -275,7 +276,7 @@ export function CampaignDetail() {
                 onChange={(e) => setNewProjectTitle(e.target.value)}
                 placeholder="Project name…"
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateProject(); if (e.key === "Escape") setShowCreateForm(false); }}
-                className="h-10 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+                className="h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
                 style={{ border: "1px solid rgba(255,255,255,0.18)" }}
               />
             </div>
@@ -286,7 +287,7 @@ export function CampaignDetail() {
                 onChange={(e) => setNewProjectBrief(e.target.value)}
                 placeholder="What this project needs to solve…"
                 rows={3}
-                className="px-3 py-2 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+                className="px-3 py-2 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
                 style={{ border: "1px solid rgba(255,255,255,0.16)" }}
               />
             </div>
@@ -331,7 +332,7 @@ export function CampaignDetail() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">BRIEF</span>
-            <p className="font-mono text-[12px] text-soft-white leading-relaxed">{campaign!.brief}</p>
+            <p className="font-mono text-[13px] text-soft-white leading-relaxed">{campaign!.brief}</p>
           </div>
         )}
 
@@ -344,7 +345,7 @@ export function CampaignDetail() {
           {projects.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-14 text-center">
               <Briefcase size={22} className="text-readable" />
-              <p className="font-mono text-[12px] text-readable">No projects yet. Add one to get started.</p>
+              <p className="font-mono text-[13px] text-readable">No projects yet. Add one to get started.</p>
               <Button variant="ghost" size="sm" onClick={() => { setShowCreateForm(true); setNewProjectTitle(""); setNewProjectBrief(""); }}>
                 <Plus size={11} /> Add Project
               </Button>
@@ -360,24 +361,24 @@ export function CampaignDetail() {
               >
                 <span className={`inline-block w-2 h-2 rounded-full shrink-0 mt-1 ${STATUS_DOT[p.status]}`} />
                 <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                  <span className="font-sans text-[13px] font-semibold text-white truncate">{p.title}</span>
+                  <span className="font-sans text-[14px] font-semibold text-white truncate">{p.title}</span>
                   <span className="font-mono text-[10px] text-readable">{STATUS_LABEL[p.status]}</span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
                   <div className="flex flex-col items-end gap-0.5">
-                    <span className="font-mono text-[13px] text-white leading-none">{p.prompt_count ?? 0}</span>
+                    <span className="font-mono text-[14px] text-white leading-none">{p.prompt_count ?? 0}</span>
                     <span className="font-mono text-[8px] text-muted uppercase tracking-widest">prompts</span>
                   </div>
                   {(p.result_count ?? 0) > 0 && (
                     <div className="flex flex-col items-end gap-0.5">
-                      <span className="font-mono text-[13px] text-white leading-none">{p.result_count}</span>
+                      <span className="font-mono text-[14px] text-white leading-none">{p.result_count}</span>
                       <span className="font-mono text-[8px] text-muted uppercase tracking-widest">results</span>
                     </div>
                   )}
                   {(p.winner_count ?? 0) > 0 && (
                     <div className="flex items-center gap-1">
                       <CheckCircle2 size={10} className="text-white/60" />
-                      <span className="font-mono text-[11px] text-white">{p.winner_count}</span>
+                      <span className="font-mono text-[12px] text-white">{p.winner_count}</span>
                     </div>
                   )}
                   {p.status === "delivered" && <Archive size={12} className="text-readable" />}

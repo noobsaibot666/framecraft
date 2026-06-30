@@ -57,24 +57,24 @@ export function parseCreativeDirections(raw: string): GeneratedCreativeDirection
 
 export function buildDirectionProjectFields(
   direction: CreativeDirection
-): Pick<CreateProjectInput, "visual_direction" | "creative_goals"> {
+): Pick<CreateProjectInput, "visual_direction" | "creative_goals" | "constraints"> {
   return {
     visual_direction: [
       direction.title,
       direction.visual_aesthetic,
-      `Tone: ${direction.tone}`,
-      `Prompt direction: ${direction.prompt_direction}`,
+      direction.tone ? `Tone: ${direction.tone}` : "",
+      direction.prompt_direction ? `Prompt direction: ${direction.prompt_direction}` : "",
     ].filter(Boolean).join(". "),
     creative_goals: [
-      `Campaign idea: ${direction.campaign_idea}`,
-      `Rationale: ${direction.rationale}`,
-      `Brand connection: ${direction.brand_connection}`,
-      `Product message: ${direction.product_message}`,
-    ].join("\n"),
+      direction.campaign_idea ? `Campaign idea: ${direction.campaign_idea}` : "",
+      direction.rationale ? `Rationale: ${direction.rationale}` : "",
+      direction.product_message ? `Product message: ${direction.product_message}` : "",
+    ].filter(Boolean).join("\n"),
+    constraints: direction.brand_connection || undefined,
   };
 }
 
-function buildGenerationPrompt(project: Project, comparisonOutcomes: string[]): string {
+function buildGenerationPrompt(project: Project, comparisonOutcomes: string[], userContext?: string): string {
   const context = [
     `Project: ${project.title}`,
     project.client ? `Client: ${project.client}` : "",
@@ -88,6 +88,7 @@ function buildGenerationPrompt(project: Project, comparisonOutcomes: string[]): 
     project.provider_targets?.length ? `Providers: ${project.provider_targets.join(", ")}` : "",
     project.aspect_ratios?.length ? `Aspect ratios: ${project.aspect_ratios.join(", ")}` : "",
     comparisonOutcomes.length ? `Prior comparison decisions:\n${comparisonOutcomes.map((item) => `- ${item}`).join("\n")}` : "",
+    userContext?.trim() ? `Additional direction from user: ${userContext.trim()}` : "",
   ].filter(Boolean).join("\n");
 
   return `You are a senior creative director for advertising and branded visual production.
@@ -116,11 +117,12 @@ Return ONLY valid JSON in this exact structure:
 export async function generateCreativeDirections(
   project: Project,
   model: AIModel,
-  comparisonOutcomes: string[] = []
+  comparisonOutcomes: string[] = [],
+  userContext?: string
 ): Promise<GeneratedCreativeDirection[]> {
   const apiKey = getApiKey(model.provider);
   requireValidApiKey(model.provider, apiKey);
-  const prompt = buildGenerationPrompt(project, comparisonOutcomes);
+  const prompt = buildGenerationPrompt(project, comparisonOutcomes, userContext);
   let raw = "";
 
   if (model.provider === "anthropic") {

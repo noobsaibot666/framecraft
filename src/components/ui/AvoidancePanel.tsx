@@ -56,7 +56,7 @@ function RiskItem({
         <span className="font-mono text-[10px] text-readable tracking-widest uppercase shrink-0">
           {SEVERITY_LABEL[pattern.severity]}
         </span>
-        <span className="flex-1 font-mono text-[11px] text-soft-white truncate">{pattern.label}</span>
+        <span className="flex-1 font-mono text-[12px] text-soft-white truncate">{pattern.label}</span>
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
@@ -84,7 +84,7 @@ function RiskItem({
           style={{ borderTop: "var(--border-dim)" }}
         >
           {pattern.description && (
-            <p className="font-mono text-[11px] text-readable leading-relaxed pt-2">{pattern.description}</p>
+            <p className="font-mono text-[12px] text-readable leading-relaxed pt-2">{pattern.description}</p>
           )}
           {risk.triggered_by && risk.triggered_by.length > 0 && (
             <div className="flex flex-wrap gap-1">
@@ -154,7 +154,7 @@ function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => voi
       </div>
       <input ref={labelRef} value={label} onChange={(e) => setLabel(e.target.value)}
         placeholder="Rule label (e.g. Over-processed skin)"
-        className="h-9 px-3 font-mono text-[11px] text-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+        className="h-9 px-3 font-mono text-[12px] text-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.22)" }}
         onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }} />
       <div className="grid grid-cols-2 gap-2">
@@ -162,7 +162,7 @@ function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => voi
           <span className="font-mono text-[10px] text-readable uppercase tracking-widest">Severity</span>
           <div className="relative">
             <select value={severity} onChange={(e) => setSeverity(e.target.value as typeof severity)}
-              className="w-full appearance-none h-9 px-3 font-mono text-[11px] text-white bg-dark rounded-sm focus:outline-none cursor-pointer"
+              className="w-full appearance-none h-9 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none cursor-pointer"
               style={{ border: "1px solid rgba(255,255,255,0.22)" }}>
               {SEVERITY_OPTIONS.map((s) => <option key={s} value={s} className="bg-panel">{s}</option>)}
             </select>
@@ -172,13 +172,13 @@ function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => voi
           <span className="font-mono text-[10px] text-readable uppercase tracking-widest">Correction</span>
           <input value={correction} onChange={(e) => setCorrection(e.target.value)}
             placeholder="Fix phrase to append…"
-            className="h-9 px-3 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+            className="h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.22)" }} />
         </div>
       </div>
       <input value={description} onChange={(e) => setDescription(e.target.value)}
         placeholder="Description (optional)"
-        className="h-9 px-3 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+        className="h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.20)" }} />
       <div className="flex items-center gap-2">
         <button type="button" onClick={handleSave} disabled={!label.trim() || saving}
@@ -270,7 +270,7 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5 px-3 py-3 rounded-sm" style={{ border: "var(--border-default)" }}>
           <AlertTriangle size={12} className="text-readable shrink-0" />
-          <span className="font-mono text-[11px] text-readable flex-1">Risk analysis runs as you build the prompt.</span>
+          <span className="font-mono text-[12px] text-readable flex-1">Risk analysis runs as you build the prompt.</span>
           <button type="button" onClick={() => setShowAddForm((v) => !v)}
             className="flex min-h-8 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan px-2.5 py-1 rounded-sm transition-precise"
             style={{ border: "var(--border-default)" }}>
@@ -287,7 +287,7 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2.5 px-3 py-3 rounded-sm" style={{ border: "var(--border-default)" }}>
           <span className="w-1.5 h-1.5 rounded-full bg-cyan shrink-0" />
-          <span className="font-mono text-[11px] text-readable flex-1">No risks detected. Risk score: 0/10.</span>
+          <span className="font-mono text-[12px] text-readable flex-1">No risks detected. Risk score: 0/10.</span>
           <button type="button" onClick={() => setShowAddForm((v) => !v)}
             className="flex min-h-8 items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan px-2.5 py-1 rounded-sm transition-precise"
             style={{ border: "var(--border-default)" }}>
@@ -322,7 +322,7 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
             )}
           </div>
         </div>
-        <span className={cn("font-mono text-[12px] font-medium shrink-0", scoreColor)}>
+        <span className={cn("font-mono text-[13px] font-medium shrink-0", scoreColor)}>
           {riskScore.toFixed(1)}<span className="text-readable text-[10px]">/10</span>
         </span>
         <button type="button" onClick={() => setShowAddForm((v) => !v)}

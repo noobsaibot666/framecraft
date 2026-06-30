@@ -229,8 +229,8 @@ export function ImageAnalyzer() {
               <>
                 <Upload size={24} className="text-cyan" />
                 <div className="flex flex-col items-center gap-1.5">
-                  <span className="font-mono text-[12px] text-soft-white">Drop image here</span>
-                  <span className="font-mono text-[11px] text-readable">or click to browse</span>
+                  <span className="font-mono text-[13px] text-soft-white">Drop image here</span>
+                  <span className="font-mono text-[12px] text-readable">or click to browse</span>
                   <span className="font-mono text-[10px] text-readable/70 mt-1">JPG · PNG · WEBP · GIF</span>
                 </div>
               </>
@@ -239,7 +239,7 @@ export function ImageAnalyzer() {
 
           {imageFile && (
             <div className="flex flex-col gap-1 px-1">
-              <span className="font-mono text-[11px] text-soft-white truncate">{imageFile.name}</span>
+              <span className="font-mono text-[12px] text-soft-white truncate">{imageFile.name}</span>
               <span className="font-mono text-[10px] text-readable">{(imageFile.size / 1024).toFixed(0)} KB</span>
             </div>
           )}
@@ -249,7 +249,7 @@ export function ImageAnalyzer() {
               style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}>
               <AlertTriangle size={12} className="text-red/80 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <span className="font-mono text-[11px] text-red/80">No API key configured.</span>
+                <span className="font-mono text-[12px] text-red/80">No API key configured.</span>
                 <button type="button" onClick={() => navigate("/settings")}
                   className="flex items-center gap-1.5 font-mono text-[10px] text-cyan hover:text-white transition-precise">
                   <Settings size={10} /> Open Settings
@@ -275,7 +275,7 @@ export function ImageAnalyzer() {
                           selectedModel.id === m.id ? "accent-selected" : "text-readable hover:text-cyan"
                         )}
                         style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
-                        <span className="font-mono text-[11px]">{m.label}</span>
+                        <span className="font-mono text-[12px]">{m.label}</span>
                         <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{m.tier}</span>
                       </button>
                     ))}
@@ -298,7 +298,7 @@ export function ImageAnalyzer() {
 
           {imageUrl && (
             <button type="button" onClick={clearImage}
-              className="font-mono text-[11px] text-readable hover:text-cyan transition-precise text-center">
+              className="font-mono text-[12px] text-readable hover:text-cyan transition-precise text-center">
               Clear
             </button>
           )}
@@ -327,14 +327,14 @@ export function ImageAnalyzer() {
           {!result && !analyzing && !error && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <Scan size={28} className="text-cyan" />
-              <span className="font-mono text-[12px] text-readable">Drop an image and click Analyze to reconstruct its prompt.</span>
+              <span className="font-mono text-[13px] text-readable">Drop an image and click Analyze to reconstruct its prompt.</span>
             </div>
           )}
 
           {analyzing && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <div className="w-5 h-5 border border-white/20 border-t-white/60 rounded-full animate-spin" />
-              <span className="font-mono text-[12px] text-readable">Sending to vision model...</span>
+              <span className="font-mono text-[13px] text-readable">Sending to vision model...</span>
             </div>
           )}
 
@@ -343,8 +343,8 @@ export function ImageAnalyzer() {
               style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}>
               <AlertTriangle size={12} className="text-red/60 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <span className="font-mono text-[12px] text-red/80 font-medium">Analysis failed</span>
-                <span className="font-mono text-[12px] text-readable">{error}</span>
+                <span className="font-mono text-[13px] text-red/80 font-medium">Analysis failed</span>
+                <span className="font-mono text-[13px] text-readable">{error}</span>
               </div>
             </div>
           )}
@@ -398,7 +398,7 @@ export function ImageAnalyzer() {
                   <span className="system-label">RECONSTRUCTED PROMPT</span>
                   <CopyButton text={result.suggested_prompt} label="Copy prompt" />
                 </div>
-                <p className="font-mono text-[13px] text-soft-white leading-relaxed line-clamp-5">
+                <p className="font-mono text-[14px] text-soft-white leading-relaxed line-clamp-5">
                   {result.suggested_prompt}
                 </p>
               </div>
@@ -427,7 +427,7 @@ export function ImageAnalyzer() {
                       )}
                     </div>
                   </div>
-                  <p className="font-mono text-[13px] text-soft-white leading-relaxed line-clamp-4">
+                  <p className="font-mono text-[14px] text-soft-white leading-relaxed line-clamp-4">
                     {result.variation_prompt}
                   </p>
                 </div>
@@ -437,7 +437,7 @@ export function ImageAnalyzer() {
               <div className="flex flex-col gap-2 p-4 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                 <span className="system-label">STYLE ANALYSIS</span>
-                <p className="font-mono text-[13px] text-readable leading-relaxed line-clamp-4">
+                <p className="font-mono text-[14px] text-readable leading-relaxed line-clamp-4">
                   {result.style_notes}
                 </p>
               </div>
@@ -454,7 +454,7 @@ export function ImageAnalyzer() {
                       </div>
                       <div className="flex flex-col gap-1">
                         {result.ai_look_risks.map((risk) => (
-                          <span key={risk} className="font-mono text-[12px] text-red/75 leading-snug">· {risk}</span>
+                          <span key={risk} className="font-mono text-[13px] text-red/75 leading-snug">· {risk}</span>
                         ))}
                       </div>
                     </div>
@@ -486,7 +486,7 @@ export function ImageAnalyzer() {
                   <span className="system-label">DETECTED ELEMENTS</span>
                   <div className="flex flex-col gap-1">
                     {result.elements.map((el) => (
-                      <span key={el} className="font-mono text-[12px] text-soft-white leading-snug">· {el}</span>
+                      <span key={el} className="font-mono text-[13px] text-soft-white leading-snug">· {el}</span>
                     ))}
                   </div>
                 </div>

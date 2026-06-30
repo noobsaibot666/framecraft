@@ -104,7 +104,7 @@ export function RecipeApply() {
                     value={values[key] ?? ""}
                     onChange={(e) => setSlotValue(key, e.target.value)}
                     placeholder={slot.placeholder}
-                    className="h-9 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
+                    className="h-9 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
                     style={{ border: errors[key] ? "1px solid rgba(215,25,33,0.8)" : "1px solid rgba(255,255,255,0.10)" }}
                   />
                   {errors[key] && <span className="font-mono text-[9px] text-red/80">{errors[key]}</span>}
@@ -117,7 +117,7 @@ export function RecipeApply() {
         <div className="flex flex-col gap-3">
           <span className="system-label">PREVIEW</span>
           <pre
-            className="min-h-40 p-4 rounded-card font-mono text-[11px] text-muted leading-relaxed whitespace-pre-wrap break-words"
+            className="min-h-40 p-4 rounded-card font-mono text-[12px] text-muted leading-relaxed whitespace-pre-wrap break-words"
             style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
           >
             {preview || recipe.prompt_text}

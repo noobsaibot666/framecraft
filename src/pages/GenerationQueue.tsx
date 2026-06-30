@@ -103,7 +103,7 @@ function QueueCard({
           {item.is_pinned && (
             <Pin size={10} className="text-amber shrink-0 fill-amber/30" />
           )}
-          <span className="font-sans text-[15px] text-white font-semibold truncate">
+          <span className="font-sans text-[16px] text-white font-semibold truncate">
             {prompt?.title ?? item.prompt_title ?? item.prompt_id}
           </span>
           {prompt?.provider && <ProviderBadge provider={prompt.provider} />}
@@ -113,7 +113,7 @@ function QueueCard({
             {STATUS_LABELS[item.status]}
           </span>
         </div>
-        <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-2">
+        <p className="font-mono text-[13px] text-readable leading-relaxed line-clamp-2">
           {prompt?.prompt_text ?? item.prompt_text ?? "Prompt not loaded in dev store."}
         </p>
       </div>
@@ -350,7 +350,7 @@ export function GenerationQueue() {
                     }}
                     className="accent-white/70"
                   />
-                  <span className="font-mono text-[12px] text-readable truncate">{prompt.title}</span>
+                  <span className="font-mono text-[13px] text-readable truncate">{prompt.title}</span>
                   <ProviderBadge provider={prompt.provider} />
                 </label>
               ))}
@@ -409,18 +409,18 @@ export function GenerationQueue() {
         ))}
       </div>
       {importError && (
-        <div className="mb-5 px-4 py-3 rounded-sm border border-red/30 bg-red/10 font-mono text-[11px] text-red">
+        <div className="mb-5 px-4 py-3 rounded-sm border border-red/30 bg-red/10 font-mono text-[12px] text-red">
           {importError}
         </div>
       )}
 
       {items.length === 0 ? (
         <div className="flex items-center justify-center h-48 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
-          <span className="font-mono text-[12px] text-readable">No queued prompts.</span>
+          <span className="font-mono text-[13px] text-readable">No queued prompts.</span>
         </div>
       ) : visibleItems.length === 0 ? (
         <div className="flex items-center justify-center h-32 rounded-card" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
-          <span className="font-mono text-[11px] text-readable">No {statusFilter} items.</span>
+          <span className="font-mono text-[12px] text-readable">No {statusFilter} items.</span>
         </div>
       ) : (
         <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>

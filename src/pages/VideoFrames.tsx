@@ -167,7 +167,7 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
       <div className="flex flex-col gap-2 flex-1 min-w-0">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-0.5 min-w-0">
-            <span className="font-sans text-[15px] font-semibold text-white truncate">{result.title}</span>
+            <span className="font-sans text-[16px] font-semibold text-white truncate">{result.title}</span>
             <span className="font-mono text-[10px] text-amber uppercase tracking-widest">Recommended next prompt</span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
@@ -188,14 +188,14 @@ function ResultCard({ frame, result, onImport, imported, disabled = false }: {
           </div>
         </div>
 
-        <p className="font-mono text-[12px] text-soft-white leading-relaxed line-clamp-3">
+        <p className="font-mono text-[13px] text-soft-white leading-relaxed line-clamp-3">
           {result.suggested_prompt}
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
             <span className="system-label text-[10px]">STYLE NOTES</span>
-            <p className="font-mono text-[11px] text-readable leading-relaxed line-clamp-2">
+            <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-2">
               {result.style_notes}
             </p>
           </div>
@@ -535,8 +535,8 @@ export function VideoFrames() {
             <>
                 <Film size={36} className="text-cyan" />
               <div className="flex flex-col items-center gap-1.5">
-                <span className="font-mono text-[13px] text-soft-white">Drop video here or click to browse</span>
-                <span className="font-mono text-[11px] text-readable">MP4 · MOV · WEBM · AVI · MKV</span>
+                <span className="font-mono text-[14px] text-soft-white">Drop video here or click to browse</span>
+                <span className="font-mono text-[12px] text-readable">MP4 · MOV · WEBM · AVI · MKV</span>
               </div>
             </>
           )}
@@ -546,7 +546,7 @@ export function VideoFrames() {
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
               style={{ background: "rgba(0,0,0,0.75)" }}>
               <div className="w-6 h-6 border border-white/20 border-t-white/70 rounded-full animate-spin" />
-              <span className="font-mono text-[13px] text-white">
+              <span className="font-mono text-[14px] text-white">
                 Extracting frame {extractProgress.current} of {extractProgress.total}...
               </span>
               {extractProgress.total > 0 && (
@@ -600,7 +600,7 @@ export function VideoFrames() {
             </div>
 
             {/* Time */}
-            <span className="font-mono text-[11px] text-readable shrink-0 tabular-nums">
+            <span className="font-mono text-[12px] text-readable shrink-0 tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
 
@@ -637,7 +637,7 @@ export function VideoFrames() {
         <div className="flex items-center gap-4 flex-wrap py-1">
           {/* Filename */}
           {videoFile && (
-            <span className="font-mono text-[11px] text-readable truncate max-w-72">
+            <span className="font-mono text-[12px] text-readable truncate max-w-72">
               {videoFile.name}
             </span>
           )}
@@ -651,7 +651,7 @@ export function VideoFrames() {
               {FRAME_COUNTS.map((n) => (
                 <button key={n} type="button" onClick={() => setFrameCount(n)}
                   className={cn(
-                    "w-10 py-2 font-mono text-[11px] rounded-sm transition-precise",
+                    "w-10 py-2 font-mono text-[12px] rounded-sm transition-precise",
                     frameCount === n ? "text-white" : "text-readable hover:text-cyan"
                   )}
                   style={{ border: frameCount === n ? "1px solid rgba(255,255,255,0.20)" : "1px solid rgba(255,255,255,0.06)" }}>
@@ -671,7 +671,7 @@ export function VideoFrames() {
           {/* API key warning (compact) */}
           {frames.length > 0 && !apiKey && (
             <button type="button" onClick={() => navigate("/settings")}
-              className="flex items-center gap-2 font-mono text-[11px] text-red/80 hover:text-red transition-precise">
+              className="flex items-center gap-2 font-mono text-[12px] text-red/80 hover:text-red transition-precise">
               <AlertTriangle size={9} /> No {selectedModel.provider} key — Settings
             </button>
           )}
@@ -682,7 +682,7 @@ export function VideoFrames() {
               <select
                 value={selectedModel.id}
                 onChange={(e) => setSelectedModel(AI_MODELS.find((m) => m.id === e.target.value) ?? AI_MODELS[0])}
-                className="accent-selected appearance-none h-9 pl-3 pr-8 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
+                className="accent-selected appearance-none h-9 pl-3 pr-8 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
                 <optgroup label="Anthropic">
                   {AI_MODELS.filter((m) => m.provider === "anthropic").map((m) => (
                     <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
@@ -716,7 +716,7 @@ export function VideoFrames() {
           <div className="flex items-start gap-2 p-3 rounded-sm"
             style={{ border: "1px solid rgba(215,25,33,0.22)", background: "rgba(215,25,33,0.04)" }}>
             <AlertTriangle size={10} className="text-red/60 shrink-0 mt-0.5" />
-            <span className="font-mono text-[12px] text-red/80">
+            <span className="font-mono text-[13px] text-red/80">
               {extractError || saveFrameError}
             </span>
           </div>
@@ -786,7 +786,7 @@ export function VideoFrames() {
                     </button>
                     <div className="absolute bottom-0 inset-x-0 px-2 py-1"
                       style={{ background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)" }}>
-                      <span className="font-mono text-[11px] text-white">{formatTime(frame.timestamp)}</span>
+                      <span className="font-mono text-[12px] text-white">{formatTime(frame.timestamp)}</span>
                     </div>
                     {isSelected && (
                       <div className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-sm flex items-center justify-center"
@@ -817,7 +817,7 @@ export function VideoFrames() {
                 <div key={frameIdx} className="flex items-center gap-3 p-3 rounded-sm"
                   style={{ border: "1px solid rgba(215,25,33,0.20)", background: "rgba(215,25,33,0.04)" }}>
                   <AlertTriangle size={10} className="text-red/60 shrink-0" />
-                  <span className="font-mono text-[12px] text-red/80">
+                  <span className="font-mono text-[13px] text-red/80">
                     Frame {formatTime(frames[frameIdx].timestamp)}: {error}
                   </span>
                 </div>

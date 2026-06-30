@@ -147,7 +147,7 @@ export function BatchImportZone({ projectId, promptId, promptProvider, onComplet
         style={{ border: dragging ? "1px solid" : "1px dashed rgba(255,255,255,0.16)" }}
       >
         <Upload size={16} className={dragging ? "text-cyan" : "text-white/30"} />
-        <span className="font-mono text-[11px] text-readable">
+        <span className="font-mono text-[12px] text-readable">
           {dragging ? "Drop images here" : "Drop images or click to select"}
         </span>
         <span className="font-mono text-[9px] text-dim/50">PNG, JPG, WEBP · multiple files supported</span>

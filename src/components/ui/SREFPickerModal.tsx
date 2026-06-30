@@ -68,7 +68,7 @@ export function SREFPickerModal({ onSelect, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search SREFs by code or title…"
-            className="flex-1 bg-transparent font-mono text-[13px] text-white placeholder:text-readable/50 focus:outline-none"
+            className="flex-1 bg-transparent font-mono text-[14px] text-white placeholder:text-readable/50 focus:outline-none"
           />
           <span className="font-mono text-[10px] text-muted">{filtered.length}</span>
           <button onClick={onClose} className="text-readable hover:text-white transition-precise">
@@ -79,7 +79,7 @@ export function SREFPickerModal({ onSelect, onClose }: Props) {
         {/* Grid */}
         <div className="overflow-y-auto flex-1 p-4">
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center py-16 font-mono text-[12px] text-readable">
+            <div className="flex items-center justify-center py-16 font-mono text-[13px] text-readable">
               {srefs.length === 0 ? "No SREFs in library." : "No matches."}
             </div>
           ) : (
@@ -94,7 +94,7 @@ export function SREFPickerModal({ onSelect, onClose }: Props) {
                   <SREFThumb path={s.example_path} code={s.code} />
                   <div className="flex flex-col gap-0.5 min-w-0">
                     {s.title && (
-                      <span className="font-sans text-[11px] font-medium text-white truncate leading-tight">
+                      <span className="font-sans text-[12px] font-medium text-white truncate leading-tight">
                         {s.title}
                       </span>
                     )}

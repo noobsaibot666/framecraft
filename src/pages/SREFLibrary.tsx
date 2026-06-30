@@ -57,8 +57,8 @@ function SREFCard({ sref, onRatingChange, onDelete }: {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1 min-w-0">
-          <span className="font-mono text-[13px] text-white font-medium tabular-nums tracking-tight">{sref.code}</span>
-          {sref.title && <span className="font-sans text-[11px] text-muted truncate">{sref.title}</span>}
+          <span className="font-mono text-[14px] text-white font-medium tabular-nums tracking-tight">{sref.code}</span>
+          {sref.title && <span className="font-sans text-[12px] text-muted truncate">{sref.title}</span>}
         </div>
         <button type="button" onClick={() => onDelete(sref.id)}
           className="text-dim/20 hover:text-red/70 transition-precise opacity-0 group-hover:opacity-100 shrink-0">
@@ -122,8 +122,8 @@ function ProfileCard({ profile, onRatingChange, onDelete }: {
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-col gap-1 min-w-0">
-          <span className="font-mono text-[13px] text-white font-medium tabular-nums tracking-tight">{profile.code}</span>
-          {profile.title && <span className="font-sans text-[11px] text-muted truncate">{profile.title}</span>}
+          <span className="font-mono text-[14px] text-white font-medium tabular-nums tracking-tight">{profile.code}</span>
+          {profile.title && <span className="font-sans text-[12px] text-muted truncate">{profile.title}</span>}
         </div>
         <button type="button" onClick={() => onDelete(profile.id)}
           className="text-dim/20 hover:text-red/70 transition-precise opacity-0 group-hover:opacity-100 shrink-0">
@@ -208,7 +208,7 @@ function AddForm({ type, onSave, onClose }: {
           <label className="system-label">{label.toUpperCase()}</label>
           <input ref={codeRef} value={code} onChange={(e) => setCode(e.target.value)}
             placeholder={placeholder}
-            className="h-8 px-3 font-mono text-[11px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
+            className="h-8 px-3 font-mono text-[12px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.15)" }}
             onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }} />
         </div>
@@ -216,28 +216,28 @@ function AddForm({ type, onSave, onClose }: {
           <label className="system-label">TITLE (optional)</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)}
             placeholder="Friendly name…"
-            className="h-8 px-3 font-mono text-[11px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
+            className="h-8 px-3 font-mono text-[12px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
         </div>
         <div className="flex flex-col gap-1.5 col-span-2">
           <label className="system-label">BEST USE</label>
           <input value={bestUse} onChange={(e) => setBestUse(e.target.value)}
             placeholder="What does this work best for?"
-            className="h-8 px-3 font-mono text-[11px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
+            className="h-8 px-3 font-mono text-[12px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="system-label">RISK NOTES</label>
           <input value={riskNotes} onChange={(e) => setRiskNotes(e.target.value)}
             placeholder="Any artifacts or caveats?"
-            className="h-8 px-3 font-mono text-[11px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
+            className="h-8 px-3 font-mono text-[12px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
         </div>
         <div className="flex flex-col gap-1.5">
           <label className="system-label">NOTES</label>
           <input value={notes} onChange={(e) => setNotes(e.target.value)}
             placeholder="Additional notes…"
-            className="h-8 px-3 font-mono text-[11px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
+            className="h-8 px-3 font-mono text-[12px] text-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
         </div>
       </div>
@@ -409,7 +409,7 @@ export function SREFLibrary() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
-            <span className="font-mono text-[11px] text-dim/40">
+            <span className="font-mono text-[12px] text-dim/40">
               {search || ratingFilter !== "all" ? "No SREFs match your filters." : "No SREFs yet."}
             </span>
             {!search && ratingFilter === "all" && (
@@ -428,7 +428,7 @@ export function SREFLibrary() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
-            <span className="font-mono text-[11px] text-dim/40">
+            <span className="font-mono text-[12px] text-dim/40">
               {search || ratingFilter !== "all" ? "No profiles match your filters." : "No profiles yet."}
             </span>
             {!search && ratingFilter === "all" && (

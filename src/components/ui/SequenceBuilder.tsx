@@ -114,7 +114,7 @@ function SortablePill({
       <button
         type="button"
         onClick={() => onRemove(token.id)}
-        className="pr-2 py-1.5 text-readable hover:text-red transition-precise leading-none text-[12px]"
+        className="pr-2 py-1.5 text-readable hover:text-red transition-precise leading-none text-[13px]"
       >
         ×
       </button>

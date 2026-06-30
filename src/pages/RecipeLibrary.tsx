@@ -45,7 +45,7 @@ function RecipeCard({ recipe, onCopy, onDelete, onOpen, onApply }: {
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <Layers size={9} className="text-dim/50 shrink-0" />
-            <span className="font-sans text-[13px] text-white font-medium truncate">{recipe.title}</span>
+            <span className="font-sans text-[14px] text-white font-medium truncate">{recipe.title}</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-[8px] tracking-widest uppercase text-dim/50">{providerLabel}</span>
@@ -288,7 +288,7 @@ export function RecipeLibrary() {
         <div className="flex flex-col items-center justify-center gap-4 h-48">
           <Layers size={24} className="text-dim/20" />
           <div className="flex flex-col items-center gap-1">
-            <span className="font-mono text-[11px] text-dim/50">No recipes yet.</span>
+            <span className="font-mono text-[12px] text-dim/50">No recipes yet.</span>
             <span className="font-mono text-[9px] text-dim/30">Save any prompt as a Recipe to build your reusable library.</span>
           </div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/recipes/new")}>

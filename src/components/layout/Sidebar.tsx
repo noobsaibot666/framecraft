@@ -37,7 +37,7 @@ const NAV_GROUPS = [
   {
     label: "CREATE",
     items: [
-      { label: "Craft", to: "/craft", icon: Wand2 },
+      { label: "Prompt", to: "/craft", icon: Wand2 },
       { label: "Recipes", to: "/recipes", icon: BookOpen },
       { label: "Import", to: "/import", icon: Upload },
     ],
@@ -105,7 +105,7 @@ function NavItem({
               isActive ? "text-red" : "text-soft-white/55 group-hover:text-cyan"
             )}
           />
-          <span className="font-sans text-[13px] font-semibold tracking-[0.04em] uppercase">
+          <span className="font-sans text-[14px] font-semibold tracking-[0.04em] uppercase">
             {label}
           </span>
           {badge != null && badge > 0 && (
@@ -179,7 +179,7 @@ export function Sidebar() {
                 size={14}
                 className={cn("shrink-0", isActive ? "text-red" : "text-soft-white/55")}
               />
-              <span className="font-sans text-[13px] font-semibold tracking-[0.04em] uppercase">
+              <span className="font-sans text-[14px] font-semibold tracking-[0.04em] uppercase">
                 Settings
               </span>
               {ingestPending > 0 && (

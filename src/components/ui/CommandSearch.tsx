@@ -61,7 +61,7 @@ function ResultRow({ result, active, onClick }: {
         {TYPE_ICON[result.type]}
       </span>
       <span className="flex-1 min-w-0">
-        <span className="block font-sans text-[13px] text-soft-white truncate">{result.title}</span>
+        <span className="block font-sans text-[14px] text-soft-white truncate">{result.title}</span>
         {result.subtitle && (
           <span className="block font-mono text-[10px] text-readable truncate mt-0.5">{result.subtitle}</span>
         )}
@@ -162,7 +162,7 @@ export function CommandSearch({ onClose }: Props) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or jump to… (prompts, recipes, tokens, projects…)"
-            className="flex-1 bg-transparent font-mono text-[13px] text-white placeholder:text-dim focus:outline-none"
+            className="flex-1 bg-transparent font-mono text-[14px] text-white placeholder:text-dim focus:outline-none"
           />
           {loading && (
             <span className="font-mono text-[9px] text-dim/40 shrink-0">···</span>
@@ -209,7 +209,7 @@ export function CommandSearch({ onClose }: Props) {
         {/* Empty search state */}
         {!showingNavShortcuts && !loading && results.length === 0 && (
           <div className="px-4 py-6 text-center">
-            <span className="font-mono text-[11px] text-muted">No results for "{query}"</span>
+            <span className="font-mono text-[12px] text-muted">No results for "{query}"</span>
           </div>
         )}
 

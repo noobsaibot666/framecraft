@@ -54,12 +54,12 @@ function FieldSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[11px] text-muted">{label}</label>
+      <label className="system-label text-[12px] text-muted">{label}</label>
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none pr-7 h-9 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
+          className="w-full appearance-none pr-7 h-9 px-3 font-mono text-[13px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         >
           {options.map((o) => (
@@ -81,7 +81,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   };
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[11px] text-muted">TAGS</label>
+      <label className="system-label text-[12px] text-muted">TAGS</label>
       <div
         className="flex flex-wrap gap-1.5 p-2.5 rounded-sm min-h-9"
         style={{ border: "1px solid rgba(255,255,255,0.16)", background: "var(--color-dark)" }}
@@ -101,7 +101,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
           }}
           onBlur={() => { if (input.trim()) commit(input); }}
           placeholder={tags.length ? "" : "Type tag + Enter…"}
-          className="flex-1 min-w-16 bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim outline-none"
+          className="flex-1 min-w-16 bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim outline-none"
         />
       </div>
     </div>
@@ -137,7 +137,7 @@ function SlotChip({
       >
         {isParam ? slot.flag ?? "PARAM" : slot.required ? "REQ" : "OPT"}
       </span>
-      <span className="font-mono text-[11px] text-soft-white flex-1 min-w-0 truncate">{slot.label}</span>
+      <span className="font-mono text-[12px] text-soft-white flex-1 min-w-0 truncate">{slot.label}</span>
       <span className="font-mono text-[9px] text-dim/40 shrink-0 font-light italic truncate max-w-24">{slot.token}</span>
       {!isParam && (
         <button
@@ -195,7 +195,7 @@ function InsertSlotPanel({
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") onClose(); }}
           placeholder="Slot name (e.g. Subject)"
-          className="flex-1 h-8 px-2.5 font-mono text-[12px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
+          className="flex-1 h-8 px-2.5 font-mono text-[13px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
         <button
@@ -328,7 +328,7 @@ export function RecipeEditor() {
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
-      <span className="system-label text-[12px] text-soft-white">{label}</span>
+      <span className="system-label text-[13px] text-soft-white">{label}</span>
       <div className="flex-1 h-px bg-white/16" />
     </div>
   );
@@ -375,7 +375,7 @@ export function RecipeEditor() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
-                  <label className="system-label text-[11px] text-muted">TITLE</label>
+                  <label className="system-label text-[12px] text-muted">TITLE</label>
                   {fieldError.includes("Title") && (
                     <span className="font-mono text-[9px] text-red/80">{fieldError}</span>
                   )}
@@ -384,7 +384,7 @@ export function RecipeEditor() {
                   value={title}
                   onChange={(e) => { setTitle(e.target.value); setFieldError(""); }}
                   placeholder="Give this recipe a name…"
-                  className="w-full h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+                  className="w-full h-10 px-3 font-sans text-[15px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
                   style={{ border: fieldError.includes("Title") ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.16)" }}
                 />
               </div>
@@ -392,7 +392,7 @@ export function RecipeEditor() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief description of what this recipe produces…"
-                className="w-full h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+                className="w-full h-9 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
                 style={{ border: "1px solid rgba(255,255,255,0.16)" }}
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -407,7 +407,7 @@ export function RecipeEditor() {
             <SectionHeader label="PROMPT TEMPLATE" />
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline gap-2">
-                <label className="system-label text-[11px] text-muted">TEMPLATE TEXT</label>
+                <label className="system-label text-[12px] text-muted">TEMPLATE TEXT</label>
                 {fieldError.includes("Prompt") && (
                   <span className="font-mono text-[9px] text-red/80">{fieldError}</span>
                 )}
@@ -421,7 +421,7 @@ export function RecipeEditor() {
                 onChange={(e) => { setPromptText(e.target.value); setFieldError(""); }}
                 placeholder="Write your template here. Use [Subject], [Mood?], --ar [Aspect Ratio] to define slots…"
                 rows={10}
-                className="w-full px-3 py-3 font-mono text-[12px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none resize-y leading-relaxed"
+                className="w-full px-3 py-3 font-mono text-[13px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none resize-y leading-relaxed"
                 style={{ border: fieldError.includes("Prompt") ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.16)" }}
               />
               <div className="flex items-center gap-2">
@@ -450,13 +450,13 @@ export function RecipeEditor() {
             <div className="flex flex-col gap-3">
               <TagInput tags={tags} onChange={setTags} />
               <div className="flex flex-col gap-1.5">
-                <label className="system-label text-[11px] text-muted">NOTES</label>
+                <label className="system-label text-[12px] text-muted">NOTES</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Usage notes, when to apply this recipe…"
                   rows={2}
-                  className="w-full px-3 py-2.5 font-mono text-[12px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none resize-none"
+                  className="w-full px-3 py-2.5 font-mono text-[13px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none resize-none"
                   style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                 />
               </div>
@@ -578,7 +578,7 @@ export function RecipeEditor() {
                     toast.error("Failed to delete recipe");
                   }
                 }}
-                className="flex items-center gap-2 font-mono text-[11px] text-red/60 hover:text-red transition-precise"
+                className="flex items-center gap-2 font-mono text-[12px] text-red/60 hover:text-red transition-precise"
               >
                 <Trash2 size={11} /> Delete Recipe
               </button>

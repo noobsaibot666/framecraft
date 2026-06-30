@@ -217,7 +217,7 @@ export function ProjectExport() {
                 >
                   <Icon size={12} className={cn("mt-0.5 shrink-0", format === f.id ? "text-white/70" : "text-dim/30")} />
                   <div className="flex flex-col gap-0.5">
-                    <span className={cn("font-sans text-[11px] font-medium", format === f.id ? "text-white" : "text-dim/60")}>
+                    <span className={cn("font-sans text-[12px] font-medium", format === f.id ? "text-white" : "text-dim/60")}>
                       {f.label}
                     </span>
                     <span className="font-mono text-[8px] text-dim/30">{f.description}</span>

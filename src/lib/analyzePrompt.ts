@@ -211,6 +211,7 @@ export async function analyzePromptDraft(opts: {
   brief?: string;
   provenTokens?: string[];
   fields?: Partial<Record<AdviceFieldKey, string>>;
+  userDirection?: string;
 }): Promise<PromptAdvice> {
   if (!isTauri) return EMPTY_ADVICE;
 
@@ -226,9 +227,13 @@ export async function analyzePromptDraft(opts: {
         .join("\n")
     : "";
 
+  const directionLine = opts.userDirection?.trim()
+    ? `\n\nUser direction: ${opts.userDirection.trim()}`
+    : "";
+
   const userMessage = fieldLines
-    ? `Draft prompt:\n${opts.promptText.trim()}\n\nCurrent field values:\n${fieldLines}`
-    : `Draft prompt:\n${opts.promptText.trim()}`;
+    ? `Draft prompt:\n${opts.promptText.trim()}\n\nCurrent field values:\n${fieldLines}${directionLine}`
+    : `Draft prompt:\n${opts.promptText.trim()}${directionLine}`;
 
   const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
     "anthropic",

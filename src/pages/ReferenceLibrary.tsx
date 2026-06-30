@@ -132,7 +132,7 @@ function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
       {/* Info */}
       <div className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
-          <span className="font-sans text-[14px] text-soft-white font-semibold leading-snug flex-1 min-w-0 truncate">
+          <span className="font-sans text-[15px] text-soft-white font-semibold leading-snug flex-1 min-w-0 truncate">
             {r.title}
           </span>
           <ExternalLink size={11} className="text-muted group-hover:text-cyan transition-precise shrink-0 mt-0.5" />
@@ -155,7 +155,7 @@ function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
 
         {/* Best use */}
         {r.best_use && (
-          <p className="font-mono text-[11px] text-readable leading-relaxed line-clamp-2">{r.best_use}</p>
+          <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-2">{r.best_use}</p>
         )}
 
         {/* Risk note */}
@@ -278,7 +278,7 @@ export function ReferenceLibrary() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by title, tags, notes…"
-          className="h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
+          className="h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-72"
           style={{ border: "var(--border-default)" }}
         />
 
@@ -286,7 +286,7 @@ export function ReferenceLibrary() {
         <FilterSelect label="RATING" value={ratingFilter} onChange={setRatingFilter} options={RATING_OPTIONS} />
 
         <div className="flex-1" />
-        <span className="font-mono text-[11px] text-readable">{refs.length} references</span>
+        <span className="font-mono text-[12px] text-readable">{refs.length} references</span>
       </div>
 
       {/* Drop zone */}
@@ -304,7 +304,7 @@ export function ReferenceLibrary() {
         style={{ border: "2px dashed" }}
       >
         <Upload size={14} className={cn("shrink-0", dropping ? "text-cyan" : "text-muted")} />
-        <span className={cn("font-mono text-[11px] tracking-widest uppercase", dropping ? "text-cyan" : "text-readable")}>
+        <span className={cn("font-mono text-[12px] tracking-widest uppercase", dropping ? "text-cyan" : "text-readable")}>
           {dropImporting ? "Importing..." : "Drop images to add as references"}
         </span>
       </div>
@@ -312,11 +312,11 @@ export function ReferenceLibrary() {
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[11px] text-muted">Loading...</span>
+          <span className="font-mono text-[12px] text-muted">Loading...</span>
         </div>
       ) : refs.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-48 gap-3">
-          <span className="font-mono text-[12px] text-readable">
+          <span className="font-mono text-[13px] text-readable">
             {search || kindFilter !== "all" || ratingFilter !== "all"
               ? "No references match your filters."
               : "No references yet."}

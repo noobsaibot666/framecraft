@@ -27,8 +27,9 @@ function rowToCampaign(row: Record<string, unknown>): Campaign {
 
 export async function getCampaigns(): Promise<Campaign[]> {
   if (!isTauri) return [];
+  const db = await getFramecraftDb();
+  // Try with project counts (requires migration 018 campaign_id on projects)
   try {
-    const db = await getFramecraftDb();
     const rows = await db.select(
       `SELECT c.*,
               COUNT(DISTINCT p.id) AS project_count,
@@ -40,14 +41,23 @@ export async function getCampaigns(): Promise<Campaign[]> {
     );
     return (rows as Record<string, unknown>[]).map(rowToCampaign);
   } catch {
-    return [];
+    // campaign_id column not yet on projects — return campaigns without counts
+    try {
+      const rows = await db.select(
+        `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns ORDER BY created_at DESC`
+      );
+      return (rows as Record<string, unknown>[]).map(rowToCampaign);
+    } catch {
+      return [];
+    }
   }
 }
 
 export async function getCampaign(id: string): Promise<Campaign | null> {
   if (!isTauri) return null;
+  const db = await getFramecraftDb();
+  // Try with project counts (requires migration 018 campaign_id on projects)
   try {
-    const db = await getFramecraftDb();
     const rows = await db.select(
       `SELECT c.*,
               COUNT(DISTINCT p.id) AS project_count,
@@ -61,7 +71,17 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
     const typed = rows as Record<string, unknown>[];
     return typed.length > 0 ? rowToCampaign(typed[0]) : null;
   } catch {
-    return null;
+    // campaign_id column not yet on projects — fall back without JOIN
+    try {
+      const rows = await db.select(
+        `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns WHERE id = $1`,
+        [id]
+      );
+      const typed = rows as Record<string, unknown>[];
+      return typed.length > 0 ? rowToCampaign(typed[0]) : null;
+    } catch {
+      return null;
+    }
   }
 }
 

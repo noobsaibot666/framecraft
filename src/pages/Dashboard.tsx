@@ -82,7 +82,7 @@ function PromptRow({ prompt, onClick }: { prompt: Prompt; onClick: () => void })
       style={{ borderBottom: "var(--border-dim)" }}
     >
       <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="font-sans text-[13px] font-medium text-white truncate">{prompt.title}</span>
+        <span className="font-sans text-[14px] font-medium text-white truncate">{prompt.title}</span>
         <span className="font-mono text-[10.5px] text-readable">{formatDate(prompt.created_at)}</span>
       </div>
       <div className="flex items-center gap-2 shrink-0">
@@ -112,8 +112,8 @@ function EmptyState({
     <div className={`flex flex-col items-center justify-center gap-3 text-center ${compact ? "py-4" : "py-8"}`}>
       {icon}
       <div className="flex flex-col gap-1">
-        <span className="font-sans text-[13px] text-readable">{label}</span>
-        {action && <span className="font-mono text-[11px] text-muted">{action}</span>}
+        <span className="font-sans text-[14px] text-readable">{label}</span>
+        {action && <span className="font-mono text-[12px] text-muted">{action}</span>}
       </div>
       {cta && onCta && (
         <Button variant="ghost" size="sm" onClick={onCta}>
@@ -140,7 +140,7 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
         }
       </div>
       <div className="flex flex-col gap-0.5 min-w-0">
-        <span className="font-sans text-[13px] font-medium text-white truncate">{result.prompt_title || "Untitled"}</span>
+        <span className="font-sans text-[14px] font-medium text-white truncate">{result.prompt_title || "Untitled"}</span>
         <div className="flex items-center gap-2">
           <div className="flex gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -187,7 +187,7 @@ function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: (
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="font-sans text-[18px] font-semibold text-white">Welcome to Framecraft</span>
-          <span className="font-mono text-[11px] text-readable">Your prompt engineering workspace is ready. Here's how to get started.</span>
+          <span className="font-mono text-[12px] text-readable">Your prompt engineering workspace is ready. Here's how to get started.</span>
         </div>
         <button
           type="button"
@@ -207,12 +207,12 @@ function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: (
             style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.03)" }}
           >
             <div className="flex items-center gap-2">
-              <span className="font-ndot text-[13px] text-dim/40">{s.n}</span>
+              <span className="font-ndot text-[14px] text-dim/40">{s.n}</span>
               {s.icon}
             </div>
             <div className="flex flex-col gap-1.5">
-              <span className="font-sans text-[13px] font-semibold text-white">{s.title}</span>
-              <span className="font-mono text-[11px] text-readable leading-relaxed">{s.desc}</span>
+              <span className="font-sans text-[14px] font-semibold text-white">{s.title}</span>
+              <span className="font-mono text-[12px] text-readable leading-relaxed">{s.desc}</span>
             </div>
             {s.cta && s.onClick && (
               <Button variant="primary" size="sm" onClick={s.onClick}>
@@ -296,7 +296,7 @@ export function Dashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search…"
-              className="h-8 w-48 pl-7 pr-3 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim focus:outline-none focus:w-64 transition-all duration-200"
+              className="h-8 w-48 pl-7 pr-3 rounded-sm bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none focus:w-64 transition-all duration-200"
               style={{ border: "var(--border-default)" }}
             />
           </div>
@@ -381,7 +381,7 @@ export function Dashboard() {
                   key={tag}
                   type="button"
                   onClick={() => navigate(`/library?tag=${encodeURIComponent(tag)}`)}
-                  className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-cyan hover:border-cyan/35 transition-precise"
+                  className="flex items-center gap-1.5 font-mono text-[12px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-cyan hover:border-cyan/35 transition-precise"
                   style={{ border: "var(--border-dim)" }}
                 >
                   {tag}
@@ -413,7 +413,7 @@ export function Dashboard() {
                   <div className="flex flex-col gap-0.5">
                     <div className="flex items-center justify-between gap-1">
                       <span className="font-mono text-[9px] text-dim/50 uppercase tracking-widest">WIN RATE</span>
-                      <span className="font-mono text-[11px] font-medium text-amber">{win_rate}%</span>
+                      <span className="font-mono text-[12px] font-medium text-amber">{win_rate}%</span>
                     </div>
                     {/* progress bar */}
                     <div className="h-0.5 rounded-full w-full" style={{ background: "rgba(255,255,255,0.06)" }}>
@@ -466,7 +466,7 @@ export function Dashboard() {
           >
             <div className="flex flex-col gap-1 min-w-0">
               <span className="system-label text-dim/50">CONTINUE WHERE YOU LEFT OFF</span>
-              <span className="font-sans text-[15px] font-medium text-white truncate">{health.lastTouchedPrompt.title}</span>
+              <span className="font-sans text-[16px] font-medium text-white truncate">{health.lastTouchedPrompt.title}</span>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{health.lastTouchedPrompt.provider}</span>
                 {health.lastTouchedPrompt.is_winner && <Star size={10} className="text-amber fill-amber/40" />}
@@ -513,7 +513,7 @@ export function Dashboard() {
                         <PromptRow key={p.id} prompt={p} onClick={() => navigate(`/library/${p.id}`)} />
                       ))}
                       {recentPrompts.length === 0 && (
-                        <span className="font-mono text-[11px] text-muted px-4 py-6">No recent prompts match search.</span>
+                        <span className="font-mono text-[12px] text-muted px-4 py-6">No recent prompts match search.</span>
                       )}
                     </div>
                   ) : (
@@ -579,7 +579,7 @@ export function Dashboard() {
                         style={{ borderBottom: "var(--border-dim)" }}
                       >
                         <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="font-sans text-[12px] text-white/90 truncate">{p.title}</span>
+                          <span className="font-sans text-[13px] text-white/90 truncate">{p.title}</span>
                           {p.client && <span className="font-mono text-[9px] text-muted truncate">{p.client}</span>}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
@@ -610,7 +610,7 @@ export function Dashboard() {
                         className="flex items-center justify-between gap-3 px-4 py-3 text-left transition-precise hover:bg-cyan/6 hover:text-cyan rounded-sm"
                         style={{ borderBottom: "var(--border-dim)" }}
                       >
-                        <span className="font-sans text-[12px] text-white/80 truncate">{r.prompt_title}</span>
+                        <span className="font-sans text-[13px] text-white/80 truncate">{r.prompt_title}</span>
                         <span className="font-mono text-[9px] text-muted shrink-0">Rate →</span>
                       </button>
                     ))}
@@ -631,7 +631,7 @@ export function Dashboard() {
                         className="flex items-center justify-between gap-3 px-4 py-2.5"
                         style={{ borderBottom: "var(--border-dim)" }}
                       >
-                        <span className="font-mono text-[11px] text-white/80 truncate">{t.text}</span>
+                        <span className="font-mono text-[12px] text-white/80 truncate">{t.text}</span>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="inline-block w-1.5 h-1.5 rounded-full bg-white/50" />
                           <span className="font-mono text-[9px] text-dim tabular-nums">{t.quality_score.toFixed(2)}</span>
@@ -660,7 +660,7 @@ export function Dashboard() {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="font-mono text-[10px] text-dim/30 w-4 text-right shrink-0">{i + 1}</span>
-                          <span className="font-mono text-[11px] text-soft-white truncate">{t.text}</span>
+                          <span className="font-mono text-[12px] text-soft-white truncate">{t.text}</span>
                         </div>
                         <span className="font-mono text-[9px] text-amber/60 shrink-0">{t.win_appearances}★</span>
                       </div>

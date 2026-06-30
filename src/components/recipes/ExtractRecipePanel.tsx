@@ -68,7 +68,7 @@ export function ExtractRecipePanel({ prompt, onSaved, onCancel }: ExtractRecipeP
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="h-8 px-3 font-sans text-[13px] text-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
+            className="h-8 px-3 font-sans text-[14px] text-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
             style={{ border: "1px solid rgba(255,255,255,0.10)" }}
           />
         </div>
@@ -88,7 +88,7 @@ export function ExtractRecipePanel({ prompt, onSaved, onCancel }: ExtractRecipeP
               <input
                 value={slot.label}
                 onChange={(e) => updateSlot(index, { label: e.target.value })}
-                className="h-8 px-3 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
+                className="h-8 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none focus:border-red/50"
                 style={{ border: "1px solid rgba(255,255,255,0.10)" }}
               />
               <label className="flex items-center gap-2 h-8 px-2 rounded-sm cursor-pointer" style={{ border: "var(--border-dim)" }}>

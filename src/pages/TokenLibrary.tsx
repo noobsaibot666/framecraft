@@ -62,7 +62,7 @@ function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-mono text-[12px] text-soft-white/90 leading-snug wrap-break-word flex-1">{token.text}</span>
+        <span className="font-mono text-[13px] text-soft-white/90 leading-snug wrap-break-word flex-1">{token.text}</span>
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
@@ -188,7 +188,7 @@ export function TokenLibrary() {
               value={searchVal}
               onChange={(e) => setSearchVal(e.target.value)}
               placeholder="Search tokens…"
-              className="w-full h-9 pl-9 pr-3 font-mono text-[12px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
+              className="w-full h-9 pl-9 pr-3 font-mono text-[13px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
               style={{ border: "var(--border-default)" }}
             />
           </div>
@@ -237,7 +237,7 @@ export function TokenLibrary() {
         ) : tokens.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-20">
             <Tag size={24} className="text-dim/30" />
-            <span className="font-mono text-[11px] text-muted">
+            <span className="font-mono text-[12px] text-muted">
               {searchVal || categoryFilter ? "No tokens match your search." : "No tokens yet — add some in Settings."}
             </span>
           </div>

@@ -53,8 +53,8 @@ function PromptCard({ p, onImport, imported, disabled = false }: {
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-0.5 min-w-0">
-          <span className="font-sans text-[15px] font-semibold text-white truncate">{p.title}</span>
-          <span className="font-mono text-[11px] text-readable">{p.use_case}</span>
+          <span className="font-sans text-[16px] font-semibold text-white truncate">{p.title}</span>
+          <span className="font-mono text-[12px] text-readable">{p.use_case}</span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {p.aspect_ratio && (
@@ -76,7 +76,7 @@ function PromptCard({ p, onImport, imported, disabled = false }: {
         </div>
       </div>
 
-      <p className="font-mono text-[12px] text-soft-white leading-relaxed line-clamp-4">{p.prompt}</p>
+      <p className="font-mono text-[13px] text-soft-white leading-relaxed line-clamp-4">{p.prompt}</p>
 
       {p.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -244,7 +244,7 @@ export function BriefAnalyzer() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-sm"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                 <FileText size={14} className="text-cyan shrink-0" />
-                <span className="font-mono text-[12px] text-soft-white truncate flex-1">{attachedFile.name}</span>
+                <span className="font-mono text-[13px] text-soft-white truncate flex-1">{attachedFile.name}</span>
                 <button type="button" onClick={handleClearFile} className="text-dim/40 hover:text-white transition-precise">
                   <X size={10} />
                 </button>
@@ -255,7 +255,7 @@ export function BriefAnalyzer() {
                 onChange={(e) => setBriefText(e.target.value)}
                 placeholder="Paste brief here — campaign objective, target audience, key messages, visual references…"
                 rows={10}
-                className="w-full min-h-[320px] px-4 py-3 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none resize-none leading-relaxed transition-precise"
+                className="w-full min-h-[320px] px-4 py-3 font-mono text-[13px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none resize-none leading-relaxed transition-precise"
                 style={{ border: "1px solid rgba(255,255,255,0.10)" }}
               />
             )}
@@ -267,7 +267,7 @@ export function BriefAnalyzer() {
               style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}>
               <AlertTriangle size={12} className="text-red/80 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <span className="font-mono text-[11px] text-red/80">No API key for {selectedModel.provider}.</span>
+                <span className="font-mono text-[12px] text-red/80">No API key for {selectedModel.provider}.</span>
                 <button type="button" onClick={() => navigate("/settings")}
                   className="flex items-center gap-1.5 font-mono text-[10px] text-cyan hover:text-white transition-precise">
                   <Settings size={10} /> Open Settings
@@ -290,7 +290,7 @@ export function BriefAnalyzer() {
                         selectedModel.id === m.id ? "accent-selected" : "text-readable hover:text-cyan"
                       )}
                       style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
-                      <span className="font-mono text-[11px]">{m.label}</span>
+                      <span className="font-mono text-[12px]">{m.label}</span>
                       <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{m.tier}</span>
                     </button>
                   ))}
@@ -334,14 +334,14 @@ export function BriefAnalyzer() {
           {!result && !analyzing && !error && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <FileText size={28} className="text-cyan" />
-              <span className="font-mono text-[12px] text-readable">Paste a brief and click Analyze to generate production-ready prompts.</span>
+              <span className="font-mono text-[13px] text-readable">Paste a brief and click Analyze to generate production-ready prompts.</span>
             </div>
           )}
 
           {analyzing && (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <div className="w-5 h-5 border border-white/20 border-t-white/60 rounded-full animate-spin" />
-              <span className="font-mono text-[12px] text-readable">Reading brief and generating prompts...</span>
+              <span className="font-mono text-[13px] text-readable">Reading brief and generating prompts...</span>
             </div>
           )}
 
@@ -350,8 +350,8 @@ export function BriefAnalyzer() {
               style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}>
               <AlertTriangle size={12} className="text-red/60 shrink-0 mt-0.5" />
               <div className="flex flex-col gap-1">
-                <span className="font-mono text-[12px] text-red/80 font-medium">Analysis failed</span>
-                <span className="font-mono text-[12px] text-readable">{error}</span>
+                <span className="font-mono text-[13px] text-red/80 font-medium">Analysis failed</span>
+                <span className="font-mono text-[13px] text-readable">{error}</span>
               </div>
             </div>
           )}
@@ -367,18 +367,18 @@ export function BriefAnalyzer() {
                     style={{ border: "var(--border-dim)" }}>{result.tone}</span>
                 </div>
 
-                <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-4">{result.summary}</p>
+                <p className="font-mono text-[13px] text-readable leading-relaxed line-clamp-4">{result.summary}</p>
 
                 {result.production_goal && (
                   <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                     <span className="system-label text-[10px]">PRODUCTION GOAL</span>
-                    <p className="font-mono text-[12px] text-white leading-relaxed line-clamp-3">{result.production_goal}</p>
+                    <p className="font-mono text-[13px] text-white leading-relaxed line-clamp-3">{result.production_goal}</p>
                   </div>
                 )}
 
                 <div className="flex flex-col gap-1 pt-1 border-t" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                   <span className="system-label text-[10px]">CREATIVE DIRECTION</span>
-                  <p className="font-mono text-[12px] text-soft-white leading-relaxed line-clamp-4">{result.creative_direction}</p>
+                  <p className="font-mono text-[13px] text-soft-white leading-relaxed line-clamp-4">{result.creative_direction}</p>
                 </div>
 
                 {result.key_elements?.length > 0 && (
@@ -401,7 +401,7 @@ export function BriefAnalyzer() {
                         </div>
                         <div className="flex flex-col gap-0.5">
                           {result.required_deliverables.map((d) => (
-                            <span key={d} className="font-mono text-[11px] text-soft-white leading-snug">· {d}</span>
+                            <span key={d} className="font-mono text-[12px] text-soft-white leading-snug">· {d}</span>
                           ))}
                         </div>
                       </div>
@@ -411,7 +411,7 @@ export function BriefAnalyzer() {
                         <span className="system-label text-[10px]">CONSTRAINTS</span>
                         <div className="flex flex-col gap-0.5">
                           {result.key_constraints.map((c) => (
-                            <span key={c} className="font-mono text-[11px] text-soft-white leading-snug">· {c}</span>
+                            <span key={c} className="font-mono text-[12px] text-soft-white leading-snug">· {c}</span>
                           ))}
                         </div>
                       </div>
@@ -430,7 +430,7 @@ export function BriefAnalyzer() {
                   </div>
                   <div className="flex flex-col gap-1">
                     {result.risk_areas.map((r) => (
-                    <span key={r} className="font-mono text-[12px] text-red/75 leading-snug">· {r}</span>
+                    <span key={r} className="font-mono text-[13px] text-red/75 leading-snug">· {r}</span>
                     ))}
                   </div>
                 </div>
@@ -466,7 +466,7 @@ export function BriefAnalyzer() {
                           <button type="button" onClick={handleImportToNewProject}
                             className="flex items-center gap-2 px-3 py-2 rounded-sm text-left hover:bg-white/5 transition-precise">
                             <Plus size={9} className="text-dim/60 shrink-0" />
-                            <span className="font-mono text-[11px] text-soft-white">New project from brief</span>
+                            <span className="font-mono text-[12px] text-soft-white">New project from brief</span>
                           </button>
                           {projects.length > 0 && (
                             <div className="h-px my-1" style={{ background: "rgba(255,255,255,0.08)" }} />
@@ -476,7 +476,7 @@ export function BriefAnalyzer() {
                               className="flex items-center gap-2 px-3 py-2 rounded-sm text-left hover:bg-white/5 transition-precise">
                               <span className="w-1.5 h-1.5 rounded-full shrink-0"
                                 style={{ background: p.status === "active" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.2)" }} />
-                              <span className="font-mono text-[11px] text-readable truncate">{p.title}</span>
+                              <span className="font-mono text-[12px] text-readable truncate">{p.title}</span>
                             </button>
                           ))}
                         </div>
@@ -516,8 +516,8 @@ export function BriefAnalyzer() {
                       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex flex-col gap-0.5 min-w-0">
-                          <span className="font-sans text-[15px] font-semibold text-white truncate">{recipe.title}</span>
-                          <span className="font-mono text-[11px] text-readable">{recipe.description}</span>
+                          <span className="font-sans text-[16px] font-semibold text-white truncate">{recipe.title}</span>
+                          <span className="font-mono text-[12px] text-readable">{recipe.description}</span>
                         </div>
                         {savedRecipeIds.has(i) ? (
                           <span className="flex items-center gap-1 font-mono text-[8px] text-white/40 shrink-0">

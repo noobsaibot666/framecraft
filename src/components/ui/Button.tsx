@@ -13,7 +13,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         className={cn(
           "inline-flex items-center justify-center gap-2",
-          "font-mono text-[12px] tracking-[0.10em] uppercase whitespace-nowrap",
+          "font-mono text-[13px] tracking-[0.10em] uppercase whitespace-nowrap",
           "transition-all duration-150 ease-out",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red/60",

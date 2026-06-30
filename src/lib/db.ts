@@ -72,6 +72,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     parent_id: row.parent_id as string | undefined,
     source_url: row.source_url as string | undefined,
     thumbnail_data: row.thumbnail_data as string | undefined,
+    builder_state: row.builder_state as string | undefined,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
@@ -111,6 +112,7 @@ export interface CreatePromptInput {
   version?: number;
   source_url?: string;
   thumbnail_data?: string;
+  builder_state?: string;
 }
 
 export type CreateRecipeInput = Omit<CreatePromptInput, "is_recipe">;
@@ -179,8 +181,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
          style_ref, character_ref, image_ref, parameters,
          tags, rating, ai_look_risk, reuse_potential, is_recipe, is_winner, is_failed,
          failure_notes, notes, best_use, risk_notes, version, parent_id,
-         source_url, thumbnail_data, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,0,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33)`,
+         source_url, thumbnail_data, builder_state, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,0,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)`,
       [
         id,
         data.title,
@@ -213,6 +215,7 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.parent_id ?? null,
         data.source_url ?? null,
         data.thumbnail_data ?? null,
+        data.builder_state ?? null,
         ts,
         ts,
       ]
@@ -320,6 +323,7 @@ export async function updatePrompt(
     if ("reuse_potential" in data && data.reuse_potential != null) add("reuse_potential", data.reuse_potential);
     if ("source_url" in data) add("source_url", data.source_url ?? null);
     if ("thumbnail_data" in data) add("thumbnail_data", data.thumbnail_data ?? null);
+    if ("builder_state" in data) add("builder_state", data.builder_state ?? null);
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);

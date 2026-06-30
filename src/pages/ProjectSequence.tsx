@@ -92,7 +92,7 @@ function PromptPicker({
         style={{ border: "var(--border-default)", background: "#121212", maxHeight: "72vh" }}
       >
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-white/8">
-          <span className="system-label text-[13px] text-white">Connect Prompt</span>
+          <span className="system-label text-[14px] text-white">Connect Prompt</span>
           <button type="button" onClick={onClose} className="text-readable hover:text-white transition-precise">
             <X size={14} />
           </button>
@@ -105,7 +105,7 @@ function PromptPicker({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search prompts…"
-              className="w-full h-9 pl-8 pr-3 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-white/5 rounded-sm focus:outline-none"
+              className="w-full h-9 pl-8 pr-3 font-mono text-[13px] text-soft-white placeholder:text-readable/60 bg-white/5 rounded-sm focus:outline-none"
               style={{ border: "var(--border-default)" }}
             />
           </div>
@@ -113,7 +113,7 @@ function PromptPicker({
         <div className="flex-1 overflow-y-auto p-2">
           {filtered.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <span className="font-mono text-[11px] text-readable">No prompts found</span>
+              <span className="font-mono text-[12px] text-readable">No prompts found</span>
             </div>
           ) : (
             filtered.map((p) => (
@@ -124,7 +124,7 @@ function PromptPicker({
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-sm text-left hover:bg-white/7 transition-precise"
               >
                 <div className="flex-1 min-w-0">
-                  <span className="font-sans text-[13px] text-soft-white truncate block">{p.title}</span>
+                  <span className="font-sans text-[14px] text-soft-white truncate block">{p.title}</span>
                   <span className="font-mono text-[10px] text-readable uppercase">{p.provider}</span>
                 </div>
                 {p.is_winner && <span className="font-mono text-[9px] text-amber">WINNER</span>}
@@ -156,7 +156,7 @@ function ResultPicker({
         style={{ border: "var(--border-default)", background: "#121212", maxHeight: "72vh" }}
       >
         <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-white/8">
-          <span className="system-label text-[13px] text-white">Connect Result</span>
+          <span className="system-label text-[14px] text-white">Connect Result</span>
           <button type="button" onClick={onClose} className="text-readable hover:text-white transition-precise">
             <X size={14} />
           </button>
@@ -164,7 +164,7 @@ function ResultPicker({
         <div className="flex-1 overflow-y-auto p-4">
           {results.length === 0 ? (
             <div className="flex items-center justify-center py-8">
-              <span className="font-mono text-[11px] text-readable">No results in this project</span>
+              <span className="font-mono text-[12px] text-readable">No results in this project</span>
             </div>
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -227,7 +227,7 @@ function AddShotForm({
         <select
           value={type}
           onChange={(e) => setType(e.target.value as ShotType)}
-          className="h-8 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none"
+          className="h-8 px-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
           style={{ border: "var(--border-default)" }}
         >
           {SHOT_TYPES.map((t) => (
@@ -240,7 +240,7 @@ function AddShotForm({
           onChange={(e) => setLabel(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
           placeholder="Shot label (optional)"
-          className="flex-1 min-w-[160px] h-8 px-3 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
+          className="flex-1 min-w-[160px] h-8 px-3 font-mono text-[13px] text-soft-white placeholder:text-readable/60 bg-dark rounded-sm focus:outline-none"
           style={{ border: "var(--border-default)" }}
         />
         <Button variant="accent" size="sm" onClick={handleSubmit} disabled={busy}>
@@ -372,11 +372,11 @@ function ShotCard({
               onChange={(e) => setLabelText(e.target.value)}
               onBlur={commitLabel}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") commitLabel(); }}
-              className="flex-1 font-sans text-[13px] text-soft-white bg-transparent focus:outline-none border-b border-cyan/50"
+              className="flex-1 font-sans text-[14px] text-soft-white bg-transparent focus:outline-none border-b border-cyan/50"
             />
           ) : (
             <span
-              className="font-sans text-[13px] text-soft-white cursor-text hover:text-white transition-precise"
+              className="font-sans text-[14px] text-soft-white cursor-text hover:text-white transition-precise"
               onClick={() => { setLabelText(shot.label); setEditingLabel(true); }}
               title="Click to edit label"
             >
@@ -422,12 +422,12 @@ function ShotCard({
                 onKeyDown={(e) => { if (e.key === "Escape") commitNotes(); }}
                 rows={2}
                 placeholder="Notes…"
-                className="w-full font-mono text-[11px] text-readable bg-white/4 rounded-sm px-2 py-1.5 focus:outline-none resize-none"
+                className="w-full font-mono text-[12px] text-readable bg-white/4 rounded-sm px-2 py-1.5 focus:outline-none resize-none"
                 style={{ border: "var(--border-default)" }}
               />
             ) : (
               <span
-                className="font-mono text-[11px] text-readable cursor-text hover:text-soft-white transition-precise block"
+                className="font-mono text-[12px] text-readable cursor-text hover:text-soft-white transition-precise block"
                 onClick={() => { setNotesText(shot.notes ?? ""); setEditingNotes(true); }}
                 title="Click to edit notes"
               >
@@ -581,16 +581,16 @@ export function ProjectSequence() {
           className="flex items-center gap-2 text-readable hover:text-white transition-precise self-start"
         >
           <ArrowLeft size={13} />
-          <span className="font-mono text-[11px] uppercase tracking-widest">Back to Project</span>
+          <span className="font-mono text-[12px] uppercase tracking-widest">Back to Project</span>
         </button>
 
         {/* Header controls */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <span className="font-sans text-[15px] font-semibold text-white">
+            <span className="font-sans text-[16px] font-semibold text-white">
               {shots.length} {shots.length === 1 ? "shot" : "shots"}
             </span>
-            <span className="font-mono text-[11px] text-readable">
+            <span className="font-mono text-[12px] text-readable">
               {shots.filter((s) => s.result_id).length} with results · {shots.filter((s) => s.prompt_id).length} with prompts
             </span>
           </div>
@@ -620,8 +620,8 @@ export function ProjectSequence() {
           >
             <Film size={28} className="text-white/20" />
             <div className="flex flex-col items-center gap-1.5">
-              <span className="font-sans text-[14px] font-semibold text-white">No shots yet</span>
-              <span className="font-mono text-[12px] text-readable text-center max-w-[280px]">
+              <span className="font-sans text-[15px] font-semibold text-white">No shots yet</span>
+              <span className="font-mono text-[13px] text-readable text-center max-w-[280px]">
                 Add shots to define your production sequence — each shot connects a prompt and result image to a specific scene.
               </span>
             </div>

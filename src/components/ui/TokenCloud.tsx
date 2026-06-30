@@ -171,7 +171,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Filter tokens…"
-            className="w-full h-9 pl-7 pr-2.5 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none transition-precise"
+            className="w-full h-9 pl-7 pr-2.5 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none transition-precise"
             style={{ border: "var(--border-default)" }}
           />
         </div>
@@ -216,7 +216,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
               if (e.key === "Escape") { setAddingNew(false); setNewTokenText(""); }
             }}
             placeholder={`Custom ${activeCategoryName} token…`}
-            className="flex-1 h-8 px-2.5 font-mono text-[11px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none transition-precise"
+            className="flex-1 h-8 px-2.5 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none transition-precise"
             style={{ border: "var(--border-strong)" }}
           />
           <button

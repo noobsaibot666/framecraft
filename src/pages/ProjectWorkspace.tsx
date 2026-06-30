@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
-  Star, AlertTriangle, Check, Image, FileText, Upload, Sparkles,
+  Star, Check, Image, FileText, Upload, Sparkles,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -34,6 +34,8 @@ import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/l
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { improveProjectField } from "@/lib/fieldImprovement";
 
 registerShortcutLabel("cmd+s", "Save (Craft / Project Workspace)");
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -69,8 +71,8 @@ const PROJECT_TYPE_OPTIONS = [
   { value: "research", label: "Research" },
 ];
 
-const ASPECT_RATIO_OPTIONS = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
 const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
+const VIDEO_ONLY_PROVIDERS = new Set(["seedance", "kling", "runway", "higgsfield"]);
 
 // ─── Shared field atoms ───────────────────────────────────────
 
@@ -78,12 +80,12 @@ function FieldLabel({ children, ai }: { children: React.ReactNode; ai?: boolean 
   if (ai) {
     return (
       <div className="flex items-center gap-1.5">
-        <label className="system-label text-[11px] text-muted">{children}</label>
+        <label className="system-label text-[12px] text-muted">{children}</label>
         <Sparkles size={9} className="text-cyan/55" />
       </div>
     );
   }
-  return <label className="system-label text-[11px] text-muted">{children}</label>;
+  return <label className="system-label text-[12px] text-muted">{children}</label>;
 }
 
 function FieldInput({ value, onChange, placeholder, mono = false }: {
@@ -92,7 +94,7 @@ function FieldInput({ value, onChange, placeholder, mono = false }: {
   return (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
       className={cn(
-        "h-10 px-3 text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full",
+        "h-10 px-3 text-[14px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full",
         mono ? "font-mono" : "font-sans"
       )}
       style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
@@ -105,7 +107,7 @@ function FieldTextarea({ value, onChange, placeholder, rows = 3 }: {
   return (
     <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
       rows={rows}
-      className="px-3 py-2.5 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full resize-none"
+      className="px-3 py-2.5 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full resize-none"
       style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
   );
 }
@@ -116,12 +118,45 @@ function FieldSelect<T extends string>({ value, onChange, options, empty }: {
   return (
     <div className="relative">
       <select value={value} onChange={(e) => onChange(e.target.value as T)}
-        className="appearance-none h-10 pl-3 pr-7 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
+        className="appearance-none h-10 pl-3 pr-7 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
         style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
         {empty && <option value="" className="bg-panel text-dim/50">{empty}</option>}
         {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
       </select>
       <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+    </div>
+  );
+}
+
+function TagChipInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase();
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+    setInput("");
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5 min-h-10 px-2.5 py-2 rounded-sm"
+      style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
+      {tags.map((tag) => (
+        <span key={tag} className="flex items-center gap-1 h-6 px-2 rounded-sm font-mono text-[10px] text-readable bg-white/8 border border-white/12">
+          {tag}
+          <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="text-muted hover:text-white leading-none">
+            <X size={8} />
+          </button>
+        </span>
+      ))}
+      <input
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(input); }
+          if (e.key === "Backspace" && !input && tags.length) onChange(tags.slice(0, -1));
+        }}
+        onBlur={() => { if (input.trim()) addTag(input); }}
+        placeholder={tags.length === 0 ? "Add tags…" : ""}
+        className="flex-1 min-w-20 bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
+      />
     </div>
   );
 }
@@ -155,6 +190,62 @@ function PillToggleGroup({ values, options, onChange }: {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function FieldImproveButton({ value, fieldName, projectTitle, projectContext, onImproved }: {
+  value: string;
+  fieldName: string;
+  projectTitle: string;
+  projectContext?: string;
+  onImproved: (v: string) => void;
+}) {
+  const availableModels = AI_MODELS.filter((m) => Boolean(getApiKey(m.provider)));
+  const [modelId, setModelId] = useState(() => availableModels[0]?.id ?? AI_MODELS[0].id);
+  const [improving, setImproving] = useState(false);
+
+  if (availableModels.length === 0) return null;
+
+  const model = AI_MODELS.find((m) => m.id === modelId) ?? availableModels[0];
+
+  const handleImprove = async () => {
+    if (!value.trim() || improving) return;
+    setImproving(true);
+    try {
+      const improved = await improveProjectField({ fieldName, currentValue: value, projectTitle, context: projectContext, model });
+      onImproved(improved);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setImproving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {availableModels.length > 1 && (
+        <select
+          value={modelId}
+          onChange={(e) => setModelId(e.target.value)}
+          className="h-7 px-2 rounded-sm bg-dark font-mono text-[10px] text-readable focus:outline-none"
+          style={{ border: "var(--border-default)" }}
+        >
+          {availableModels.map((m) => (
+            <option key={m.id} value={m.id}>{m.label}</option>
+          ))}
+        </select>
+      )}
+      <button
+        type="button"
+        onClick={handleImprove}
+        disabled={improving || !value.trim()}
+        className="flex items-center gap-1 h-7 px-2.5 rounded-sm font-mono text-[10px] text-cyan border border-cyan/30 hover:bg-cyan/10 disabled:opacity-40 transition-precise"
+        title={`Improve ${fieldName} with AI`}
+      >
+        <Sparkles size={9} />
+        {improving ? "Improving…" : "Improve"}
+      </button>
     </div>
   );
 }
@@ -193,32 +284,81 @@ function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; c
 
 // ─── Linked prompt row ────────────────────────────────────────
 
-function PromptRow({ prompt, onRemove, onOpen }: {
-  prompt: { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean };
+type ProjectResult = { id: string; prompt_id?: string; score_overall: number; is_winner: boolean; is_failed: boolean; thumbnail_path?: string };
+
+type ProjectPrompt = { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean; version: number; parent_id?: string; thumbnail_data?: string };
+
+function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
+  prompt: ProjectPrompt;
+  results?: ProjectResult[];
   onRemove: () => void;
   onOpen: () => void;
+  onImport?: () => void;
 }) {
   return (
-    <div className="flex items-center gap-3 px-3 py-3 rounded-sm group"
+    <div className="flex flex-col rounded-sm group overflow-hidden"
       style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
-        <span className="font-sans text-[13px] text-soft-white truncate block">{prompt.title}</span>
-        <div className="flex items-center gap-2 mt-0.5">
-          <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{prompt.provider}</span>
-          {prompt.is_winner && <span className="font-mono text-[9px] text-amber">WINNER</span>}
-          {prompt.is_failed && <span className="font-mono text-[9px] text-red">FAILED</span>}
+      <div className="flex items-center gap-3 px-3 py-3">
+        {prompt.thumbnail_data && (
+          <div className="shrink-0 w-10 h-10 rounded-sm overflow-hidden cursor-pointer" onClick={onOpen}>
+            <SafeThumb src={prompt.thumbnail_data} className="w-full h-full object-cover" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
+          <div className="flex items-center gap-1.5">
+            {prompt.version > 1 && (
+              <span className="font-mono text-[9px] text-cyan border border-cyan/30 px-1 py-0.5 rounded-sm shrink-0">v{prompt.version}</span>
+            )}
+            <span className="font-sans text-[14px] text-soft-white truncate block">{prompt.title}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{prompt.provider}</span>
+            {prompt.is_winner && <span className="font-mono text-[9px] text-amber">WINNER</span>}
+            {prompt.is_failed && <span className="font-mono text-[9px] text-red">FAILED</span>}
+            {results.length > 0 && (
+              <span className="font-mono text-[9px] text-muted">{results.length} result{results.length !== 1 ? "s" : ""}</span>
+            )}
+          </div>
         </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Star key={i} size={9} className={cn(i < prompt.rating ? "text-amber fill-amber/40" : "text-white/14")} />
+          ))}
+        </div>
+        <button type="button" onClick={onRemove}
+          className="text-muted hover:text-red transition-precise opacity-0 group-hover:opacity-100 shrink-0">
+          <X size={11} />
+        </button>
       </div>
-      {/* Stars */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Star key={i} size={9} className={cn(i < prompt.rating ? "text-amber fill-amber/40" : "text-white/14")} />
-        ))}
-      </div>
-      <button type="button" onClick={onRemove}
-        className="text-muted hover:text-red transition-precise opacity-0 group-hover:opacity-100 shrink-0">
-        <X size={11} />
-      </button>
+      {results.length > 0 ? (
+        <div className="flex gap-1.5 px-3 pb-3 overflow-x-auto">
+          {results.slice(0, 12).map((r) => (
+            <div key={r.id} className="relative shrink-0 w-14 h-14 rounded-sm overflow-hidden cursor-pointer" onClick={onOpen}>
+              <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
+              {r.is_winner && (
+                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-sm bg-black/60 flex items-center justify-center">
+                  <Star size={7} className="text-amber fill-amber/60" />
+                </span>
+              )}
+            </div>
+          ))}
+          {onImport && (
+            <button type="button" onClick={(e) => { e.stopPropagation(); onImport(); }}
+              className="shrink-0 w-14 h-14 rounded-sm border border-dashed border-white/14 hover:border-white/30 flex items-center justify-center text-dim/40 hover:text-white transition-precise"
+              title="Import results for this prompt">
+              <Upload size={11} />
+            </button>
+          )}
+        </div>
+      ) : onImport ? (
+        <div className="px-3 pb-2.5">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onImport(); }}
+            className="flex items-center gap-1 h-7 px-2.5 rounded-sm font-mono text-[9px] text-dim/50 hover:text-white border border-dashed border-white/10 hover:border-white/25 transition-precise"
+            title="Import results for this prompt">
+            <Upload size={9} /> Import results
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -235,7 +375,7 @@ function RefRow({ ref: r, onRemove, onOpen }: {
       style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
       <SafeThumb src={r.thumbnail_data} className="w-11 h-11 object-cover rounded-sm shrink-0" />
       <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
-        <span className="font-sans text-[13px] text-soft-white truncate block">{r.title}</span>
+        <span className="font-sans text-[14px] text-soft-white truncate block">{r.title}</span>
         <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{r.kind}</span>
       </div>
       <button type="button" onClick={onRemove}
@@ -278,7 +418,7 @@ function PromptPicker({ projectId, onAdd, onClose }: {
     <div className="flex flex-col gap-2">
       <input value={search} onChange={(e) => setSearch(e.target.value)}
         placeholder="Search prompts…" autoFocus
-        className="h-10 px-3 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+        className="h-10 px-3 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
       <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
         {items.map((p) => (
@@ -472,16 +612,28 @@ export function ProjectWorkspace() {
   const [briefText, setBriefText] = useState("");
   const [productionGoal, setProductionGoal] = useState("");
   const [category, setCategory] = useState("");
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+
+  const hasImageProvider = providerTargets.length === 0 || providerTargets.some((p) => !VIDEO_ONLY_PROVIDERS.has(p));
+  const hasVideoProvider = providerTargets.length === 0 || providerTargets.some((p) => VIDEO_ONLY_PROVIDERS.has(p));
 
   // Linked content
   const [linkedPrompts, setLinkedPrompts] = useState<Awaited<ReturnType<typeof getPromptsForProject>>>([]);
   const [linkedRefs, setLinkedRefs] = useState<Awaited<ReturnType<typeof getReferencesForProject>>>([]);
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
+
+  // Results grouped by owning prompt
+  const resultsByPromptId = linkedResults.reduce<Record<string, ProjectResult[]>>((acc, r) => {
+    if (r.prompt_id) {
+      (acc[r.prompt_id] ??= []).push(r);
+    }
+    return acc;
+  }, {});
   const [shotCount, setShotCount] = useState(0);
   const [shotComplete, setShotComplete] = useState(0);
   const [batchImportOpen, setBatchImportOpen] = useState(false);
+  const [batchImportPromptId, setBatchImportPromptId] = useState<string | null>(null);
 
   // Picker
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
@@ -492,6 +644,7 @@ export function ProjectWorkspace() {
 
   useEffect(() => {
     if (!id) return;
+    hydratedRef.current = false;
     (async () => {
       setLoading(true);
       const [proj, prompts, refs, results, shots] = await Promise.all([
@@ -520,7 +673,7 @@ export function ProjectWorkspace() {
       setBriefText(proj.brief_text ?? "");
       setProductionGoal(proj.production_goal ?? "");
       setCategory(proj.category ?? "");
-      setTags((proj.tags ?? []).join(", "));
+      setTags(proj.tags ?? []);
       setNotes(proj.notes ?? "");
       setLinkedPrompts(prompts);
       setLinkedRefs(refs);
@@ -550,7 +703,7 @@ export function ProjectWorkspace() {
     brief_text: briefText.trim() || undefined,
     production_goal: productionGoal.trim() || undefined,
     category: (category || undefined) as Project["category"] | undefined,
-    tags: tags.trim() ? tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
+    tags: tags.length ? tags : undefined,
     notes: notes.trim() || undefined,
   });
 
@@ -614,7 +767,7 @@ export function ProjectWorkspace() {
     setConstraints("");
     setCreativeGoals("");
     setCategory("");
-    setTags("");
+    setTags([]);
     setNotes("");
     setLinkedPrompts([]);
     setLinkedRefs([]);
@@ -697,11 +850,15 @@ export function ProjectWorkspace() {
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm"
             style={{ border: "var(--border-dim)" }}>
             <span className={cn("w-1.5 h-1.5 rounded-full", STATUS_DOT[status])} />
-            <FieldSelect<ProjectStatus>
+            <select
               value={status}
-              onChange={(v) => { setStatus(v); }}
-              options={STATUS_OPTIONS}
-            />
+              onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+              className="appearance-none font-mono text-[13px] text-white bg-transparent border-none focus:outline-none cursor-pointer"
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>
+              ))}
+            </select>
           </div>
           <button type="button" onClick={handleDelete}
             onBlur={() => setConfirmDelete(false)}
@@ -760,18 +917,18 @@ export function ProjectWorkspace() {
                 </span>
               ))}
               {!providerTargets.length && !aspectRatios.length && (
-                <span className="font-mono text-[11px] text-readable">Add provider and ratio targets in Setup.</span>
+                <span className="font-mono text-[12px] text-readable">Add provider and ratio targets in Setup.</span>
               )}
             </div>
             {(intendedOutput || creativeGoals) && (
-              <p className="font-mono text-[12px] leading-relaxed text-readable max-w-4xl">
+              <p className="font-mono text-[13px] leading-relaxed text-readable max-w-4xl">
                 {intendedOutput || creativeGoals}
               </p>
             )}
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
             <Button variant="primary" size="sm" onClick={() => navigate(`/craft?projectId=${id}`)}>
-              <Plus size={10} /> Craft Prompt
+              <Plus size={10} /> New Prompt
             </Button>
             <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${id}/sequence`)}>
               Sequence
@@ -807,10 +964,6 @@ export function ProjectWorkspace() {
               <FieldInput value={title} onChange={setTitle} placeholder="Project name…" />
             </div>
             <div className="flex flex-col gap-1.5">
-              <FieldLabel>CLIENT</FieldLabel>
-              <FieldInput value={client} onChange={setClient} placeholder="Client name…" mono />
-            </div>
-            <div className="flex flex-col gap-1.5">
               <FieldLabel>CAMPAIGN</FieldLabel>
               {allCampaigns.length > 0 ? (
                 <select
@@ -821,7 +974,7 @@ export function ProjectWorkspace() {
                     setCampaignId(newId);
                     setCampaign(found?.title ?? "");
                   }}
-                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 >
                   <option value="">— no campaign —</option>
@@ -852,10 +1005,6 @@ export function ProjectWorkspace() {
                 <FieldTextarea value={intendedOutput} onChange={setIntendedOutput} placeholder="Final assets, prompt systems, boards, videos..." rows={3} />
               </div>
               <div className="flex flex-col gap-2">
-                <FieldLabel ai>ASPECT RATIOS</FieldLabel>
-                <PillToggleGroup values={aspectRatios} options={ASPECT_RATIO_OPTIONS} onChange={setAspectRatios} />
-              </div>
-              <div className="flex flex-col gap-2">
                 <FieldLabel ai>PROVIDER TARGETS</FieldLabel>
                 <PillToggleGroup values={providerTargets} options={PROVIDER_TARGET_OPTIONS} onChange={setProviderTargets} />
               </div>
@@ -864,16 +1013,34 @@ export function ProjectWorkspace() {
 
           {/* Brief */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <FileText size={9} className="text-dim/40" />
-              <FieldLabel ai>BRIEF</FieldLabel>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <FileText size={9} className="text-dim/40" />
+                <FieldLabel ai>BRIEF</FieldLabel>
+              </div>
+              <FieldImproveButton
+                value={briefText}
+                fieldName="brief"
+                projectTitle={title}
+                projectContext={productionGoal || undefined}
+                onImproved={setBriefText}
+              />
             </div>
             <FieldTextarea value={briefText} onChange={setBriefText} placeholder="Paste brief, goals, or creative direction…" rows={5} />
           </div>
 
           {/* Production goal */}
           <div className="flex flex-col gap-1.5">
-            <FieldLabel ai>PRODUCTION GOAL</FieldLabel>
+            <div className="flex items-center justify-between">
+              <FieldLabel ai>PRODUCTION GOAL</FieldLabel>
+              <FieldImproveButton
+                value={productionGoal}
+                fieldName="production goal"
+                projectTitle={title}
+                projectContext={briefText || undefined}
+                onImproved={setProductionGoal}
+              />
+            </div>
             <FieldTextarea value={productionGoal} onChange={setProductionGoal} placeholder="What does success look like for this production?" rows={3} />
           </div>
 
@@ -896,23 +1063,24 @@ export function ProjectWorkspace() {
               brief_text: briefText || undefined,
               production_goal: productionGoal || undefined,
               category: (category || undefined) as Project["category"] | undefined,
-              tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+              tags: tags.length ? tags : undefined,
               notes: notes || undefined,
               created_at: "",
               updated_at: "",
             }}
             onApplied={(fields) => {
-              setVisualDirection(fields.visual_direction ?? "");
-              setCreativeGoals(fields.creative_goals ?? "");
+              if (fields.visual_direction !== undefined) setVisualDirection(fields.visual_direction);
+              if (fields.creative_goals !== undefined) setCreativeGoals(fields.creative_goals);
+              if (fields.constraints !== undefined) setConstraints(fields.constraints);
             }}
           />
 
           <Panel
-            title="CRAFT"
+            title="PRE-CRAFT"
             count={linkedPrompts.length}
             action={
               <Button variant="primary" size="sm" onClick={() => navigate(`/craft?projectId=${id}`)}>
-                <Plus size={10} /> Craft Prompt
+                <Plus size={10} /> New Prompt
               </Button>
             }
           >
@@ -921,14 +1089,18 @@ export function ProjectWorkspace() {
                 <FieldLabel ai>VISUAL DIRECTION</FieldLabel>
                 <FieldTextarea value={visualDirection} onChange={setVisualDirection} placeholder="Look, style, realism level..." rows={4} />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel ai>IMAGE NEEDS</FieldLabel>
-                <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <FieldLabel ai>VIDEO NEEDS</FieldLabel>
-                <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
-              </div>
+              {hasImageProvider && (
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel ai>IMAGE NEEDS</FieldLabel>
+                  <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
+                </div>
+              )}
+              {hasVideoProvider && (
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel ai>VIDEO NEEDS</FieldLabel>
+                  <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
+                </div>
+              )}
               <div className="flex flex-col gap-1.5 lg:col-span-2">
                 <FieldLabel ai>CREATIVE GOALS</FieldLabel>
                 <FieldTextarea value={creativeGoals} onChange={setCreativeGoals} placeholder="What good looks like, what to avoid, and what should become reusable..." rows={3} />
@@ -940,79 +1112,42 @@ export function ProjectWorkspace() {
             </div>
           </Panel>
 
-          {/* Notes */}
-          <div className="flex flex-col gap-1.5">
-            <FieldLabel>NOTES</FieldLabel>
-            <FieldTextarea value={notes} onChange={setNotes} placeholder="Internal notes…" rows={2} />
-          </div>
-
           {/* Prompts panel */}
           <Panel
             title="PROMPTS"
-            count={linkedPrompts.length}
+            count={linkedPrompts.length + (linkedResults.length > 0 ? linkedResults.length : 0)}
             action={
-              <button type="button"
-                onClick={() => setPickerMode(pickerMode === "prompts" ? null : "prompts")}
-                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
-                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                <Plus size={10} /> Add
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button type="button"
+                  onClick={() => { setBatchImportOpen((v) => !v); setPickerMode(null); }}
+                  disabled={linkedPrompts.length === 0}
+                  title={linkedPrompts.length === 0 ? "Link a prompt first" : "Import image results"}
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-white disabled:opacity-35 transition-precise px-2.5 py-1.5 rounded-sm"
+                  style={{ border: "var(--border-default)" }}>
+                  <Upload size={10} /> Import
+                </button>
+                <button type="button"
+                  onClick={() => { setPickerMode(pickerMode === "results" ? null : "results"); setBatchImportOpen(false); }}
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
+                  style={{ border: "var(--border-default)" }}>
+                  <Plus size={10} /> Add Result
+                </button>
+                <button type="button"
+                  onClick={() => { setPickerMode(pickerMode === "prompts" ? null : "prompts"); setBatchImportOpen(false); }}
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
+                  style={{ border: "var(--border-default)" }}>
+                  <Plus size={10} /> Add Prompt
+                </button>
+              </div>
             }
           >
+            {/* Pickers */}
             {pickerMode === "prompts" && (
               <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
                 <PromptPicker
                   projectId={id!}
                   onAdd={reloadLinks}
                   onClose={() => setPickerMode(null)}
-                />
-              </div>
-            )}
-            {linkedPrompts.length === 0 && pickerMode !== "prompts" ? (
-              <span className="font-mono text-[11px] text-muted">No prompts linked yet.</span>
-            ) : (
-              <div className="flex flex-col gap-1">
-                {linkedPrompts.map((p) => (
-                  <PromptRow
-                    key={p.id}
-                    prompt={p}
-                    onRemove={() => handleRemovePrompt(p.id)}
-                    onOpen={() => navigate(`/library/${p.id}`)}
-                  />
-                ))}
-              </div>
-            )}
-          </Panel>
-
-          <Panel
-            title="RESULTS"
-            count={linkedResults.length}
-            action={
-              <div className="flex items-center gap-1.5">
-                <button type="button"
-                  onClick={() => setPickerMode(pickerMode === "results" ? null : "results")}
-                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
-                  style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                  <Plus size={10} /> Add Existing
-                </button>
-                <button type="button"
-                  onClick={() => setBatchImportOpen((v) => !v)}
-                  disabled={linkedPrompts.length === 0}
-                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white disabled:opacity-35 transition-precise px-2.5 py-1.5 rounded-sm"
-                  style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                  <Upload size={10} /> Import
-                </button>
-              </div>
-            }
-          >
-            {batchImportOpen && linkedPrompts[0] && (
-              <div className="mb-3 p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
-                <BatchImportZone
-                  projectId={id!}
-                  promptId={linkedPrompts[0].id}
-                  promptProvider={linkedPrompts[0].provider}
-                  onComplete={() => { setBatchImportOpen(false); reloadLinks(); }}
-                  onCancel={() => setBatchImportOpen(false)}
                 />
               </div>
             )}
@@ -1025,51 +1160,95 @@ export function ProjectWorkspace() {
                 />
               </div>
             )}
-            {linkedResults.length === 0 && pickerMode !== "results" && !batchImportOpen ? (
-              <div className="flex flex-col gap-2">
-                <span className="font-mono text-[11px] text-muted">
-                  {linkedPrompts.length === 0
-                    ? "No results linked yet. Link a prompt first, then import images."
-                    : "No results linked yet. Use Import to add image results."}
-                </span>
-                {linkedPrompts.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setBatchImportOpen(true)}
-                    className="self-start flex items-center gap-1.5 px-3 py-2 rounded-sm font-mono text-[10px] text-white hover:text-cyan transition-precise"
-                    style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}
-                  >
-                    <Upload size={9} /> Import Image Results
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-4 md:grid-cols-6 gap-2.5">
-                {linkedResults.map((r) => (
-                    <div key={r.id} className="relative rounded-sm overflow-hidden aspect-square group">
-                      <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveResult(r.id)}
-                        className="absolute bottom-1 right-1 w-6 h-6 rounded-sm bg-black/70 text-white/60 hover:text-red opacity-0 group-hover:opacity-100 transition-precise flex items-center justify-center"
-                        title="Remove result from project"
+            {batchImportOpen && linkedPrompts.length > 0 && (() => {
+              const importTarget = linkedPrompts.find((p) => p.id === batchImportPromptId) ?? linkedPrompts[0];
+              return (
+                <div className="mb-3 flex flex-col gap-2">
+                  {linkedPrompts.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-readable">Import to:</span>
+                      <select
+                        value={importTarget.id}
+                        onChange={(e) => setBatchImportPromptId(e.target.value)}
+                        className="h-7 px-2 rounded-sm bg-dark font-mono text-[10px] text-soft-white focus:outline-none"
+                        style={{ border: "var(--border-default)" }}
                       >
-                        <Trash2 size={10} />
-                      </button>
-                      {r.is_winner && (
-                        <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-sm bg-white/20 flex items-center justify-center">
-                          <Star size={8} className="text-white/80 fill-white/60" />
-                        </span>
-                      )}
-                      {r.is_failed && (
-                        <span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-sm bg-red/20 flex items-center justify-center">
-                          <AlertTriangle size={7} className="text-red/70" />
-                        </span>
-                      )}
+                        {linkedPrompts.map((p) => (
+                          <option key={p.id} value={p.id}>{p.title}</option>
+                        ))}
+                      </select>
                     </div>
-                ))}
-              </div>
-            )}
+                  )}
+                  <div className="p-4 rounded-sm" style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
+                    <BatchImportZone
+                      projectId={id!}
+                      promptId={importTarget.id}
+                      promptProvider={importTarget.provider}
+                      onComplete={() => { setBatchImportOpen(false); reloadLinks(); }}
+                      onCancel={() => setBatchImportOpen(false)}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Prompt cards with inline results */}
+            {linkedPrompts.length === 0 && !pickerMode && !batchImportOpen ? (
+              <span className="font-mono text-[12px] text-muted">No prompts linked yet. Add a prompt to start.</span>
+            ) : (() => {
+              if (linkedPrompts.length === 0) return null;
+              const promptIds = new Set(linkedPrompts.map((p) => p.id));
+              const roots = linkedPrompts.filter((p) => !p.parent_id || !promptIds.has(p.parent_id));
+              const childrenOf = linkedPrompts.reduce<Record<string, ProjectPrompt[]>>((acc, p) => {
+                if (p.parent_id && promptIds.has(p.parent_id)) {
+                  (acc[p.parent_id] ??= []).push(p);
+                }
+                return acc;
+              }, {});
+              const orphanResults = linkedResults.filter((r) => !r.prompt_id || !promptIds.has(r.prompt_id));
+              return (
+                <div className="flex flex-col gap-2">
+                  {roots.map((p) => (
+                    <div key={p.id} className="flex flex-col gap-1">
+                      <PromptRow
+                        prompt={p}
+                        results={resultsByPromptId[p.id] ?? []}
+                        onRemove={() => handleRemovePrompt(p.id)}
+                        onOpen={() => navigate(`/library/${p.id}`)}
+                        onImport={() => { setBatchImportPromptId(p.id); setBatchImportOpen(true); setPickerMode(null); }}
+                      />
+                      {(childrenOf[p.id] ?? []).map((child) => (
+                        <div key={child.id} className="pl-4">
+                          <PromptRow
+                            prompt={child}
+                            results={resultsByPromptId[child.id] ?? []}
+                            onRemove={() => handleRemovePrompt(child.id)}
+                            onOpen={() => navigate(`/library/${child.id}`)}
+                            onImport={() => { setBatchImportPromptId(child.id); setBatchImportOpen(true); setPickerMode(null); }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {orphanResults.length > 0 && (
+                    <div className="flex flex-col gap-1.5 mt-1">
+                      <span className="font-mono text-[9px] text-dim/50 uppercase tracking-widest">Unlinked results</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {orphanResults.map((r) => (
+                          <div key={r.id} className="relative w-14 h-14 rounded-sm overflow-hidden group">
+                            <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
+                            <button type="button" onClick={() => handleRemoveResult(r.id)}
+                              className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-sm bg-black/70 text-white/60 hover:text-red opacity-0 group-hover:opacity-100 transition-precise flex items-center justify-center">
+                              <Trash2 size={9} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </Panel>
         </div>
 
@@ -1090,8 +1269,7 @@ export function ProjectWorkspace() {
             </div>
             <div className="flex flex-col gap-1.5">
               <FieldLabel>TAGS</FieldLabel>
-              <FieldInput value={tags} onChange={setTags} placeholder="tag1, tag2, tag3" mono />
-              <span className="font-mono text-[10px] text-muted">Comma-separated</span>
+              <TagChipInput tags={tags} onChange={setTags} />
             </div>
           </div>
 
@@ -1118,7 +1296,7 @@ export function ProjectWorkspace() {
               </div>
             )}
             {linkedRefs.length === 0 && pickerMode !== "references" ? (
-              <span className="font-mono text-[11px] text-muted">No inspirations linked yet.</span>
+              <span className="font-mono text-[12px] text-muted">No inspirations linked yet.</span>
             ) : (
               <div className="flex flex-col gap-1">
                 {linkedRefs.map((r) => (
@@ -1136,8 +1314,14 @@ export function ProjectWorkspace() {
           {/* Recommendations */}
           <div className="flex flex-col gap-4 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <RecommendationPanel
-              context={{ category: category || undefined, projectId: id }}
+              context={{ category: category || undefined, provider: providerTargets[0] || undefined, projectId: id }}
             />
+          </div>
+
+          {/* Notes */}
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel>NOTES</FieldLabel>
+            <FieldTextarea value={notes} onChange={setNotes} placeholder="Internal notes…" rows={2} />
           </div>
 
           {/* Quick actions */}
@@ -1191,7 +1375,7 @@ export function ProjectWorkspace() {
           <Button variant="ghost" size="sm"
             onClick={() => navigate(`/craft?projectId=${id}`)}
             className="w-full justify-center">
-            <Plus size={10} /> Craft New Prompt for Project
+            <Plus size={10} /> New Prompt for Project
           </Button>
         </div>
       </div>

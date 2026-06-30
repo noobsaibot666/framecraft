@@ -270,7 +270,7 @@ export function ResultReview() {
               >
                 <Upload size={20} className="text-dim/40" />
                 <div className="flex flex-col items-center gap-1">
-                  <span className="font-mono text-[11px] text-dim">Drop image here or click to browse</span>
+                  <span className="font-mono text-[12px] text-dim">Drop image here or click to browse</span>
                   <span className="font-mono text-[9px] text-dim/50">JPEG, PNG, WEBP — any size</span>
                 </div>
                 <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={onInputChange} />

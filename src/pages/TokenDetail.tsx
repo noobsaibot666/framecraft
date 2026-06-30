@@ -52,7 +52,7 @@ function PromptRow({ prompt, onClick }: { prompt: TokenDetailPrompt; onClick: ()
       onClick={onClick}
     >
       <div className="flex-1 min-w-0">
-        <span className="font-sans text-[13px] text-soft-white truncate block">{prompt.title}</span>
+        <span className="font-sans text-[14px] text-soft-white truncate block">{prompt.title}</span>
         <div className="flex items-center gap-2 mt-0.5">
           <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{prompt.provider}</span>
           {prompt.is_winner && <span className="font-mono text-[9px] text-amber">WINNER</span>}
@@ -76,7 +76,7 @@ function ComboRow({ combo, onClick }: { combo: TokenCombo; onClick: () => void }
       onClick={onClick}
     >
       <Zap size={9} className="text-cyan shrink-0" />
-      <span className="flex-1 font-mono text-[12px] text-soft-white truncate">{combo.partner_text}</span>
+      <span className="flex-1 font-mono text-[13px] text-soft-white truncate">{combo.partner_text}</span>
       <span className="font-mono text-[10px] text-readable tabular-nums">{rating.toFixed(1)} avg</span>
       <span className="font-mono text-[9px] text-muted">{combo.co_occurrence_count}×</span>
     </div>
@@ -96,7 +96,7 @@ function QualityBar({ score }: { score: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className={cn("font-mono text-[11px] tabular-nums shrink-0", isNegative ? "text-red" : "text-cyan")}>
+      <span className={cn("font-mono text-[12px] tabular-nums shrink-0", isNegative ? "text-red" : "text-cyan")}>
         {score > 0 ? "+" : ""}{score.toFixed(1)}
       </span>
     </div>
@@ -168,7 +168,7 @@ export function TokenDetail() {
       <PageContainer title="Token" subtitle="NOT FOUND"
         action={<Button variant="ghost" size="md" onClick={() => navigate(-1)}><ArrowLeft size={11} /> Back</Button>}>
         <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[11px] text-muted">Token not found.</span>
+          <span className="font-mono text-[12px] text-muted">Token not found.</span>
         </div>
       </PageContainer>
     );
@@ -220,7 +220,7 @@ export function TokenDetail() {
             <span className="font-mono text-[10px] text-readable">({prompts.length})</span>
           </div>
           {prompts.length === 0 ? (
-            <span className="font-mono text-[11px] text-muted">
+            <span className="font-mono text-[12px] text-muted">
               No prompts have used this token yet. Add it in Craft to start building its history.
             </span>
           ) : (
@@ -243,7 +243,7 @@ export function TokenDetail() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <span className="system-label text-soft-white">PROVEN COMBOS</span>
             {combos.length === 0 ? (
-              <span className="font-mono text-[11px] text-muted">
+              <span className="font-mono text-[12px] text-muted">
                 No co-occurrence data yet. Rate results to build pattern intelligence.
               </span>
             ) : (
@@ -295,7 +295,7 @@ export function TokenDetail() {
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-center justify-between">
                   <span className="font-mono text-[9px] text-muted tracking-widest uppercase">{label}</span>
-                  <span className="font-mono text-[11px] text-readable">{value}</span>
+                  <span className="font-mono text-[12px] text-readable">{value}</span>
                 </div>
               ))}
             </div>

@@ -366,11 +366,13 @@ export async function removePromptFromProject(projectId: string, promptId: strin
 
 export async function getPromptsForProject(projectId: string): Promise<{
   id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean;
+  version: number; parent_id?: string; thumbnail_data?: string;
 }[]> {
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
-    `SELECT p.id, p.title, p.provider, p.rating, p.is_winner, p.is_failed
+    `SELECT p.id, p.title, p.provider, p.rating, p.is_winner, p.is_failed,
+            p.version, p.parent_id, p.thumbnail_data
      FROM prompts p
      JOIN project_prompts pp ON p.id = pp.prompt_id
      WHERE pp.project_id = $1
@@ -384,6 +386,9 @@ export async function getPromptsForProject(projectId: string): Promise<{
     rating: (r.rating as number) ?? 0,
     is_winner: Boolean(r.is_winner),
     is_failed: Boolean(r.is_failed),
+    version: (r.version as number) ?? 1,
+    parent_id: r.parent_id as string | undefined,
+    thumbnail_data: r.thumbnail_data as string | undefined,
   }));
 }
 
@@ -410,12 +415,12 @@ export async function removeResultFromProject(projectId: string, resultId: strin
 }
 
 export async function getResultsForProject(projectId: string): Promise<{
-  id: string; score_overall: number; is_winner: boolean; is_failed: boolean; thumbnail_path?: string;
+  id: string; prompt_id?: string; score_overall: number; is_winner: boolean; is_failed: boolean; thumbnail_path?: string;
 }[]> {
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
-    `SELECT r.id, r.score_overall, r.is_winner, r.is_failed, r.thumbnail_path
+    `SELECT r.id, r.prompt_id, r.score_overall, r.is_winner, r.is_failed, r.thumbnail_path
      FROM results r
      JOIN project_results pr ON r.id = pr.result_id
      WHERE pr.project_id = $1
@@ -424,6 +429,7 @@ export async function getResultsForProject(projectId: string): Promise<{
   )) as Record<string, unknown>[];
   return rows.map((r) => ({
     id: r.id as string,
+    prompt_id: r.prompt_id as string | undefined,
     score_overall: (r.score_overall as number) ?? 0,
     is_winner: Boolean(r.is_winner),
     is_failed: Boolean(r.is_failed),

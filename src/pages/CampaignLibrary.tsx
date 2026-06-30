@@ -35,9 +35,11 @@ export function CampaignLibrary() {
       setNewClient("");
       setShowCreate(false);
       toast(`"${c.title}" created`, "success");
+      // Optimistically add to list so it appears if user navigates back
+      setCampaigns((prev) => [c, ...prev]);
       navigate(`/campaigns/${c.id}`);
-    } catch {
-      toast("Failed to create campaign", "error");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err) || "Failed to create campaign", "error");
     } finally {
       setCreating(false);
     }
@@ -72,7 +74,7 @@ export function CampaignLibrary() {
 
         {/* Header row */}
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] text-readable tracking-widest uppercase">
+          <span className="font-mono text-[12px] text-readable tracking-widest uppercase">
             {campaigns.length} campaign{campaigns.length !== 1 ? "s" : ""}
           </span>
           <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
@@ -86,7 +88,7 @@ export function CampaignLibrary() {
             className="flex flex-col gap-4 p-6 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <span className="font-sans text-[13px] font-semibold text-white tracking-wide">NEW CAMPAIGN</span>
+            <span className="font-sans text-[14px] font-semibold text-white tracking-wide">NEW CAMPAIGN</span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Title</span>
@@ -96,7 +98,7 @@ export function CampaignLibrary() {
                   onChange={(e) => setNewTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                   placeholder="e.g. Summer 2026 Campaign"
-                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 />
               </div>
@@ -107,7 +109,7 @@ export function CampaignLibrary() {
                   onChange={(e) => setNewClient(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                   placeholder="e.g. Acme Co"
-                  className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.24)" }}
                 />
               </div>
@@ -127,7 +129,7 @@ export function CampaignLibrary() {
         {campaigns.length === 0 && !showCreate && (
           <div className="flex flex-col items-center justify-center gap-4 py-24 text-center w-full">
             <Briefcase size={28} className="text-readable" />
-            <p className="font-mono text-[12px] text-readable leading-relaxed max-w-xs">
+            <p className="font-mono text-[13px] text-readable leading-relaxed max-w-xs">
               Campaigns group projects under a single client job. Create one to get started.
             </p>
             <Button variant="ghost" size="sm" onClick={() => setShowCreate(true)}>
@@ -198,9 +200,9 @@ function CampaignCard({
 
       {/* Title + client */}
       <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-        <span className="font-sans text-[14px] font-semibold text-white truncate">{campaign.title}</span>
+        <span className="font-sans text-[15px] font-semibold text-white truncate">{campaign.title}</span>
         {campaign.client && (
-          <span className="font-mono text-[11px] text-readable">{campaign.client}</span>
+          <span className="font-mono text-[12px] text-readable">{campaign.client}</span>
         )}
       </div>
 

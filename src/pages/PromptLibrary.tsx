@@ -149,7 +149,7 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
             {prompt.title}
           </span>
           {prompt.description && (
-            <span className="font-mono text-[12px] text-readable leading-snug line-clamp-2">
+            <span className="font-mono text-[13px] text-readable leading-snug line-clamp-2">
               {prompt.description}
             </span>
           )}
@@ -261,7 +261,7 @@ function NativeSelect({
         onChange={(e) => onChange(e.target.value)}
         className={cn(
           "w-full appearance-none pr-7",
-          "font-mono text-[11px] tracking-[0.06em] uppercase",
+          "font-mono text-[12px] tracking-[0.06em] uppercase",
           "bg-transparent text-readable",
           "rounded-sm px-3 py-2.5",
           "focus:outline-none focus:text-white transition-precise",
@@ -583,7 +583,7 @@ export function PromptLibrary() {
             </div>
             <div className="flex min-w-0 flex-col gap-2">
               <span className="font-sans text-[18px] font-semibold text-white">Library overview</span>
-              <span className="font-mono text-[12px] leading-relaxed text-readable">
+              <span className="font-mono text-[13px] leading-relaxed text-readable">
                 Scan saved prompts by quality, provider, result coverage, and reuse potential.
               </span>
             </div>
@@ -743,7 +743,7 @@ export function PromptLibrary() {
 
       {/* Delete confirmation */}
       {confirmDelete && (
-        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[11px] text-red flex items-center justify-between"
+        <div className="mb-4 px-4 py-3 rounded-sm font-mono text-[12px] text-red flex items-center justify-between"
           style={{ background: "rgba(215,25,33,0.06)", border: "var(--border-active)" }}>
           <span>Click delete again to confirm: <span className="text-white/60">{confirmDelete.title}</span></span>
           <button className="text-dim hover:text-white" onClick={() => setConfirmDelete(null)}>Cancel</button>
@@ -762,7 +762,7 @@ export function PromptLibrary() {
           >
             <ImageOff size={28} className="text-cyan" />
             <span className="system-label">LIBRARY EMPTY</span>
-            <span className="font-mono text-[12px] text-readable text-center leading-relaxed">
+            <span className="font-mono text-[13px] text-readable text-center leading-relaxed">
               {searchVal
                 ? "No prompts match your search."
                 : "No prompts stored yet. Craft your first prompt or import one."}
@@ -793,7 +793,7 @@ export function PromptLibrary() {
               {tagFilteredPrompts.length === 1 ? "PROMPT" : "PROMPTS"}
               {tagFilter && <span className="text-dim/50 ml-2">#{tagFilter}</span>}
             </span>
-            <span className="font-mono text-[11px] text-readable">
+            <span className="font-mono text-[12px] text-readable">
               {metrics.withResults} with results · {metrics.failed} failed marked
             </span>
           </div>
@@ -832,7 +832,7 @@ export function PromptLibrary() {
                   )}
                   <ProviderBadge provider={p.provider} />
                   {p.is_winner && <Star size={10} className="text-amber fill-amber/40 shrink-0" />}
-                  <span className="font-sans text-[13px] font-medium text-white truncate flex-1 min-w-0">{p.title}</span>
+                  <span className="font-sans text-[14px] font-medium text-white truncate flex-1 min-w-0">{p.title}</span>
                   {p.parent_id && (
                     <span className="font-mono text-[7px] uppercase tracking-widest px-1 py-0.5 rounded-sm text-dim/40 shrink-0"
                       style={{ border: "1px solid rgba(255,255,255,0.08)" }}>copy</span>

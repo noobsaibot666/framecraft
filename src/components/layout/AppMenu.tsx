@@ -91,18 +91,18 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
       <div className="flex flex-col gap-5">
         <div className="flex items-start gap-3">
           <MonitorCog size={16} className="mt-0.5 shrink-0 text-cyan" />
-          <p className="font-mono text-[12px] leading-relaxed text-readable">
+          <p className="font-mono text-[13px] leading-relaxed text-readable">
             Applied when starting a new prompt with no project context.
           </p>
         </div>
 
         {/* Default provider */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Provider</span>
+          <span className="font-mono text-[12px] uppercase tracking-widest text-readable">Default Provider</span>
           <select
             value={prefs.defaultProvider}
             onChange={(e) => save({ ...prefs, defaultProvider: e.target.value })}
-            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.24)" }}
           >
             {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
@@ -113,11 +113,11 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
 
         {/* Default aspect ratio */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Aspect Ratio</span>
+          <span className="font-mono text-[12px] uppercase tracking-widest text-readable">Default Aspect Ratio</span>
           <select
             value={prefs.defaultAspectRatio}
             onChange={(e) => save({ ...prefs, defaultAspectRatio: e.target.value })}
-            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.24)" }}
           >
             {PREF_ASPECT_RATIOS.map((r) => (
@@ -128,11 +128,11 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
 
         {/* Default category */}
         <div className="flex flex-col gap-1.5">
-          <span className="font-mono text-[11px] uppercase tracking-widest text-readable">Default Category</span>
+          <span className="font-mono text-[12px] uppercase tracking-widest text-readable">Default Category</span>
           <select
             value={prefs.defaultCategory}
             onChange={(e) => save({ ...prefs, defaultCategory: e.target.value })}
-            className="h-10 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.24)" }}
           >
             {PREF_CATEGORIES.map((c) => (
@@ -150,7 +150,7 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
           <Link
             to="/settings"
             onClick={onClose}
-            className="font-mono text-[11px] uppercase tracking-widest text-readable hover:text-cyan transition-precise"
+            className="font-mono text-[12px] uppercase tracking-widest text-readable hover:text-cyan transition-precise"
           >
             Full Settings →
           </Link>
@@ -164,7 +164,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
   return (
     <NativeModal title="Framecraft" eyebrow="About" onClose={onClose}>
       <div className="flex flex-col gap-5">
-        <p className="font-mono text-[12px] leading-relaxed text-readable">
+        <p className="font-mono text-[13px] leading-relaxed text-readable">
           Creative prompt workspace for projects, references, recipes, comparison, analysis, and portable libraries.
         </p>
 
@@ -218,7 +218,7 @@ function MenuItem({ icon, label, onClick }: { icon: ReactNode; label: string; on
     <button
       type="button"
       role="menuitem"
-      className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[11px] uppercase tracking-widest text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
+      className="flex w-full items-center gap-3 rounded-[5px] px-3 py-2.5 text-left font-mono text-[12px] uppercase tracking-widest text-soft-white/80 transition-precise hover:bg-cyan/8 hover:text-cyan"
       onClick={onClick}
     >
       {icon}

@@ -147,6 +147,18 @@ pub fn run() {
             sql: include_str!("../migrations/023_prompt_thumbnail.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 24,
+            description: "remove_seeded_recipes",
+            sql: include_str!("../migrations/024_remove_seeded_recipes.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 25,
+            description: "prompt_builder_state",
+            sql: include_str!("../migrations/025_prompt_builder_state.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

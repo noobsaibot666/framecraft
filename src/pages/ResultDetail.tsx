@@ -77,7 +77,7 @@ function ResultImage({ src }: { src?: string }) {
   if (!image.src) return (
     <div className="w-full aspect-video rounded-card bg-black/30 flex items-center justify-center"
       style={{ border: "var(--border-default)" }}>
-      <span className="font-mono text-[11px] text-dim/40">No image stored</span>
+      <span className="font-mono text-[12px] text-dim/40">No image stored</span>
     </div>
   );
   return (

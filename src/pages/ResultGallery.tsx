@@ -148,7 +148,7 @@ function GalleryCard({
 
       {/* Meta */}
       <div className="px-3 py-2.5 flex flex-col gap-0.5">
-        <span className="font-sans text-[11px] font-medium text-white/80 truncate text-left">{result.prompt_title}</span>
+        <span className="font-sans text-[12px] font-medium text-white/80 truncate text-left">{result.prompt_title}</span>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[9px] text-dim/60 uppercase tracking-wider">
             {result.score_overall > 0 ? `${result.score_overall}/5` : "Unrated"}
@@ -522,8 +522,8 @@ export function ResultGallery() {
           <div className="flex flex-col items-center justify-center gap-4 py-16">
             <ImageOff size={24} className="text-dim/30" />
             <div className="flex flex-col items-center gap-1">
-              <span className="font-sans text-[14px] text-readable">No results found</span>
-              <span className="font-mono text-[11px] text-muted">
+              <span className="font-sans text-[15px] text-readable">No results found</span>
+              <span className="font-mono text-[12px] text-muted">
                 {filter !== "all" || minScore > 0 || searchText ? "Try a different filter, or " : ""}
                 Add results from Prompt Detail pages.
               </span>
@@ -559,7 +559,7 @@ export function ResultGallery() {
                   <div key={g.promptId} className="flex flex-col gap-3">
                     <div className="flex items-center gap-3">
                       <button type="button" onClick={() => navigate(`/library/${g.promptId}`)}
-                        className="font-mono text-[11px] text-soft-white hover:text-cyan transition-precise truncate max-w-sm text-left">
+                        className="font-mono text-[12px] text-soft-white hover:text-cyan transition-precise truncate max-w-sm text-left">
                         {g.promptTitle}
                       </button>
                       <span className="font-mono text-[9px] text-dim/40 shrink-0">{g.results.length} result{g.results.length !== 1 ? "s" : ""}</span>

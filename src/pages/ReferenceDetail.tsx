@@ -53,7 +53,7 @@ const ROLE_LABELS: Record<ReferenceRole, string> = {
 // ─── Sub-components ───────────────────────────────────────────
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="system-label text-[11px] text-muted">{children}</label>;
+  return <label className="system-label text-[12px] text-muted">{children}</label>;
 }
 
 function FieldInput({ value, onChange, placeholder, mono = false }: {
@@ -68,7 +68,7 @@ function FieldInput({ value, onChange, placeholder, mono = false }: {
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       className={cn(
-        "h-10 px-3 text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full",
+        "h-10 px-3 text-[14px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full",
         mono ? "font-mono" : "font-sans"
       )}
       style={{ border: "1px solid rgba(255,255,255,0.16)" }}
@@ -88,7 +88,7 @@ function FieldTextarea({ value, onChange, placeholder, rows = 3 }: {
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="px-3 py-2.5 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full resize-none"
+      className="px-3 py-2.5 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-full resize-none"
       style={{ border: "1px solid rgba(255,255,255,0.16)" }}
     />
   );
@@ -105,7 +105,7 @@ function FieldSelect({ value, onChange, options, empty = "— select —" }: {
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="appearance-none h-10 pl-3 pr-7 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
+        className="appearance-none h-10 pl-3 pr-7 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
         style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
         <option value="" className="bg-panel text-dim/50">{empty}</option>
         {options.map((o) => <option key={o} value={o} className="bg-panel text-white">{o}</option>)}
@@ -179,13 +179,13 @@ function ImageDropZone({ src, onFile }: {
           <img src={image.src} alt="reference" className="w-full h-full object-contain" onError={image.onError} />
           <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
             style={{ background: "rgba(0,0,0,0.6)" }}>
-            <span className="font-mono text-[11px] text-white tracking-widest uppercase">Replace image</span>
+            <span className="font-mono text-[12px] text-white tracking-widest uppercase">Replace image</span>
           </div>
         </>
       ) : (
         <div className="flex flex-col items-center gap-2 cursor-pointer">
           <Upload size={24} className="text-muted" />
-          <span className="font-mono text-[11px] text-readable tracking-widest uppercase">Drop image or click</span>
+          <span className="font-mono text-[12px] text-readable tracking-widest uppercase">Drop image or click</span>
         </div>
       )}
       <input ref={inputRef} type="file" accept="image/*" className="hidden"
@@ -210,7 +210,7 @@ function LinkedSection({ title, items }: {
         {items.map((item) => (
           <div key={item.id} className="flex items-center justify-between px-3 py-2.5 rounded-sm"
             style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
-            <span className="font-sans text-[12px] text-readable truncate">{item.label}</span>
+            <span className="font-sans text-[13px] text-readable truncate">{item.label}</span>
             <span className="font-mono text-[9px] text-muted tracking-widest uppercase ml-2 shrink-0">
               {ROLE_LABELS[item.role]}
             </span>
@@ -360,7 +360,7 @@ export function ReferenceDetail() {
     return (
       <PageContainer title="Reference" subtitle="LOADING…">
         <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[11px] text-muted">Loading...</span>
+          <span className="font-mono text-[12px] text-muted">Loading...</span>
         </div>
       </PageContainer>
     );
@@ -426,7 +426,7 @@ export function ReferenceDetail() {
               <FieldLabel>KIND</FieldLabel>
               <div className="relative">
                 <select value={kind} onChange={(e) => setKind(e.target.value as ReferenceKind)}
-                  className="appearance-none h-10 pl-3 pr-7 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
+                  className="appearance-none h-10 pl-3 pr-7 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none w-full cursor-pointer"
                   style={{ border: "1px solid rgba(255,255,255,0.16)" }}>
                   {KIND_OPTIONS.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
                 </select>

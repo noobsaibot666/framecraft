@@ -50,7 +50,7 @@ function ModelPicker({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+      className="h-9 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
       style={{ border: "1px solid rgba(255,255,255,0.10)" }}
     >
       {available.map((m) => (
@@ -82,10 +82,10 @@ function SuggestionCard({
     <div className="flex flex-col gap-3 p-4 rounded-card"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
       <div className="flex items-start gap-3">
-        <span className="font-mono text-[13px] text-amber mt-0.5">{SUGGESTION_ICON[s.kind]}</span>
+        <span className="font-mono text-[14px] text-amber mt-0.5">{SUGGESTION_ICON[s.kind]}</span>
         <div className="flex flex-col gap-1 flex-1">
           <span className="system-label text-[10px] text-readable">{s.label}</span>
-          <p className="font-sans text-[12px] text-soft-white leading-relaxed">{s.body}</p>
+          <p className="font-sans text-[13px] text-soft-white leading-relaxed">{s.body}</p>
         </div>
       </div>
       <div className="flex gap-3 flex-wrap pl-6">
@@ -130,7 +130,7 @@ function MessageBubble({ msg }: { msg: AssistantMessage }) {
             : "bg-transparent",
         )}
           style={isUser ? {} : { border: "var(--border-dim)" }}>
-          <p className="font-sans text-[13px] text-soft-white leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+          <p className="font-sans text-[14px] text-soft-white leading-relaxed whitespace-pre-wrap">{msg.content}</p>
         </div>
         {msg.citations && msg.citations.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -169,12 +169,12 @@ function ConfirmModal({
       <div className="flex flex-col gap-4 p-6 rounded-card w-[360px]"
         style={{ border: "var(--border-default)", background: "var(--surface-panel)" }}>
         <div className="flex items-start justify-between gap-2">
-          <span className="font-sans text-[13px] text-white font-medium">{title}</span>
+          <span className="font-sans text-[14px] text-white font-medium">{title}</span>
           <button type="button" onClick={onCancel} className="text-dim/40 hover:text-white transition-precise">
             <X size={12} />
           </button>
         </div>
-        <p className="font-sans text-[11px] text-soft-white/70 leading-snug">{body}</p>
+        <p className="font-sans text-[12px] text-soft-white/70 leading-snug">{body}</p>
         <div className="flex gap-2 justify-end">
           <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
           <Button variant="primary" size="sm" onClick={onConfirm}>
@@ -211,7 +211,7 @@ function ThreadList({
         </button>
       </div>
       {threads.length === 0 && (
-        <p className="font-mono text-[11px] text-readable px-1">No threads yet.</p>
+        <p className="font-mono text-[12px] text-readable px-1">No threads yet.</p>
       )}
       {threads.map((t) => (
         <div key={t.id}
@@ -221,7 +221,7 @@ function ThreadList({
           )}
           onClick={() => onSelect(t.id)}
         >
-          <span className="flex-1 font-sans text-[12px] truncate"
+          <span className="flex-1 font-sans text-[13px] truncate"
             style={{ color: activeId === t.id ? "rgb(255,255,255)" : "var(--text-readable)" }}>
             {t.title}
           </span>
@@ -463,7 +463,7 @@ export function ProjectAssistant() {
                   {pack.results.avgScore > 0 && <Row label="Avg score" value={`${pack.results.avgScore}/5`} />}
                 </>
               ) : (
-                <p className="font-mono text-[11px] text-readable">No project data.</p>
+                <p className="font-mono text-[12px] text-readable">No project data.</p>
               )}
             </div>
           </div>
@@ -505,12 +505,12 @@ export function ProjectAssistant() {
             {!activeThreadId && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                 <Cpu size={28} className="text-cyan" />
-                <p className="font-sans text-[14px] text-readable max-w-[420px] leading-relaxed">
+                <p className="font-sans text-[15px] text-readable max-w-[420px] leading-relaxed">
                   Ask about this project. The assistant uses local prompts, results, references, and deliverables.
                 </p>
                 <button type="button"
                   onClick={handleNewThread}
-                  className="font-mono text-[11px] text-cyan hover:text-white transition-precise flex items-center gap-2 mt-2">
+                  className="font-mono text-[12px] text-cyan hover:text-white transition-precise flex items-center gap-2 mt-2">
                   <Plus size={11} /> Start a thread
                 </button>
               </div>
@@ -522,7 +522,7 @@ export function ProjectAssistant() {
                   <Cpu size={11} className="text-amber" />
                 </div>
                 <div className="px-4 py-3 rounded-card" style={{ border: "var(--border-dim)" }}>
-                  <span className="font-ndot text-[14px] text-readable">···</span>
+                  <span className="font-ndot text-[15px] text-readable">···</span>
                 </div>
               </div>
             )}
@@ -530,7 +530,7 @@ export function ProjectAssistant() {
               <div className="flex items-start gap-2 px-3 py-2 rounded-sm"
                 style={{ border: "1px solid rgba(215,25,33,0.2)", background: "rgba(215,25,33,0.04)" }}>
                 <AlertTriangle size={10} className="text-red/50 mt-0.5 shrink-0" />
-                <p className="font-mono text-[11px] text-red/80">{error}</p>
+                <p className="font-mono text-[12px] text-red/80">{error}</p>
               </div>
             )}
             <div ref={bottomRef} />
@@ -550,7 +550,7 @@ export function ProjectAssistant() {
               placeholder="Ask about this project..."
               rows={2}
               disabled={sending}
-              className="flex-1 px-4 py-3 font-sans text-[13px] text-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none resize-none"
+              className="flex-1 px-4 py-3 font-sans text-[14px] text-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none resize-none"
               style={{ border: "1px solid rgba(255,255,255,0.08)" }}
             />
             <button type="button"
@@ -587,7 +587,7 @@ function Row({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
       <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{label}</span>
-      <span className="font-mono text-[11px] text-soft-white">{value}</span>
+      <span className="font-mono text-[12px] text-soft-white">{value}</span>
     </div>
   );
 }

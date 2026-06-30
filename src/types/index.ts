@@ -61,6 +61,7 @@ export interface Prompt {
   parent_id?: string;
   source_url?: string;
   thumbnail_data?: string;
+  builder_state?: string;
   created_at: string;
   updated_at: string;
 }

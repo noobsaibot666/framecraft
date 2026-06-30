@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="flex flex-col items-center justify-center min-h-64 p-8 gap-6">
           <div className="flex flex-col items-center gap-3">
             <AlertTriangle size={24} className="text-red/60" />
-            <span className="font-mono text-[11px] uppercase tracking-widest text-red/70">
+            <span className="font-mono text-[12px] uppercase tracking-widest text-red/70">
               Something went wrong
             </span>
           </div>

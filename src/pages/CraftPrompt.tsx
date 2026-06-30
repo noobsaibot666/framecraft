@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch, Sparkles } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -19,6 +19,9 @@ import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
+import { getTokenById } from "@/lib/tokenDetail";
+import { improveProjectField } from "@/lib/fieldImprovement";
+import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -44,12 +47,12 @@ function FieldSelect({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[11px] text-muted">{label}</label>
+      <label className="system-label text-[12px] text-muted">{label}</label>
       <div className="relative">
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none pr-7 h-10 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
+          className="w-full appearance-none pr-7 h-10 px-3 font-mono text-[13px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         >
           {options.map((o) => (
@@ -80,14 +83,14 @@ function FieldInput({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline justify-between">
-        <label className="system-label text-[11px] text-muted">{label}</label>
+        <label className="system-label text-[12px] text-muted">{label}</label>
         {hint && <span className="font-mono text-[10px] text-readable">{hint}</span>}
       </div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
         style={{ border: "1px solid rgba(255,255,255,0.16)" }}
       />
     </div>
@@ -97,7 +100,7 @@ function FieldInput({
 function RatingPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[11px] text-muted">RATING</label>
+      <label className="system-label text-[12px] text-muted">RATING</label>
       <div className="flex items-center gap-1.5">
         {Array.from({ length: 5 }).map((_, i) => (
           <button
@@ -110,7 +113,7 @@ function RatingPicker({ value, onChange }: { value: number; onChange: (n: number
             )}
           />
         ))}
-        <span className="font-mono text-[11px] text-readable ml-1">{value}/5</span>
+        <span className="font-mono text-[12px] text-readable ml-1">{value}/5</span>
       </div>
     </div>
   );
@@ -121,8 +124,8 @@ function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <label className="system-label text-[11px] text-muted">AI-LOOK RISK</label>
-        <span className={cn("font-mono text-[11px]", colorClass)}>{value}/10</span>
+        <label className="system-label text-[12px] text-muted">AI-LOOK RISK</label>
+        <span className={cn("font-mono text-[12px]", colorClass)}>{value}/10</span>
       </div>
       <input
         type="range" min={0} max={10} value={value}
@@ -143,7 +146,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
   };
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[11px] text-muted">TAGS</label>
+      <label className="system-label text-[12px] text-muted">TAGS</label>
       <div
         className="flex flex-wrap gap-1.5 p-2.5 rounded-sm min-h-10"
         style={{ border: "1px solid rgba(255,255,255,0.16)", background: "var(--color-dark)" }}
@@ -163,7 +166,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
           }}
           onBlur={() => { if (input.trim()) commit(input); }}
           placeholder={tags.length ? "" : "Type tag + Enter…"}
-          className="flex-1 min-w-16 bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim outline-none"
+          className="flex-1 min-w-16 bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim outline-none"
         />
       </div>
     </div>
@@ -182,7 +185,7 @@ interface MJParams {
 interface DalleParams { size: string; quality: string; style: string; }
 interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
 
-const MJ_ASPECT_RATIOS = [
+const ASPECT_RATIOS = [
   { value: "", label: "Select ratio…" },
   { value: "1:1", label: "1:1 — Square" },
   { value: "16:9", label: "16:9 — Landscape" },
@@ -265,7 +268,6 @@ const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTi
   return (
     <>
       {/* Core */}
-      <FieldSelect label="ASPECT RATIO" value={p.aspect_ratio} onChange={(v) => set("aspect_ratio", v)} options={MJ_ASPECT_RATIOS} />
       <FieldSelect label="VERSION --v" value={p.model_version} onChange={(v) => set("model_version", v)} options={MJ_VERSIONS} />
       <FieldSelect label="QUALITY --q" value={p.quality} onChange={(v) => set("quality", v)} options={MJ_QUALITY} />
       <FieldInput label="STYLIZE --s" value={p.stylize} onChange={(v) => set("stylize", v)} placeholder="400" hint="0–1000" />
@@ -340,13 +342,13 @@ const SDParamsPanel = memo(function SDParamsPanel({ p, set }: { p: SDParams; set
       <FieldSelect label="SAMPLER" value={p.sampler} onChange={(v) => set("sampler", v)} options={SD_SAMPLERS} />
       <FieldInput label="SEED" value={p.seed} onChange={(v) => set("seed", v)} placeholder="-1 (random)" />
       <div className="flex flex-col gap-1.5">
-        <label className="system-label text-[11px] text-muted">NEGATIVE PROMPT</label>
+        <label className="system-label text-[12px] text-muted">NEGATIVE PROMPT</label>
         <textarea
           value={p.negative_prompt}
           onChange={(e) => set("negative_prompt", e.target.value)}
           placeholder="ugly, bad anatomy, blurry…"
           rows={3}
-          className="w-full px-3 py-2.5 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise resize-none"
+          className="w-full px-3 py-2.5 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise resize-none"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
       </div>
@@ -360,7 +362,7 @@ function assembleMJ(f: Fields, mj: MJParams): string {
   const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   let out = parts.join(", ");
-  if (mj.aspect_ratio)  out += ` --ar ${mj.aspect_ratio}`;
+  if (f.aspect_ratio)   out += ` --ar ${f.aspect_ratio}`;
   if (mj.model_version) out += ` --v ${mj.model_version}`;
   if (mj.quality)       out += ` --q ${mj.quality}`;
   if (mj.stylize)       out += ` --s ${mj.stylize}`;
@@ -612,7 +614,7 @@ const CATEGORIES: { value: string; label: string }[] = [
 
 interface Fields {
   title: string; description: string; provider: Provider;
-  category: string; use_case: string;
+  category: string; use_case: string; aspect_ratio: string;
   prompt_text: string; avoidance_text: string;
   subject: string; environment: string; camera: string; lens: string;
   lighting: string; mood: string; realism: string;
@@ -624,7 +626,7 @@ interface Fields {
 
 const EMPTY: Fields = {
   title: "", description: "", provider: "midjourney",
-  category: "", use_case: "",
+  category: "", use_case: "", aspect_ratio: "",
   prompt_text: "", avoidance_text: "",
   subject: "", environment: "", camera: "", lens: "",
   lighting: "", mood: "", realism: "",
@@ -708,7 +710,7 @@ function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
       className="flex items-center gap-2 rounded-sm px-2 py-1.5 hover:bg-white/3 transition-precise text-left w-full group">
       <ImpactRefThumb src={ref_.thumbnail_data} />
       <div className="flex-1 min-w-0">
-        <span className="font-sans text-[12px] text-soft-white truncate block">{ref_.title}</span>
+        <span className="font-sans text-[13px] text-soft-white truncate block">{ref_.title}</span>
         <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{ref_.kind}</span>
       </div>
       <div className="flex flex-col items-end shrink-0 gap-0.5">
@@ -769,11 +771,11 @@ export function CraftPrompt() {
       ...EMPTY,
       provider: (prefs.defaultProvider as Provider) || EMPTY.provider,
       category: prefs.defaultCategory || EMPTY.category,
+      aspect_ratio: prefs.defaultAspectRatio || EMPTY.aspect_ratio,
     };
   });
   const [mjParams, setMjParams] = useState<MJParams>(() => {
-    const prefs = getPreferences();
-    return { ...EMPTY_MJ, aspect_ratio: prefs.defaultAspectRatio || EMPTY_MJ.aspect_ratio };
+    return { ...EMPTY_MJ };
   });
   const [dalleParams, setDalleParams] = useState<DalleParams>(EMPTY_DALLE);
   const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
@@ -804,6 +806,8 @@ export function CraftPrompt() {
   const [advice, setAdvice] = useState<PromptAdvice>(EMPTY_ADVICE);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceDismissed, setAdviceDismissed] = useState(false);
+  const [analyzeDirection, setAnalyzeDirection] = useState("");
+  const [improvingAvoidance, setImprovingAvoidance] = useState(false);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
@@ -817,7 +821,8 @@ export function CraftPrompt() {
         ...EMPTY,
         title: p.title, description: p.description ?? "",
         provider: p.provider, category: p.category ?? "",
-        use_case: p.use_case ?? "", prompt_text: p.prompt_text,
+        use_case: p.use_case ?? "", aspect_ratio: p.aspect_ratio ?? "",
+        prompt_text: p.prompt_text,
         avoidance_text: p.avoidance_text ?? "",
         camera: p.camera ?? "", lens: p.lens ?? "", lighting: p.lighting ?? "",
         rating: p.rating, ai_look_risk: p.ai_look_risk,
@@ -851,7 +856,28 @@ export function CraftPrompt() {
         exp:   Boolean(pp.exp),
       }));
       setOriginalVersion(p.version ?? 1);
-      setMode("manual");
+      // Restore builder state if available
+      if (p.builder_state) {
+        try {
+          const bs = JSON.parse(p.builder_state) as {
+            mode?: "builder" | "manual";
+            tokens?: { id: string; text: string; quality_score: number }[];
+            overrides?: Record<string, string>;
+          };
+          if (bs.mode) setMode(bs.mode);
+          if (bs.tokens?.length) {
+            setTokenSequence(bs.tokens.map((t) => ({
+              id: t.id, text: t.text, quality_score: t.quality_score ?? 0,
+              category_id: "", use_count: 0, is_builtin: false, is_favorite: false,
+            })));
+          }
+          if (bs.overrides && Object.keys(bs.overrides).length) {
+            setTokenOverrides(bs.overrides);
+          }
+        } catch { /* ignore corrupt builder state */ }
+      } else {
+        setMode("manual");
+      }
     });
   }, [id, getById]);
 
@@ -868,6 +894,16 @@ export function CraftPrompt() {
     }
     getProjectById(projectId).then((project) => setProjectContext(project));
   }, [projectId]);
+
+  // Pre-seed token from ?tokenId= when navigating from Token Library
+  useEffect(() => {
+    const tokenId = searchParams.get("tokenId");
+    if (!tokenId || isEdit) return;
+    getTokenById(tokenId).then((token) => {
+      if (token) setTokenSequence((prev) => prev.some((t) => t.id === token.id) ? prev : [token, ...prev]);
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!projectId || !insightsReady) return;
@@ -895,7 +931,7 @@ export function CraftPrompt() {
         tags: current.tags.length ? current.tags : projectContext.tags ?? [],
       };
     });
-    setMjParams((current) => ({
+    setFields((current) => ({
       ...current,
       aspect_ratio: current.aspect_ratio || projectContext.aspect_ratios?.[0] || "",
     }));
@@ -1080,7 +1116,7 @@ export function CraftPrompt() {
     use_case: fields.use_case || undefined,
     prompt_text: assembled,
     avoidance_text: fields.avoidance_text || undefined,
-    aspect_ratio:  mjParams.aspect_ratio  || undefined,
+    aspect_ratio:  fields.aspect_ratio    || undefined,
     model_version: mjParams.model_version || undefined,
     style_ref:     mjParams.sref_code     || undefined,
     parameters: fields.provider === "midjourney" ? (() => {
@@ -1117,6 +1153,11 @@ export function CraftPrompt() {
     is_recipe: asRecipe,
     parent_id: !isEdit ? appliedRecipeId ?? prefillState?.prefillRecipeId : undefined,
     notes: fields.notes || undefined,
+    builder_state: JSON.stringify({
+      mode,
+      tokens: tokenSequence.map((t) => ({ id: t.id, text: tokenOverrides[t.id] ?? t.text, quality_score: t.quality_score })),
+      overrides: tokenOverrides,
+    }),
   });
 
   const handleApplyRecipe = (recipe: Prompt) => {
@@ -1140,8 +1181,9 @@ export function CraftPrompt() {
       ...EMPTY,
       provider: (prefs.defaultProvider as Provider) || EMPTY.provider,
       category: prefs.defaultCategory || EMPTY.category,
+      aspect_ratio: prefs.defaultAspectRatio || EMPTY.aspect_ratio,
     });
-    setMjParams({ ...EMPTY_MJ, aspect_ratio: prefs.defaultAspectRatio || EMPTY_MJ.aspect_ratio });
+    setMjParams({ ...EMPTY_MJ });
     setDalleParams(EMPTY_DALLE);
     setSDParams(EMPTY_SD);
     setErrors({});
@@ -1162,7 +1204,7 @@ export function CraftPrompt() {
     try {
       if (isEdit && id) {
         await update(id, buildData(asRecipe));
-        navigate(`/library/${id}`);
+        toast.success("Prompt updated");
       } else {
         const newId = await create(buildData(asRecipe));
         if (projectId) {
@@ -1219,7 +1261,7 @@ export function CraftPrompt() {
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
-      <span className="system-label text-[12px] text-soft-white">{label}</span>
+      <span className="system-label text-[13px] text-soft-white">{label}</span>
       <div className="flex-1 h-px bg-white/16" />
     </div>
   );
@@ -1236,8 +1278,8 @@ export function CraftPrompt() {
   return (
     <>
     <PageContainer
-      title={isEdit ? "Edit Prompt" : "Craft Prompt"}
-      subtitle={projectContext ? `PROJECT CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
+      title={isEdit ? "Edit Prompt" : "Prompt"}
+      subtitle={projectContext ? `PRE-CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
@@ -1288,7 +1330,7 @@ export function CraftPrompt() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-col gap-1 min-w-0">
                   <span className="system-label text-soft-white">PROJECT CONTEXT</span>
-                  <span className="font-sans text-[15px] text-white font-semibold truncate">{projectContext.title}</span>
+                  <span className="font-sans text-[16px] text-white font-semibold truncate">{projectContext.title}</span>
                 </div>
                 <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectContext.id}`)}>
                   <ArrowLeft size={10} /> Back to Project
@@ -1309,7 +1351,7 @@ export function CraftPrompt() {
                 ))}
               </div>
               {(projectContext.visual_direction || projectContext.creative_goals) && (
-                <p className="font-mono text-[12px] text-readable leading-relaxed">
+                <p className="font-mono text-[13px] text-readable leading-relaxed">
                   {projectContext.visual_direction || projectContext.creative_goals}
                 </p>
               )}
@@ -1356,14 +1398,14 @@ export function CraftPrompt() {
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
-                  <label className="system-label text-[11px] text-muted">TITLE</label>
+                  <label className="system-label text-[12px] text-muted">TITLE</label>
                   {errors.title && <span className="font-mono text-[9px] text-red/80 flex items-center gap-1"><AlertCircle size={8} />{errors.title}</span>}
                 </div>
                 <input
                   value={fields.title}
                   onChange={(e) => setF("title", e.target.value)}
                   placeholder="Give this prompt a unique name…"
-                  className="w-full h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+                  className="w-full h-10 px-3 font-sans text-[15px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
                   style={{ border: errors.title ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.16)" }}
                 />
               </div>
@@ -1372,7 +1414,7 @@ export function CraftPrompt() {
                 onChange={(e) => setF("description", e.target.value)}
                 placeholder="Brief description of what this produces…"
               />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <FieldSelect
                   label="PROVIDER"
                   value={fields.provider}
@@ -1380,6 +1422,7 @@ export function CraftPrompt() {
                   options={PROVIDERS}
                 />
                 <FieldSelect label="CATEGORY" value={fields.category} onChange={(v) => setF("category", v)} options={CATEGORIES} />
+                <FieldSelect label="ASPECT RATIO" value={fields.aspect_ratio} onChange={(v) => setF("aspect_ratio", v)} options={ASPECT_RATIOS} />
               </div>
               <Input
                 value={fields.use_case}
@@ -1416,23 +1459,23 @@ export function CraftPrompt() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {builderFields.map(({ key, label, placeholder }) => (
                   <div key={key} className="flex flex-col gap-1.5">
-                    <label className="system-label text-[11px] text-muted">{label}</label>
+                    <label className="system-label text-[12px] text-muted">{label}</label>
                     <input
                       value={fields[key] as string}
                       onChange={(e) => setF(key, e.target.value)}
                       placeholder={placeholder}
-                      className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                      className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                       style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                     />
                   </div>
                 ))}
                 <div className="col-span-2 flex flex-col gap-1.5">
-                  <label className="system-label text-[11px] text-muted">REALISM NOTES</label>
+                  <label className="system-label text-[12px] text-muted">REALISM NOTES</label>
                   <input
                     value={fields.realism}
                     onChange={(e) => setF("realism", e.target.value)}
                     placeholder="authentic skin texture, real terrain imperfections…"
-                    className="w-full h-10 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                    className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                     style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                   />
                 </div>
@@ -1440,7 +1483,7 @@ export function CraftPrompt() {
             ) : (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline gap-2">
-                  <label className="system-label text-[11px] text-muted">PROMPT TEXT</label>
+                  <label className="system-label text-[12px] text-muted">PROMPT TEXT</label>
                   {errors.prompt_text && <span className="font-mono text-[9px] text-red/80">{errors.prompt_text}</span>}
                 </div>
                 <Textarea
@@ -1572,7 +1615,44 @@ export function CraftPrompt() {
 
           {/* Avoidance */}
           <div>
-            <SectionHeader label="AI-LOOK AVOIDANCE" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3 flex-1">
+                <span className="system-label text-[13px] text-soft-white">AI-LOOK AVOIDANCE</span>
+                <div className="flex-1 h-px bg-white/16" />
+              </div>
+              {(() => {
+                const availableModels = AI_MODELS.filter((m) => Boolean(getApiKey(m.provider)));
+                if (availableModels.length === 0) return null;
+                const model = availableModels[0];
+                return (
+                  <button
+                    type="button"
+                    disabled={improvingAvoidance || !assembled.trim()}
+                    onClick={async () => {
+                      setImprovingAvoidance(true);
+                      try {
+                        const improved = await improveProjectField({
+                          fieldName: "AI-look avoidance list",
+                          currentValue: fields.avoidance_text || "No avoidance text yet — generate a comprehensive list",
+                          projectTitle: fields.title || "this prompt",
+                          context: assembled,
+                          model,
+                        });
+                        setF("avoidance_text", improved);
+                      } catch (err) {
+                        toast.error(String(err));
+                      } finally {
+                        setImprovingAvoidance(false);
+                      }
+                    }}
+                    className="flex items-center gap-1 h-7 px-2.5 rounded-sm font-mono text-[10px] text-cyan border border-cyan/30 hover:bg-cyan/10 disabled:opacity-40 transition-precise"
+                  >
+                    <Sparkles size={9} />
+                    {improvingAvoidance ? "Improving…" : "Improve"}
+                  </button>
+                );
+              })()}
+            </div>
             <div className="flex flex-col gap-3">
               <AvoidancePanel
                 promptText={deferredAssembled}
@@ -1619,14 +1699,14 @@ export function CraftPrompt() {
                   value={fields.variation}
                   onChange={(e) => setF("variation", e.target.value)}
                   placeholder="Single controlled change… (rotate 90°, night version, camera from above)"
-                  className="w-full h-9 px-3 pr-8 font-mono text-[11px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+                  className="w-full h-9 px-3 pr-8 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
                   style={{ border: "var(--border-default)" }}
                 />
                 {fields.variation && (
                   <button
                     type="button"
                     onClick={() => setF("variation", "")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim/60 hover:text-red transition-precise text-[12px] leading-none"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim/60 hover:text-red transition-precise text-[13px] leading-none"
                   >
                     ×
                   </button>
@@ -1706,7 +1786,7 @@ export function CraftPrompt() {
               />
             )}
             {!["midjourney", "dalle", "stable_diffusion", "nano_banana"].includes(fields.provider) && (
-              <p className="font-mono text-[11px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
+              <p className="font-mono text-[12px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
           </div>
 
@@ -1728,7 +1808,7 @@ export function CraftPrompt() {
                   className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
                   style={{ border: "var(--border-dim)" }}
                 >
-                  <span className="font-mono text-[11px] text-readable truncate">{p.title}</span>
+                  <span className="font-mono text-[12px] text-readable truncate">{p.title}</span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
@@ -1758,7 +1838,7 @@ export function CraftPrompt() {
                   style={{ border: appliedRecipeId === recipe.id ? "1px solid rgba(72,229,232,0.35)" : "var(--border-dim)" }}
                 >
                   <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="font-mono text-[11px] text-readable truncate">{recipe.title}</span>
+                    <span className="font-mono text-[12px] text-readable truncate">{recipe.title}</span>
                     <span className="font-mono text-[9px] text-muted truncate">{recipe.provider}</span>
                   </div>
                   <span className="font-mono text-[9px] text-cyan shrink-0">Use</span>
@@ -1926,7 +2006,7 @@ export function CraftPrompt() {
               color="rgba(246,173,85,0.7)"
               borderColor="rgba(246,173,85,0.2)"
               bgColor="rgba(246,173,85,0.04)"
-              content={buildNanaBananaJson(fields, assembled, mjParams.aspect_ratio)}
+              content={buildNanaBananaJson(fields, assembled, fields.aspect_ratio)}
             />
           )}
           {(["seedance", "kling", "runway", "higgsfield"] as const).includes(fields.provider as "seedance" | "kling" | "runway" | "higgsfield") && assembled && (
@@ -1938,7 +2018,7 @@ export function CraftPrompt() {
               bgColor="rgba(183,148,244,0.04)"
               content={[
                 `SCENE: ${assembled}`,
-                mjParams.aspect_ratio ? `RATIO: ${mjParams.aspect_ratio}` : "",
+                fields.aspect_ratio ? `RATIO: ${fields.aspect_ratio}` : "",
                 fields.mood ? `TONE: ${fields.mood}` : "",
                 fields.avoidance_text ? `AVOID: ${fields.avoidance_text}` : "",
               ].filter(Boolean).join("\n")}
@@ -1977,6 +2057,14 @@ export function CraftPrompt() {
             const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0 || advice.improvements.length > 0) && !adviceDismissed;
             return (
               <div className="flex flex-col gap-2">
+                <input
+                  type="text"
+                  value={analyzeDirection}
+                  onChange={(e) => setAnalyzeDirection(e.target.value)}
+                  placeholder="Direction: make it shorter, add lighting…"
+                  className="h-8 px-2.5 rounded-sm bg-transparent font-mono text-[10px] text-soft-white placeholder:text-dim focus:outline-none"
+                  style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+                />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1999,10 +2087,11 @@ export function CraftPrompt() {
                           mood: fields.mood || undefined,
                           realism: fields.realism || undefined,
                         } : undefined,
+                        userDirection: analyzeDirection || undefined,
                       });
                       setAdvice(result);
-                    } catch {
-                      /* silently ignore API errors */
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Analysis failed — check your Anthropic API key in Settings");
                     } finally {
                       setAdviceLoading(false);
                     }

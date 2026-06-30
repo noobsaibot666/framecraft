@@ -193,7 +193,7 @@ function FieldSelect({ label, value, onChange, options }: {
       <label className="system-label">{label}</label>
       <div className="relative">
         <select value={value} onChange={(e) => onChange(e.target.value)}
-          className="w-full appearance-none pr-7 h-8 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none transition-precise cursor-pointer"
+          className="w-full appearance-none pr-7 h-8 px-3 font-mono text-[13px] text-white bg-dark rounded-sm focus:outline-none transition-precise cursor-pointer"
           style={{ border: "1px solid rgba(255,255,255,0.10)" }}>
           {options.map((o) => <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>)}
         </select>
@@ -248,7 +248,7 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
         <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
           placeholder="Paste URL or upload image…"
           className={cn(
-            "w-full h-8 font-mono text-[11px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
+            "w-full h-8 font-mono text-[12px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
             isUrl ? "pl-3 pr-8" : "px-3"
           )}
           style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
@@ -736,7 +736,7 @@ export function ManualImport() {
                 {learning.avoidanceText && (
                   <div className="flex flex-col gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-red">Avoidance captured</span>
-                    <span className="font-mono text-[11px] leading-relaxed text-readable">{learning.avoidanceText}</span>
+                    <span className="font-mono text-[12px] leading-relaxed text-readable">{learning.avoidanceText}</span>
                   </div>
                 )}
               </div>
@@ -772,7 +772,7 @@ export function ManualImport() {
               <div className="flex flex-col gap-2">
                 <span className="system-label">CLEAN PROMPT PREVIEW</span>
                 <div className="p-3 rounded-sm" style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}>
-                  <pre className="font-mono text-[11px] text-soft-white/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
+                  <pre className="font-mono text-[12px] text-soft-white/80 whitespace-pre-wrap wrap-break-word leading-relaxed select-text">
                     {stripParams(raw) || raw}
                   </pre>
                 </div>
@@ -792,7 +792,7 @@ export function ManualImport() {
                 </div>
                 <input value={title} onChange={(e) => { setTitle(e.target.value); setError(""); }}
                   placeholder="Name this prompt…"
-                  className={cn("w-full h-8 px-3 font-sans text-[12px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise")}
+                  className={cn("w-full h-8 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise")}
                   style={{ border: !title.trim() && error ? "1px solid rgba(215,25,33,0.6)" : "1px solid rgba(255,255,255,0.10)" }} />
               </div>
               <FieldSelect label="PROVIDER" value={provider} onChange={(v) => setProvider(v as Provider)} options={PROVIDERS} />
@@ -823,7 +823,7 @@ export function ManualImport() {
                 <label className="system-label">BEST USE</label>
                 <input value={bestUse} onChange={(e) => setBestUse(e.target.value)}
                   placeholder="Hero banner, social ad, product shot…"
-                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  className="w-full h-8 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
               </div>
 
@@ -832,7 +832,7 @@ export function ManualImport() {
                 <label className="system-label">RISK NOTES</label>
                 <input value={riskNotes} onChange={(e) => setRiskNotes(e.target.value)}
                   placeholder="Brand, legal, or production constraints…"
-                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  className="w-full h-8 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
               </div>
 
@@ -841,7 +841,7 @@ export function ManualImport() {
                 <label className="system-label">AI-LOOK NOTES</label>
                 <input value={aiLookNotes} onChange={(e) => setAiLookNotes(e.target.value)}
                   placeholder="Known AI-look issues with this prompt…"
-                  className="w-full h-8 px-3 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+                  className="w-full h-8 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
               </div>
 
@@ -852,7 +852,7 @@ export function ManualImport() {
                   <select
                     value={linkedProjectId}
                     onChange={(e) => setLinkedProjectId(e.target.value)}
-                    className="w-full h-8 px-3 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                    className="w-full h-8 px-3 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none"
                     style={{ border: "1px solid rgba(255,255,255,0.10)" }}
                   >
                     <option value="">None</option>
@@ -939,7 +939,7 @@ export function ManualImport() {
                         ? <Check size={10} className="text-white/50 shrink-0" />
                         : <Layers size={10} className="text-dim/40 shrink-0" />
                       }
-                      <span className="font-sans text-[11px] text-white truncate flex-1">{item.title}</span>
+                      <span className="font-sans text-[12px] text-white truncate flex-1">{item.title}</span>
                       <span className="font-mono text-[9px] text-dim/50 shrink-0">{item.provider ?? "midjourney"}</span>
                     </div>
                   ))}

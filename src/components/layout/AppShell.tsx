@@ -68,7 +68,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
           {shortcuts.map((s) => (
             <div key={s.keys} className="flex items-center justify-between gap-4 px-3 py-2.5 rounded-sm"
               style={{ border: "var(--border-dim)" }}>
-              <span className="font-mono text-[11px] text-readable">{s.description}</span>
+              <span className="font-mono text-[12px] text-readable">{s.description}</span>
               <kbd className="font-mono text-[10px] text-amber px-2 py-1 rounded-sm shrink-0"
                 style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
                 {formatShortcutKeys(s.keys)}

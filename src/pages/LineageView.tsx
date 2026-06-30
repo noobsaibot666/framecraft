@@ -100,7 +100,7 @@ function VersionCard({
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-mono text-[9px] text-dim/50 shrink-0">v{node.version}</span>
             <span className={cn(
-              "font-sans text-[11px] font-medium truncate",
+              "font-sans text-[12px] font-medium truncate",
               isSelected ? "text-white" : "text-soft-white"
             )}>
               {node.title}
@@ -347,7 +347,7 @@ export function LineageView() {
     return (
       <PageContainer title="Lineage" subtitle="VERSION HISTORY">
         <div className="flex flex-col items-center justify-center h-40 gap-3">
-          <span className="font-mono text-[11px] text-dim/40">No version history found.</span>
+          <span className="font-mono text-[12px] text-dim/40">No version history found.</span>
           <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
             <ArrowLeft size={10} /> Back
           </Button>
@@ -432,7 +432,7 @@ export function LineageView() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[9px] text-dim/50">v{selected.version}</span>
-                  <span className="font-sans text-[13px] font-medium text-white">{selected.title}</span>
+                  <span className="font-sans text-[14px] font-medium text-white">{selected.title}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {selected.is_winner && (
@@ -458,7 +458,7 @@ export function LineageView() {
                     {copiedId === selected.id ? "Copied" : "Copy"}
                   </button>
                 </div>
-                <p className="font-mono text-[11px] text-soft-white leading-relaxed">
+                <p className="font-mono text-[12px] text-soft-white leading-relaxed">
                   {selected.prompt_text}
                 </p>
               </div>

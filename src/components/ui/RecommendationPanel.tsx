@@ -65,7 +65,7 @@ function TokenChip({
       )}
       style={{ border: "var(--border-dim)" }}
     >
-      <span className="font-mono text-[11px] text-soft-white flex-1 truncate">{text}</span>
+      <span className="font-mono text-[12px] text-soft-white flex-1 truncate">{text}</span>
       {copied
         ? <Check size={10} className="text-cyan shrink-0" />
         : <Copy size={10} className="text-readable group-hover:text-cyan shrink-0 transition-precise" />
@@ -267,7 +267,7 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
 
       {!recs || total === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 gap-1">
-          <span className="font-mono text-[11px] text-readable">
+          <span className="font-mono text-[12px] text-readable">
             {loading
               ? "Scanning library…"
               : !context.provider

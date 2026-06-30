@@ -100,7 +100,7 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
         <span className={cn("w-2 h-2 rounded-full shrink-0 mt-1.5", STATUS_DOT[project.status])} />
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <span className={cn("font-sans text-[15px] font-semibold leading-snug", STATUS_COLORS[project.status])}>
+            <span className={cn("font-sans text-[16px] font-semibold leading-snug", STATUS_COLORS[project.status])}>
               {project.title}
             </span>
             <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-precise shrink-0">
@@ -121,7 +121,7 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
             </div>
           </div>
           {(project.client || project.campaign) && (
-            <p className="font-mono text-[11px] text-readable mt-1 truncate">
+            <p className="font-mono text-[12px] text-readable mt-1 truncate">
               {[project.client, project.campaign].filter(Boolean).join(" · ")}
             </p>
           )}
@@ -142,7 +142,7 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
 
       {/* Brief excerpt */}
       {project.brief_text && (
-        <p className="font-mono text-[11px] text-readable leading-relaxed line-clamp-2">
+        <p className="font-mono text-[12px] text-readable leading-relaxed line-clamp-2">
           {project.brief_text}
         </p>
       )}
@@ -155,7 +155,7 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
           { label: "refs",    val: project.reference_count ?? 0 },
         ].map(({ label, val }) => (
           <div key={label} className="flex items-center gap-1">
-            <span className="font-mono text-[14px] text-soft-white tabular-nums">{val}</span>
+            <span className="font-mono text-[15px] text-soft-white tabular-nums">{val}</span>
             <span className="font-mono text-[9px] text-muted tracking-widest uppercase">{label}</span>
           </div>
         ))}
@@ -232,7 +232,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-1">
           <span className="system-label">NEW PROJECT SETUP</span>
-          <span className="font-mono text-[11px] text-readable">Setup, craft direction, and output targets for this workspace.</span>
+          <span className="font-mono text-[12px] text-readable">Setup, craft direction, and output targets for this workspace.</span>
         </div>
         <button type="button" onClick={onClose} className="text-dim/40 hover:text-white transition-precise">
           <X size={12} />
@@ -248,7 +248,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Campaign or project name…"
             autoFocus
-            className="h-10 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+            className="h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.18)" }}
             onKeyDown={(e) => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") onClose(); }}
           />
@@ -260,7 +260,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
           <select
             value={projectType}
             onChange={(e) => setProjectType(e.target.value)}
-            className="h-10 px-3 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           >
             {PROJECT_TYPE_OPTIONS.map((o) => (
@@ -276,7 +276,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             value={client}
             onChange={(e) => setClient(e.target.value)}
             placeholder="Client name…"
-            className="h-10 px-3 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -292,7 +292,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
               setCampaignId(id);
               setCampaignName(found?.title ?? "");
             }}
-            className="h-10 px-3 font-mono text-[12px] text-white bg-transparent rounded-sm focus:outline-none"
+            className="h-10 px-3 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           >
             <option value="" className="bg-panel text-dim/60">No campaign</option>
@@ -310,7 +310,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setIntendedOutput(e.target.value)}
             placeholder="Final assets, prompt systems, boards, videos..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -323,7 +323,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setBriefText(e.target.value)}
             placeholder="What this project needs to solve..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -366,7 +366,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setImageNeeds(e.target.value)}
             placeholder="Hero, product, background, variations..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -377,7 +377,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setVideoNeeds(e.target.value)}
             placeholder="Motion tests, frames, transitions..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -388,7 +388,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setVisualDirection(e.target.value)}
             placeholder="Look, style, realism level..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -401,7 +401,7 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             onChange={(e) => setCreativeGoals(e.target.value)}
             placeholder="What good looks like, what to avoid, and what should become reusable..."
             rows={3}
-            className="px-3 py-2 font-mono text-[12px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
         </div>
@@ -514,7 +514,7 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
       {/* Toolbar — search on the right */}
       <div className="flex flex-col gap-3 mb-7">
         <div className="flex items-center gap-4 flex-wrap">
-          <span className="font-mono text-[11px] text-readable shrink-0">
+          <span className="font-mono text-[12px] text-readable shrink-0">
             {projects.length} {view === "archived" ? "archived" : "active"} project{projects.length !== 1 ? "s" : ""}
           </span>
           <div className="flex-1" />
@@ -522,7 +522,7 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title, client, campaign…"
-            className="h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-64"
+            className="h-9 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none w-64"
             style={{ border: "var(--border-default)" }}
           />
         </div>
@@ -555,7 +555,7 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
       {loading ? (
         <div className="flex items-center gap-3 h-40 justify-center">
           <span className="font-ndot text-[20px] text-dim/30 animate-pulse">···</span>
-          <span className="font-mono text-[11px] text-muted">Loading projects…</span>
+          <span className="font-mono text-[12px] text-muted">Loading projects…</span>
         </div>
       ) : projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -567,7 +567,7 @@ export function ProjectLibrary({ initialCreate = false }: { initialCreate?: bool
             <span className="system-label">
               {view === "archived" ? "ARCHIVE EMPTY" : "NO PROJECTS"}
             </span>
-            <span className="font-mono text-[12px] text-readable text-center leading-relaxed">
+            <span className="font-mono text-[13px] text-readable text-center leading-relaxed">
               {view === "archived"
                 ? "No archived projects yet."
                 : search || statusFilter !== "all"

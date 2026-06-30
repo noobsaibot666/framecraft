@@ -97,14 +97,14 @@ function CreateForm({
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") setOpen(false); }}
         placeholder="Deliverable title…"
-        className="w-full h-10 px-3 font-sans text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+        className="w-full h-10 px-3 font-sans text-[14px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
         style={{ border: "1px solid rgba(255,255,255,0.16)" }}
       />
       <div className="grid grid-cols-2 gap-1.5">
         <select
           value={format}
           onChange={(e) => setFormat(e.target.value)}
-          className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+          className="h-9 px-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
           style={{ border: "1px solid rgba(255,255,255,0.14)" }}
         >
           <option value="">Format…</option>
@@ -113,7 +113,7 @@ function CreateForm({
         <select
           value={aspect}
           onChange={(e) => setAspect(e.target.value)}
-          className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+          className="h-9 px-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
           style={{ border: "1px solid rgba(255,255,255,0.14)" }}
         >
           <option value="">Ratio…</option>
@@ -183,7 +183,7 @@ function DeliverableCard({
     >
       {/* Title + delete */}
       <div className="flex items-start gap-1.5">
-        <span className="font-sans text-[13px] font-semibold text-soft-white flex-1 leading-snug">{deliverable.title}</span>
+        <span className="font-sans text-[14px] font-semibold text-soft-white flex-1 leading-snug">{deliverable.title}</span>
         <button
           type="button"
           onClick={() => {
@@ -264,17 +264,17 @@ function DeliverableCard({
       {editing && (
         <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "var(--border-dim)" }}>
           <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-            className="w-full h-9 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none"
+            className="w-full h-9 px-3 font-mono text-[13px] text-white bg-dark rounded-sm focus:outline-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }} />
           <div className="grid grid-cols-2 gap-1">
             <select value={editFormat} onChange={(e) => setEditFormat(e.target.value)}
-              className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+              className="h-9 px-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
               style={{ border: "1px solid rgba(255,255,255,0.14)" }}>
               <option value="">Format…</option>
               {FORMAT_OPTIONS.slice(1).map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
             <select value={editAspect} onChange={(e) => setEditAspect(e.target.value)}
-              className="h-9 px-2 font-mono text-[11px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
+              className="h-9 px-2 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none appearance-none"
               style={{ border: "1px solid rgba(255,255,255,0.14)" }}>
               <option value="">Ratio…</option>
               {ASPECT_OPTIONS.slice(1).map((a) => <option key={a} value={a}>{a}</option>)}
@@ -282,7 +282,7 @@ function DeliverableCard({
           </div>
           <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)}
             placeholder="Notes…" rows={2}
-            className="w-full px-3 py-2 font-mono text-[11px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none resize-none"
+            className="w-full px-3 py-2 font-mono text-[12px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.14)" }} />
           <div className="flex gap-1">
             <Button variant="primary" size="sm" onClick={handleSaveEdit} className="flex-1 justify-center">
@@ -398,7 +398,7 @@ function WorkflowGuide({ activeStep }: { activeStep: number }) {
               background: active ? "rgba(56,183,200,0.07)" : "rgba(255,255,255,0.035)",
             }}>
             <span className={cn("font-mono text-[10px] tracking-widest uppercase", active ? "text-cyan" : "text-muted")}>{step.label}</span>
-            <span className="font-sans text-[13px] text-soft-white truncate">{step.body}</span>
+            <span className="font-sans text-[14px] text-soft-white truncate">{step.body}</span>
           </div>
         );
       })}
@@ -545,8 +545,8 @@ export function ProjectBoard() {
         <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
           <div className="flex flex-col items-center justify-center py-16 gap-3"
             style={{ border: "2px dashed rgba(215,25,33,0.18)", borderRadius: "8px", background: "rgba(215,25,33,0.025)" }}>
-          <span className="font-mono text-[12px] text-red">Start with one planned deliverable.</span>
-          <span className="font-mono text-[11px] text-readable">Name the output you need, then add format or ratio if useful.</span>
+          <span className="font-mono text-[13px] text-red">Start with one planned deliverable.</span>
+          <span className="font-mono text-[12px] text-readable">Name the output you need, then add format or ratio if useful.</span>
           </div>
           <div>
             <CreateForm initialOpen projectId={id!} onCreated={handleCreated} compact />

@@ -20,7 +20,7 @@ import type { CreativeDirection, Project } from "@/types";
 
 interface DirectionStudioProps {
   project: Project;
-  onApplied: (fields: { visual_direction?: string; creative_goals?: string }) => void;
+  onApplied: (fields: { visual_direction?: string; creative_goals?: string; constraints?: string }) => void;
 }
 
 const DIRECTION_FIELDS: { key: keyof CreativeDirection; label: string; rows: number }[] = [
@@ -40,6 +40,8 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
   });
   const [generating, setGenerating] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [appliedId, setAppliedId] = useState<string | null>(null);
+  const [userContext, setUserContext] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -80,7 +82,7 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
         .map((session) => session.outcome_summary?.trim() ?? "")
         .filter(Boolean)
         .slice(0, 5);
-      const generated = await generateCreativeDirections(project, model, outcomes);
+      const generated = await generateCreativeDirections(project, model, outcomes, userContext || undefined);
       for (const direction of generated) {
         await createCreativeDirection({ project_id: project.id, ...direction });
       }
@@ -109,7 +111,9 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
       await selectCreativeDirection(project.id, direction.id);
       onApplied(fields);
       await reload();
-      setNotice(`${direction.title} applied to Project Craft.`);
+      setNotice(`${direction.title} applied to Pre-Craft.`);
+      setAppliedId(direction.id);
+      setTimeout(() => setAppliedId(null), 3000);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -129,28 +133,38 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
         <div className="flex flex-col gap-1 max-w-2xl">
           <span className="system-label text-cyan">DIRECTION STUDIO</span>
           <h2 className="font-sans text-[20px] font-semibold text-white">Creative direction alternatives</h2>
-          <p className="font-mono text-[11px] leading-relaxed text-readable">
-            Develop distinct campaign directions, select one, then apply it to the project context used by Craft.
+          <p className="font-mono text-[12px] leading-relaxed text-readable">
+            Develop distinct campaign directions, select one, then apply it to the Pre-Craft context.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={modelId}
-            onChange={(event) => setModelId(event.target.value)}
-            className="h-9 px-3 rounded-sm bg-dark font-mono text-[11px] text-soft-white focus:outline-none"
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={userContext}
+            onChange={(event) => setUserContext(event.target.value)}
+            placeholder="Optional: add focus or constraints before generating — e.g. focus on luxury feel, bold contrast dark mood…"
+            rows={2}
+            className="w-full px-3 py-2 rounded-sm bg-black/20 font-mono text-[12px] leading-relaxed text-soft-white resize-none focus:outline-none"
             style={{ border: "var(--border-default)" }}
-            aria-label="Creative Director model"
-          >
-            {AI_MODELS.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
-            ))}
-          </select>
-          <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()}>
-            <Sparkles size={11} /> {generating ? "Developing..." : "Generate 3"}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleNew}>
-            <Plus size={11} /> New Direction
-          </Button>
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={modelId}
+              onChange={(event) => setModelId(event.target.value)}
+              className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none"
+              style={{ border: "var(--border-default)" }}
+              aria-label="Creative Director model"
+            >
+              {AI_MODELS.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
+              ))}
+            </select>
+            <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()}>
+              <Sparkles size={11} /> {generating ? "Developing..." : "Generate 3"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleNew} disabled={directions.length >= 3}>
+              <Plus size={11} /> New Direction
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -158,14 +172,14 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
         <button
           type="button"
           onClick={() => navigator.clipboard?.writeText(error)}
-          className="w-full px-4 py-3 text-left rounded-sm font-mono text-[11px] leading-relaxed text-red hover:bg-red/5"
+          className="w-full px-4 py-3 text-left rounded-sm font-mono text-[12px] leading-relaxed text-red hover:bg-red/5"
           style={{ border: "1px solid rgba(215,25,33,0.30)" }}
           title="Click to copy error"
         >
           {error}
         </button>
       )}
-      {notice && <span className="font-mono text-[11px] text-cyan">{notice}</span>}
+      {notice && <span className="font-mono text-[12px] text-cyan">{notice}</span>}
 
       {directions.length === 0 ? (
         <button
@@ -175,15 +189,19 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
           className="flex flex-col items-center justify-center gap-2 min-h-40 border border-dashed border-cyan/30 hover:bg-cyan/5 transition-precise disabled:opacity-50"
         >
           <Sparkles size={18} className="text-cyan" />
-          <span className="font-sans text-[14px] font-semibold text-soft-white">Develop the first three directions</span>
+          <span className="font-sans text-[15px] font-semibold text-soft-white">Develop the first three directions</span>
           <span className="font-mono text-[10px] text-readable">Uses the current project brief, goals, constraints, and review decisions.</span>
         </button>
       ) : (
         <div className="grid grid-cols-1 2xl:grid-cols-3 gap-5 items-start">
           {directions.slice(0, 6).map((direction) => (
             <article key={direction.id}
-              className={cn("flex flex-col gap-4 p-5 rounded-card min-w-0", direction.is_selected && "ring-1 ring-cyan/50")}
-              style={{ border: direction.is_selected ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)", background: "var(--surface-card)" }}>
+              className={cn(
+                "flex flex-col gap-4 p-5 rounded-card min-w-0 transition-colors duration-500",
+                direction.is_selected && "ring-1 ring-cyan/50",
+                appliedId === direction.id && "bg-cyan/5"
+              )}
+              style={{ border: direction.is_selected ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)", background: appliedId === direction.id ? "rgba(56,183,200,0.06)" : "var(--surface-card)" }}>
               <div className="flex items-start gap-3">
                 <input
                   value={direction.title}
@@ -210,7 +228,7 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
                     onChange={(event) => updateLocal(direction.id, field.key, event.target.value)}
                     onBlur={(event) => persistField(direction.id, field.key, event.target.value)}
                     rows={field.rows}
-                    className="w-full px-3 py-2.5 rounded-sm bg-black/20 font-mono text-[11px] leading-relaxed text-soft-white resize-y focus:outline-none"
+                    className="w-full px-3 py-2.5 rounded-sm bg-black/20 font-mono text-[12px] leading-relaxed text-soft-white resize-y focus:outline-none"
                     style={{ border: "var(--border-default)" }}
                   />
                 </label>
@@ -235,7 +253,7 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
                       DIRECTION_FIELDS.some((field) => !String(direction[field.key] ?? "").trim())
                     }
                   >
-                    {applyingId === direction.id ? "Applying..." : "Apply to Project"}
+                    {applyingId === direction.id ? "Applying…" : appliedId === direction.id ? "Applied ✓" : "Apply to Project"}
                   </Button>
                 )}
               </div>

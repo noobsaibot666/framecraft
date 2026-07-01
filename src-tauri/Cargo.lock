@@ -1426,6 +1426,7 @@ dependencies = [
  "chrono",
  "image",
  "libc",
+ "once_cell",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",

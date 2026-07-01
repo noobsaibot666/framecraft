@@ -6,9 +6,9 @@
  * processes one row at a time with a small delay so it never blocks the UI.
  */
 
-const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+import { fetchImageAsDataUrl, looksLikeThumbnailUrl } from "@/lib/fetchImageUrl";
 
-import { fetchImageAsDataUrl } from "@/lib/fetchImageUrl";
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /** How long to wait between fetches so we don't hammer the network. */
 const BETWEEN_MS = 300;
@@ -68,8 +68,8 @@ async function runMigration(db: DbHandle): Promise<void> {
       const id = row.id as string;
       const url = row.source_url as string;
 
-      // Skip obvious non-image URLs
-      if (!looksLikeImageUrl(url)) continue;
+      // Skip obvious non-image URLs (uses the same logic as ManualImport)
+      if (!looksLikeThumbnailUrl(url)) continue;
 
       try {
         // fetchImageAsDataUrl uses JS fetch first to bypass Cloudflare bot protection, 
@@ -105,15 +105,7 @@ async function runMigration(db: DbHandle): Promise<void> {
   }
 }
 
-function looksLikeImageUrl(url: string): boolean {
-  if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
-  // CDN-hosted images (Midjourney, etc.) or direct image extensions
-  return (
-    url.includes("cdn.midjourney.com") ||
-    url.includes("cdn.discordapp.com") ||
-    /\.(jpe?g|png|webp|gif|avif)([\?#].*)?$/i.test(url)
-  );
-}
+// looksLikeThumbnailUrl is imported from fetchImageUrl.ts — single source of truth.
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Upload, AlertTriangle, ChevronDown, Layers, X, Check, Link } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -234,6 +234,8 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
   const [copied, setCopied] = useState(false);
   const [fetching, setFetching] = useState(false);
   const isUrl = sourceUrl.startsWith("http");
+  // Debounce ref so typing / editing doesn't fire a fetch on every keystroke
+  const urlCommitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // previewUrl: show the stored data URL (from file upload or native fetch), never the raw CDN URL
   const previewUrl = thumbnailData || null;
@@ -245,20 +247,23 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
   };
 
   // When the user finishes typing a URL, attempt to resolve it as an image via native Rust fetch
-  const handleUrlCommit = async (url: string) => {
-    if (!url || thumbnailData) return; // don't overwrite an uploaded file
-    if (!isDirectImageUrl(url) && !isMidjourneyUrl(url)) return;
-    setFetching(true);
-    try {
-      const parsed = parseMJSourceUrl(url);
-      const fetchUrl = parsed?.cdnUrl ?? url;
-      const thumb = await fetchImageAsDataUrl(fetchUrl);
-      onThumbnailData(thumb);
-    } catch {
-      // silently ignore — user can upload manually
-    } finally {
-      setFetching(false);
-    }
+  const handleUrlCommit = (url: string) => {
+    if (urlCommitTimer.current) clearTimeout(urlCommitTimer.current);
+    urlCommitTimer.current = setTimeout(async () => {
+      if (!url || thumbnailData) return; // don't overwrite an uploaded file
+      if (!isDirectImageUrl(url) && !isMidjourneyUrl(url)) return;
+      setFetching(true);
+      try {
+        const parsed = parseMJSourceUrl(url);
+        const fetchUrl = parsed?.cdnUrl ?? url;
+        const thumb = await fetchImageAsDataUrl(fetchUrl);
+        onThumbnailData(thumb);
+      } catch {
+        // silently ignore — user can upload manually
+      } finally {
+        setFetching(false);
+      }
+    }, 300);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

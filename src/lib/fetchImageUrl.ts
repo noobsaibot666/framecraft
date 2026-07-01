@@ -27,26 +27,36 @@ export async function fetchImageAsDataUrl(url: string): Promise<string> {
       } catch (parseErr) {
         // If the Rust CPU processing fails (e.g. invalid image format, corrupt bytes),
         // DO NOT fallback to fetch_image_as_data_url because it will just download 
-        // the same broken bytes again and fail again.
-        console.warn("Image decode/compression failed", parseErr);
-        throw parseErr; 
+        // the same broken bytes again and fail again. Wrap in a sentinel so the outer
+        // catch can distinguish this from a network error.
+        throw new ImageDecodeError(parseErr);
       }
     } else {
-      // If server returned 404/500, no point in falling back to reqwest.
-      throw new Error(`Server returned status ${res.status}`);
+      // If server returned 4xx/5xx, no point in falling back to reqwest.
+      throw new ImageDecodeError(`Server returned status ${res.status}`);
     }
   } catch (err: unknown) {
-    // We only fallback to Rust reqwest on Network/CORS/Timeout errors.
-    // DOMException with name 'TimeoutError' or 'AbortError' are network-level.
-    // TypeError is usually CORS or DNS failure.
-    if (err instanceof Error && err.message.includes("decode/compression failed")) {
-      throw err;
-    }
-    console.warn("Browser fetch failed (CORS/Network), falling back to Rust reqwest", err);
+    // Re-throw immediately if this was a decode/parse failure — retrying via reqwest
+    // would just download the same bad bytes again.
+    if (err instanceof ImageDecodeError) throw err.cause ?? err;
+
+    // For genuine network errors (CORS, DNS, Timeout, etc.), fall back to Rust reqwest.
+    // DOMException(AbortError/TimeoutError) and TypeError both land here.
+    console.warn("[fetchImageUrl] Browser fetch failed (network/CORS), falling back to Rust reqwest:", err);
   }
 
-  // Fallback to pure Rust reqwest if browser fetch fails (e.g. CORS block that reqwest wouldn't care about)
+  // Fallback: Rust reqwest bypasses CORS (useful for tauri:// production origin)
   return invoke<string>("fetch_image_as_data_url", { url });
+}
+
+/** Sentinel wrapper so we can distinguish decode failures from network failures. */
+class ImageDecodeError extends Error {
+  cause: unknown;
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.cause = cause;
+    this.name = "ImageDecodeError";
+  }
 }
 
 /** Returns true if the URL looks like a direct image URL */
@@ -59,8 +69,13 @@ export function isDirectImageUrl(url: string): boolean {
 export function isMidjourneyUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.hostname.endsWith("midjourney.com");
+    return u.hostname.endsWith("midjourney.com") || u.hostname.endsWith("discordapp.com");
   } catch {
     return false;
   }
+}
+
+/** Returns true if a URL is worth attempting to fetch as a thumbnail */
+export function looksLikeThumbnailUrl(url: string): boolean {
+  return isDirectImageUrl(url) || isMidjourneyUrl(url);
 }

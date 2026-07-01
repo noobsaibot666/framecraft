@@ -200,6 +200,29 @@ function FieldSelect({ label, value, onChange, options }: {
   );
 }
 
+export function parseMJSourceUrl(url: string): { cdnUrl: string; jobId: string; index: number } | null {
+  try {
+    const u = new URL(url.trim());
+    if (!u.hostname.endsWith("midjourney.com")) return null;
+
+    // Direct CDN URL: cdn.midjourney.com/{uuid}/0_{n}.png
+    if (u.hostname === "cdn.midjourney.com") {
+      const cdn = u.pathname.match(/\/([0-9a-f-]{36})\/0_(\d+)/i);
+      if (!cdn) return null;
+      return { cdnUrl: url.trim(), jobId: cdn[1], index: parseInt(cdn[2], 10) };
+    }
+
+    // alpha.midjourney.com/jobs/{uuid}?index={n}
+    const match = u.pathname.match(/\/jobs\/([0-9a-f-]{36})/i);
+    if (!match) return null;
+    const jobId = match[1];
+    const index = parseInt(u.searchParams.get("index") ?? "0", 10);
+    return { cdnUrl: `https://cdn.midjourney.com/${jobId}/0_${index}.png`, jobId, index };
+  } catch {
+    return null;
+  }
+}
+
 function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData, onError }: {
   sourceUrl: string; onSourceUrl: (v: string) => void;
   thumbnailData: string; onThumbnailData: (v: string) => void;
@@ -207,6 +230,10 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
 }) {
   const [copied, setCopied] = useState(false);
   const isUrl = sourceUrl.startsWith("http");
+
+  const mjSource = useMemo(() => parseMJSourceUrl(sourceUrl), [sourceUrl]);
+  const isDirectImage = isUrl && /\\.(png|jpe?g|webp|gif)(\\?.*)?$/i.test(sourceUrl);
+  const previewUrl = thumbnailData || mjSource?.cdnUrl || (isDirectImage ? sourceUrl : null);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(sourceUrl);
@@ -227,28 +254,12 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     const reader = new FileReader();
     reader.onload = () => {
       onThumbnailData(reader.result as string);
-      onSourceUrl("");
     };
     reader.readAsDataURL(file);
   };
 
-  if (thumbnailData) {
-    return (
-      <div className="flex items-center gap-2 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
-        <img src={thumbnailData} alt="Source" className="w-12 h-12 object-cover rounded-sm shrink-0" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
-        <div className="flex-1 min-w-0">
-          <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">Uploaded image</span>
-          <p className="font-mono text-[8px] text-dim/40 mt-0.5">Saved as prompt thumbnail</p>
-        </div>
-        <button type="button" onClick={() => onThumbnailData("")} className="text-dim/40 hover:text-red transition-precise shrink-0">
-          <X size={10} />
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="relative">
         <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
           placeholder="Paste URL or upload image…"
@@ -265,10 +276,28 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
           </button>
         )}
       </div>
-      <label className="flex items-center gap-1 cursor-pointer w-fit">
+      
+      {previewUrl && (
+        <div className="flex items-center gap-2 p-2 rounded-sm mt-1" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+          <img src={previewUrl} alt="Preview" className="w-12 h-12 object-cover rounded-sm shrink-0" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+          <div className="flex-1 min-w-0">
+            <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">
+              {thumbnailData ? "Uploaded image" : "URL Preview"}
+            </span>
+            <p className="font-mono text-[8px] text-dim/40 mt-0.5">Will be used as prompt thumbnail</p>
+          </div>
+          {thumbnailData && (
+            <button type="button" onClick={() => onThumbnailData("")} className="text-dim/40 hover:text-red transition-precise shrink-0" title="Remove uploaded image">
+              <X size={10} />
+            </button>
+          )}
+        </div>
+      )}
+
+      <label className="flex items-center gap-1 cursor-pointer w-fit mt-0.5">
         <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
         <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-cyan transition-precise">
-          + Upload image
+          + Upload custom thumbnail
         </span>
       </label>
     </div>
@@ -304,31 +333,6 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
       </div>
     </div>
   );
-}
-
-// ─── MJ Source URL Parser ─────────────────────────────────────
-
-function parseMJSourceUrl(url: string): { cdnUrl: string; jobId: string; index: number } | null {
-  try {
-    const u = new URL(url.trim());
-    if (!u.hostname.endsWith("midjourney.com")) return null;
-
-    // Direct CDN URL: cdn.midjourney.com/{uuid}/0_{n}.png
-    if (u.hostname === "cdn.midjourney.com") {
-      const cdn = u.pathname.match(/\/([0-9a-f-]{36})\/0_(\d+)/i);
-      if (!cdn) return null;
-      return { cdnUrl: url.trim(), jobId: cdn[1], index: parseInt(cdn[2], 10) };
-    }
-
-    // alpha.midjourney.com/jobs/{uuid}?index={n}
-    const match = u.pathname.match(/\/jobs\/([0-9a-f-]{36})/i);
-    if (!match) return null;
-    const jobId = match[1];
-    const index = parseInt(u.searchParams.get("index") ?? "0", 10);
-    return { cdnUrl: `https://cdn.midjourney.com/${jobId}/0_${index}.png`, jobId, index };
-  } catch {
-    return null;
-  }
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -475,7 +479,7 @@ export function ManualImport() {
         failure_notes: aiLookNotes.trim() || undefined,
         is_recipe: asRecipe,
         source_url: source.trim() || undefined,
-        thumbnail_data: thumbnailData || undefined,
+        thumbnail_data: thumbnailData || parseMJSourceUrl(source)?.cdnUrl || (source.startsWith("http") && /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(source) ? source : undefined),
       });
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});

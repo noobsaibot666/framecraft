@@ -15,6 +15,8 @@ import {
   type ImportLearningSignal,
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
+import { validateImageFile } from "@/lib/imageUtils";
+import { batchFullySucceeded, summarizeBatchOutcome, type BatchFailure } from "@/lib/batchImport";
 import type { Provider, Project } from "@/types";
 
 // ─── Parameter Detection ──────────────────────────────────────
@@ -203,9 +205,10 @@ function FieldSelect({ label, value, onChange, options }: {
   );
 }
 
-function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData }: {
+function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData, onError }: {
   sourceUrl: string; onSourceUrl: (v: string) => void;
   thumbnailData: string; onThumbnailData: (v: string) => void;
+  onError?: (msg: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const isUrl = sourceUrl.startsWith("http");
@@ -219,6 +222,8 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const invalid = validateImageFile(file);
+    if (invalid) { onError?.(invalid); e.target.value = ""; return; }
     const reader = new FileReader();
     reader.onload = () => {
       onThumbnailData(reader.result as string);
@@ -396,6 +401,7 @@ export function ManualImport() {
   const [batchError, setBatchError] = useState("");
   const [batchSaving, setBatchSaving] = useState(false);
   const [batchDone, setBatchDone] = useState(0);
+  const [batchResult, setBatchResult] = useState("");
 
   const handleAnalyze = useCallback(() => {
     if (!raw.trim()) return;
@@ -491,22 +497,38 @@ export function ManualImport() {
     if (!batchParsed.length) return;
     setBatchSaving(true);
     setBatchDone(0);
-    let count = 0;
-    for (const item of batchParsed) {
-      const learned = analyzeImportedPromptLearning(item.prompt_text);
-      await create({
-        title: item.title,
-        provider: item.provider ?? "midjourney",
-        prompt_text: item.prompt_text,
-        avoidance_text: learned.avoidanceText,
-        tags: uniqueTags([...(item.tags ?? []), ...learned.tags]),
-        notes: [item.notes, buildImportLearningNotes(undefined, learned)].filter(Boolean).join("\n") || undefined,
-      });
-      count++;
-      setBatchDone(count);
+    setBatchResult("");
+    let succeeded = 0;
+    const failures: BatchFailure[] = [];
+    try {
+      for (const item of batchParsed) {
+        try {
+          const learned = analyzeImportedPromptLearning(item.prompt_text);
+          await create({
+            title: item.title,
+            provider: item.provider ?? "midjourney",
+            prompt_text: item.prompt_text,
+            avoidance_text: learned.avoidanceText,
+            tags: uniqueTags([...(item.tags ?? []), ...learned.tags]),
+            notes: [item.notes, buildImportLearningNotes(undefined, learned)].filter(Boolean).join("\n") || undefined,
+          });
+          succeeded++;
+          setBatchDone(succeeded);
+        } catch (err) {
+          // One bad item must not abort the whole batch or strand the saving state.
+          failures.push({ title: item.title, error: err instanceof Error ? err.message : String(err) });
+        }
+      }
+    } finally {
+      setBatchSaving(false);
     }
-    setBatchSaving(false);
-    navigate("/library");
+    const outcome = { total: batchParsed.length, succeeded, failures };
+    if (batchFullySucceeded(outcome)) {
+      navigate("/library");
+      return;
+    }
+    // Partial or total failure — keep the user here and report exactly what happened.
+    setBatchResult(summarizeBatchOutcome(outcome));
   };
 
   const paramCount = Object.keys(detected).filter((k) => detected[k as keyof DetectedParams]).length;
@@ -799,7 +821,7 @@ export function ManualImport() {
               <FieldSelect label="PROVIDER" value={provider} onChange={(v) => setProvider(v as Provider)} options={PROVIDERS} />
               <div className="flex flex-col gap-1.5">
                 <label className="system-label">SOURCE</label>
-                <DualSourceInput sourceUrl={source} onSourceUrl={setSource} thumbnailData={thumbnailData} onThumbnailData={setThumbnailData} />
+                <DualSourceInput sourceUrl={source} onSourceUrl={setSource} thumbnailData={thumbnailData} onThumbnailData={setThumbnailData} onError={setError} />
                 {mjSource && !thumbnailData && (
                   <div className="flex items-start gap-3 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <img
@@ -963,6 +985,14 @@ export function ManualImport() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-sm"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
                 <span className="font-mono text-[10px] text-dim">{batchDone} / {batchParsed.length} imported…</span>
+              </div>
+            )}
+
+            {batchResult && !batchSaving && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-sm"
+                style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(215,25,33,0.06)" }}>
+                <AlertTriangle size={11} className="text-red shrink-0" />
+                <span className="font-mono text-[10px] text-readable">{batchResult}</span>
               </div>
             )}
 

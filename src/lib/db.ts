@@ -5,6 +5,7 @@ import { selectPaged, type PageResult, type PageOptions } from "./pagination";
 import { executeAtomically } from "./dbTransaction";
 import { buildBatchUpdatePromptStatements } from "./dbStatements";
 import { removeManagedPaths } from "./fileStore";
+import { invalidateRecommendations } from "./recommendations";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -821,6 +822,8 @@ export async function recomputePromptResultSummary(promptId: string): Promise<vo
   const results = await getResultsForPrompt(promptId);
   const summary = summarizePromptFromResults(results);
   await updatePrompt(promptId, summary);
+  // Result scoring changes win_count/avg_score — the primary recommendation inputs.
+  invalidateRecommendations();
 }
 
 export async function updateResult(id: string, data: Partial<CreateResultInput>): Promise<void> {

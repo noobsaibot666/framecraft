@@ -21,10 +21,20 @@ export function useImageDisplaySrc(source: string | undefined): {
   }, [source]);
 
   useEffect(() => {
+    let ignore = false;
     attemptedFallback.current = false;
     setFallbackSrc(undefined);
-    if (source && !imageDisplaySrc(source)) loadFallback();
-  }, [loadFallback, source]);
+    if (source && !imageDisplaySrc(source) && isStoredImagePath(source)) {
+      attemptedFallback.current = true;
+      readImageAsDataUrl(source)
+        .then((dataUrl) => {
+          // A newer source arrived while this load was in flight — drop the stale result.
+          if (!ignore && dataUrl.startsWith("data:")) setFallbackSrc(dataUrl);
+        })
+        .catch(() => {});
+    }
+    return () => { ignore = true; };
+  }, [source]);
 
   return {
     src: fallbackSrc ?? imageDisplaySrc(source),

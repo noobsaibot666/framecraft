@@ -37,9 +37,27 @@ export function PageTransition() {
   // Freeze each route's outlet so AnimatePresence renders the correct (old) content
   // during exit rather than the new route's content. Without this, both the exiting
   // and entering elements would show the new page during the crossfade.
+  //
+  // Retention is bounded to the current + previous key: the crossfade only ever needs
+  // the entering and exiting outlets, so anything older is evicted to prevent the map
+  // (which holds whole React subtrees) from growing with every route visited.
   const outletCache = useRef<Map<string, React.ReactNode>>(new Map());
+  const currentKeyRef = useRef<string | null>(null);
+  const previousKeyRef = useRef<string | null>(null);
+
+  // Advance the current/previous window when the route key changes.
+  if (key !== currentKeyRef.current) {
+    previousKeyRef.current = currentKeyRef.current;
+    currentKeyRef.current = key;
+  }
+
   if (outlet) {
     outletCache.current.set(key, outlet);
+    for (const cachedKey of outletCache.current.keys()) {
+      if (cachedKey !== currentKeyRef.current && cachedKey !== previousKeyRef.current) {
+        outletCache.current.delete(cachedKey);
+      }
+    }
   }
 
   return (

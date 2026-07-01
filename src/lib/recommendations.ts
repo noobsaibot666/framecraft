@@ -13,6 +13,7 @@
 
 import type { Prompt, Token, SREF, Profile, Reference, Recipe } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { createBoundedCache } from "./boundedCache";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -582,29 +583,62 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
   });
 }
 
-const _recCache = new Map<string, { result: RecommendationSet; ts: number }>();
+// Bounded 30s cache (max 24 contexts) keyed on EVERY input that changes results.
+// tags and promptText feed recommendTokens/recommendReferences, so they must be in the key.
+const _recCache = createBoundedCache<RecommendationSet>(24, 30_000);
+// In-flight dedupe: concurrent callers with the same key share one computation.
+const _recInFlight = new Map<string, Promise<RecommendationSet>>();
 
-/** Run all recommendation scorers in parallel, with a 30s in-memory cache per context key. */
+function recommendationKey(ctx: RecommendationContext): string {
+  return [
+    ctx.provider ?? "",
+    ctx.category ?? "",
+    ctx.projectId ?? "",
+    ctx.excludePromptId ?? "",
+    (ctx.tags ?? []).join(","),
+    ctx.promptText ?? "",
+  ].join("|");
+}
+
+/** Drop all cached recommendation sets — call after any write that changes scoring inputs. */
+export function invalidateRecommendations(): void {
+  _recCache.clear();
+  _recInFlight.clear();
+}
+
+/** Run all recommendation scorers in parallel, with a bounded 30s cache + in-flight dedupe. */
 export async function getRecommendations(ctx: RecommendationContext): Promise<RecommendationSet> {
   if (!isTauri) {
     return { tokens: [], prompts: [], recipes: [], srefs: [], profiles: [], references: [], avoidance: [] };
   }
 
-  const key = `${ctx.provider ?? ""}|${ctx.category ?? ""}|${ctx.projectId ?? ""}|${ctx.excludePromptId ?? ""}`;
+  const key = recommendationKey(ctx);
   const cached = _recCache.get(key);
-  if (cached && Date.now() - cached.ts < 30_000) return cached.result;
+  if (cached) return cached;
 
-  const [tokens, prompts, recipes, srefs, profiles, references, avoidance] = await Promise.all([
-    recommendTokens(ctx),
-    recommendPrompts(ctx),
-    recommendRecipes(ctx),
-    recommendSREFs(ctx),
-    recommendProfiles(ctx),
-    recommendReferences(ctx),
-    recommendAvoidance(ctx),
-  ]);
+  const existing = _recInFlight.get(key);
+  if (existing) return existing;
 
-  const result = { tokens, prompts, recipes, srefs, profiles, references, avoidance };
-  _recCache.set(key, { result, ts: Date.now() });
-  return result;
+  const work = (async () => {
+    const [tokens, prompts, recipes, srefs, profiles, references, avoidance] = await Promise.all([
+      recommendTokens(ctx),
+      recommendPrompts(ctx),
+      recommendRecipes(ctx),
+      recommendSREFs(ctx),
+      recommendProfiles(ctx),
+      recommendReferences(ctx),
+      recommendAvoidance(ctx),
+    ]);
+    const result = { tokens, prompts, recipes, srefs, profiles, references, avoidance };
+    _recCache.set(key, result);
+    return result;
+  })();
+
+  _recInFlight.set(key, work);
+  try {
+    return await work;
+  } finally {
+    // Evict the in-flight promise (rejected or resolved) so failures can retry.
+    _recInFlight.delete(key);
+  }
 }

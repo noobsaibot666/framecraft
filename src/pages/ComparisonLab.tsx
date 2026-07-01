@@ -36,7 +36,7 @@ import {
 } from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
-import { fileToDataUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, validateImageFile } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -616,6 +616,8 @@ export function ComparisonLab() {
       setUploadError("All comparison slots are full. Remove one before adding another image.");
       return;
     }
+    const invalid = validateImageFile(file);
+    if (invalid) { setUploadError(invalid); return; }
 
     setUploading(true);
     setUploadError("");

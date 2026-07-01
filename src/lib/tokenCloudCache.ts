@@ -14,6 +14,10 @@ export function createTokenCategoryCache(loadTokens: TokenLoader) {
     let pending = cache.get(categoryId);
     if (!pending) {
       pending = loadTokens(categoryId).then((tokens) => [...tokens]);
+      // Evict a rejected load so the next read retries instead of replaying the failure.
+      pending.catch(() => {
+        if (cache.get(categoryId) === pending) cache.delete(categoryId);
+      });
       cache.set(categoryId, pending);
     }
 

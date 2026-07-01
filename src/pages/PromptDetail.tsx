@@ -93,15 +93,20 @@ export function PromptDetail() {
 
   useEffect(() => {
     if (!id) return;
+    // Guard against a fast id change: stale responses from a previous id must not
+    // overwrite the current prompt's state.
+    let ignore = false;
     getById(id).then((p) => {
+      if (ignore) return;
       setPrompt(p);
       setLoading(false);
     });
-    getResultsForPrompt(id).then(setResults);
-    getPromptVersions(id).then(setVersions).catch(() => {});
-    getChildPrompts(id).then(setChildPrompts).catch(() => {});
-    getProjectsForPrompt(id).then(setLinkedProjects).catch(() => {});
-    getProjects({ excludeArchived: true }).then(setAllProjects).catch(() => {});
+    getResultsForPrompt(id).then((r) => { if (!ignore) setResults(r); });
+    getPromptVersions(id).then((v) => { if (!ignore) setVersions(v); }).catch(() => {});
+    getChildPrompts(id).then((c) => { if (!ignore) setChildPrompts(c); }).catch(() => {});
+    getProjectsForPrompt(id).then((l) => { if (!ignore) setLinkedProjects(l); }).catch(() => {});
+    getProjects({ excludeArchived: true }).then((a) => { if (!ignore) setAllProjects(a); }).catch(() => {});
+    return () => { ignore = true; };
   }, [id, getById]);
 
   useShortcut("cmd+e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);

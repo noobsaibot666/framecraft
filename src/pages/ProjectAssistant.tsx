@@ -282,7 +282,10 @@ export function ProjectAssistant() {
   // Load messages when thread changes
   useEffect(() => {
     if (!activeThreadId) { setMessages([]); return; }
-    getMessages(activeThreadId).then(setMessages);
+    // Guard: switching threads fast must not let an old thread's messages land here.
+    let ignore = false;
+    getMessages(activeThreadId).then((m) => { if (!ignore) setMessages(m); });
+    return () => { ignore = true; };
   }, [activeThreadId]);
 
   // Scroll to bottom on new messages

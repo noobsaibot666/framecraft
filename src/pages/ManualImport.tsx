@@ -19,7 +19,7 @@ import {
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
 import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
-import { THUMBNAIL_UPDATED_EVENT } from "@/lib/thumbnailMigration";
+
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import type { Provider, Project } from "@/types";
 
@@ -400,7 +400,7 @@ const PROVIDERS: { value: Provider; label: string }[] = [
 export function ManualImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { create, update, prompts: allPrompts } = usePromptStore();
+  const { create, prompts: allPrompts } = usePromptStore();
 
   // Mode — read ?batch=1 from URL on mount
   const [mode, setMode] = useState<"single" | "batch">(searchParams.get("batch") === "1" ? "batch" : "single");
@@ -502,6 +502,19 @@ export function ManualImport() {
       }
       const notes = buildImportLearningNotes(source, learned);
       const isNbMode = importType === "nano_banana_json";
+
+      // Resolve thumbnail BEFORE inserting the prompt so it's stored atomically.
+      // This eliminates the race condition where PromptLibrary re-fetches from DB
+      // before the async thumbnail update completes.
+      let resolvedThumb: string | undefined = thumbnailData || undefined;
+      if (!resolvedThumb) {
+        const mj = parseMJSourceUrl(source);
+        const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
+        if (fetchUrl) {
+          resolvedThumb = await fetchImageAsDataUrl(fetchUrl).catch(() => undefined);
+        }
+      }
+
       const id = await create({
         title: title.trim(),
         provider,
@@ -521,35 +534,11 @@ export function ManualImport() {
         failure_notes: aiLookNotes.trim() || undefined,
         is_recipe: asRecipe,
         source_url: source.trim() || undefined,
-        thumbnail_data: (() => {
-          // If user explicitly uploaded a file, always use that
-          if (thumbnailData) return thumbnailData;
-          return undefined; // will be fetched below if needed
-        })(),
+        // Thumbnail is now resolved before insert — no async update needed
+        thumbnail_data: resolvedThumb,
       });
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});
-      }
-      // If no thumbnail yet, try to fetch it natively (handles Midjourney CDN + direct image URLs)
-      if (!thumbnailData) {
-        const mj = parseMJSourceUrl(source);
-        const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
-        if (fetchUrl) {
-          fetchImageAsDataUrl(fetchUrl)
-            .then((thumb) => {
-              // Persist to DB and patch the store in-place
-              update(id, { thumbnail_data: thumb });
-              // Also fire the same event that the background migrator uses,
-              // so PromptLibrary's event listener can react immediately
-              // even if the component already rendered with empty thumbnail_data.
-              window.dispatchEvent(
-                new CustomEvent<{ id: string; thumbnail_data: string }>(THUMBNAIL_UPDATED_EVENT, {
-                  detail: { id, thumbnail_data: thumb },
-                })
-              );
-            })
-            .catch(() => {}); // silently ignore — user can add manually later
-        }
       }
       navigate(`/library/${id}`);
     } catch (err) {

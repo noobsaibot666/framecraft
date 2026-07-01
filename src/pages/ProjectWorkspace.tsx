@@ -161,35 +161,42 @@ function TagChipInput({ tags, onChange }: { tags: string[]; onChange: (t: string
   );
 }
 
-function PillToggleGroup({ values, options, onChange }: {
+function ProviderSelect({ values, options, onChange }: {
   values: string[];
   options: string[];
   onChange: (next: string[]) => void;
 }) {
-  const toggle = (value: string) => {
-    onChange(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
-  };
-
+  const available = options.filter((o) => !values.includes(o));
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map((option) => {
-        const selected = values.includes(option);
-        return (
-          <button
-            key={option}
-            type="button"
-            onClick={() => toggle(option)}
-            className={cn(
-              "h-8 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise border",
-              selected
-                ? "text-cyan border-cyan/55 bg-cyan/10"
-                : "text-readable border-white/18 hover:text-white hover:border-white/30"
-            )}
-          >
-            {option}
-          </button>
-        );
-      })}
+    <div className="flex flex-col gap-1.5">
+      <div className="relative">
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) onChange([...values, e.target.value]); }}
+          className="appearance-none h-10 w-full pl-3 pr-7 font-mono text-[13px] text-white bg-transparent rounded-sm focus:outline-none cursor-pointer"
+          style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+        >
+          <option value="" className="bg-panel text-dim/50">
+            {values.length === 0 ? "Add provider…" : "Add another…"}
+          </option>
+          {available.map((o) => (
+            <option key={o} value={o} className="bg-panel text-white">{o}</option>
+          ))}
+        </select>
+        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+      </div>
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((v) => (
+            <span key={v} className="flex items-center gap-1 h-6 px-2 rounded-sm font-mono text-[10px] tracking-widest uppercase text-cyan bg-cyan/8 border border-cyan/25">
+              {v}
+              <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} className="text-cyan/40 hover:text-white transition-precise">
+                <X size={8} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -846,40 +853,38 @@ export function ProjectWorkspace() {
       subtitle={[client, campaign].filter(Boolean).join(" · ") || "PROJECT WORKSPACE"}
       action={
         <div className="flex items-center gap-2">
-          {/* Status pill */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-sm"
+          {/* Status pill — same h-10 as Button size="md" */}
+          <div className="flex items-center gap-2 h-10 px-3 rounded-sm"
             style={{ border: "var(--border-dim)" }}>
-            <span className={cn("w-1.5 h-1.5 rounded-full", STATUS_DOT[status])} />
+            <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", STATUS_DOT[status])} />
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              className="appearance-none font-mono text-[13px] text-white bg-transparent border-none focus:outline-none cursor-pointer"
+              className="appearance-none font-mono text-[13px] tracking-widest uppercase text-white bg-transparent border-none focus:outline-none cursor-pointer"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>
               ))}
             </select>
           </div>
-          <button type="button" onClick={handleDelete}
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={handleDelete}
             onBlur={() => setConfirmDelete(false)}
-            className={cn(
-              "font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise",
-              confirmDelete ? "text-red border-red/40" : "text-dim hover:text-red"
-            )}
-            style={{ border: confirmDelete ? "1px solid" : "var(--border-dim)" }}>
-            <Trash2 size={9} className="inline mr-1" />
-            {confirmDelete ? "Confirm" : "Delete"}
-          </button>
-          <button type="button" onClick={handleResetProject}
+            className={confirmDelete ? "text-red border-red/40" : "text-dim hover:text-red"}
+          >
+            <Trash2 size={11} /> {confirmDelete ? "Confirm" : "Delete"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={handleResetProject}
             onBlur={() => setConfirmReset(false)}
-            className={cn(
-              "font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise",
-              confirmReset ? "text-red border-red/40" : "text-dim hover:text-red"
-            )}
-            style={{ border: confirmReset ? "1px solid" : "var(--border-dim)" }}>
-            <X size={9} className="inline mr-1" />
-            {confirmReset ? "Confirm Reset" : "Reset"}
-          </button>
+            className={confirmReset ? "text-red border-red/40" : "text-dim hover:text-red"}
+          >
+            <X size={11} /> {confirmReset ? "Confirm Reset" : "Reset"}
+          </Button>
           <Button variant="ghost" size="md" onClick={() => navigate("/projects")}>
             <ArrowLeft size={11} /> Projects
           </Button>
@@ -990,7 +995,7 @@ export function ProjectWorkspace() {
 
           {/* Setup */}
           <Panel title="SETUP">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>PROJECT TYPE</FieldLabel>
                 <FieldSelect<string>
@@ -1002,11 +1007,11 @@ export function ProjectWorkspace() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>INTENDED OUTPUT</FieldLabel>
-                <FieldTextarea value={intendedOutput} onChange={setIntendedOutput} placeholder="Final assets, prompt systems, boards, videos..." rows={3} />
+                <FieldInput value={intendedOutput} onChange={setIntendedOutput} placeholder="Final assets, prompt systems, boards, videos…" mono />
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>PROVIDER TARGETS</FieldLabel>
-                <PillToggleGroup values={providerTargets} options={PROVIDER_TARGET_OPTIONS} onChange={setProviderTargets} />
+                <ProviderSelect values={providerTargets} options={PROVIDER_TARGET_OPTIONS} onChange={setProviderTargets} />
               </div>
             </div>
           </Panel>
@@ -1084,8 +1089,9 @@ export function ProjectWorkspace() {
               </Button>
             }
           >
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div className="flex flex-col gap-1.5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Row 1: Visual direction + primary needs field */}
+              <div className={cn("flex flex-col gap-1.5", !hasImageProvider && !hasVideoProvider && "lg:col-span-2")}>
                 <FieldLabel ai>VISUAL DIRECTION</FieldLabel>
                 <FieldTextarea value={visualDirection} onChange={setVisualDirection} placeholder="Look, style, realism level..." rows={4} />
               </div>
@@ -1095,19 +1101,27 @@ export function ProjectWorkspace() {
                   <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
                 </div>
               )}
-              {hasVideoProvider && (
+              {!hasImageProvider && hasVideoProvider && (
                 <div className="flex flex-col gap-1.5">
                   <FieldLabel ai>VIDEO NEEDS</FieldLabel>
                   <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
                 </div>
               )}
-              <div className="flex flex-col gap-1.5 lg:col-span-2">
+              {/* Row 2: Video needs (only if both providers active — full width) */}
+              {hasImageProvider && hasVideoProvider && (
+                <div className="flex flex-col gap-1.5 lg:col-span-2">
+                  <FieldLabel ai>VIDEO NEEDS</FieldLabel>
+                  <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={3} />
+                </div>
+              )}
+              {/* Row last: Creative goals + constraints — always equal */}
+              <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>CREATIVE GOALS</FieldLabel>
-                <FieldTextarea value={creativeGoals} onChange={setCreativeGoals} placeholder="What good looks like, what to avoid, and what should become reusable..." rows={3} />
+                <FieldTextarea value={creativeGoals} onChange={setCreativeGoals} placeholder="What good looks like, what to avoid, and what should become reusable..." rows={4} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>CONSTRAINTS</FieldLabel>
-                <FieldTextarea value={constraints} onChange={setConstraints} placeholder="Brand, legal, AI-look, or production limits..." rows={3} />
+                <FieldTextarea value={constraints} onChange={setConstraints} placeholder="Brand, legal, AI-look, or production limits..." rows={4} />
               </div>
             </div>
           </Panel>

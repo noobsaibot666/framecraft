@@ -128,44 +128,43 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
   };
 
   return (
-    <section className="flex flex-col gap-5 py-6 border-y border-white/10">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
-        <div className="flex flex-col gap-1 max-w-2xl">
-          <span className="system-label text-cyan">DIRECTION STUDIO</span>
-          <h2 className="font-sans text-[20px] font-semibold text-white">Creative direction alternatives</h2>
-          <p className="font-mono text-[12px] leading-relaxed text-readable">
-            Develop distinct campaign directions, select one, then apply it to the Pre-Craft context.
-          </p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <textarea
-            value={userContext}
-            onChange={(event) => setUserContext(event.target.value)}
-            placeholder="Optional: add focus or constraints before generating — e.g. focus on luxury feel, bold contrast dark mood…"
-            rows={2}
-            className="w-full px-3 py-2 rounded-sm bg-black/20 font-mono text-[12px] leading-relaxed text-soft-white resize-none focus:outline-none"
-            style={{ border: "var(--border-default)" }}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={modelId}
-              onChange={(event) => setModelId(event.target.value)}
-              className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none"
-              style={{ border: "var(--border-default)" }}
-              aria-label="Creative Director model"
-            >
-              {AI_MODELS.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
-              ))}
-            </select>
-            <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()}>
-              <Sparkles size={11} /> {generating ? "Developing..." : "Generate 3"}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleNew} disabled={directions.length >= 3}>
-              <Plus size={11} /> New Direction
-            </Button>
-          </div>
-        </div>
+    <section className="flex flex-col gap-4 py-6 border-y border-white/10">
+      {/* Header */}
+      <div className="flex flex-col gap-1">
+        <span className="system-label text-cyan">DIRECTION STUDIO</span>
+        <h2 className="font-sans text-[20px] font-semibold text-white">Creative direction alternatives</h2>
+        <p className="font-mono text-[12px] leading-relaxed text-readable">
+          Develop distinct campaign directions, select one, then apply it to the Pre-Craft context.
+        </p>
+      </div>
+
+      {/* Controls row */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={userContext}
+          onChange={(event) => setUserContext(event.target.value)}
+          placeholder="Add focus or constraints before generating…"
+          className="flex-1 h-9 px-3 rounded-sm bg-black/20 font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
+          style={{ border: "var(--border-default)" }}
+        />
+        <select
+          value={modelId}
+          onChange={(event) => setModelId(event.target.value)}
+          className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none shrink-0"
+          style={{ border: "var(--border-default)" }}
+          aria-label="Creative Director model"
+        >
+          {AI_MODELS.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
+          ))}
+        </select>
+        <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()} className="shrink-0">
+          <Sparkles size={11} /> {generating ? "Developing…" : "Generate 3"}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={handleNew} disabled={directions.length >= 3} className="shrink-0">
+          <Plus size={11} /> New Direction
+        </Button>
       </div>
 
       {error && (

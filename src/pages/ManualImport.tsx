@@ -19,6 +19,7 @@ import {
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
 import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
+import { THUMBNAIL_UPDATED_EVENT } from "@/lib/thumbnailMigration";
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import type { Provider, Project } from "@/types";
 
@@ -530,7 +531,18 @@ export function ManualImport() {
         const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
         if (fetchUrl) {
           fetchImageAsDataUrl(fetchUrl)
-            .then((thumb) => update(id, { thumbnail_data: thumb }))
+            .then((thumb) => {
+              // Persist to DB and patch the store in-place
+              update(id, { thumbnail_data: thumb });
+              // Also fire the same event that the background migrator uses,
+              // so PromptLibrary's event listener can react immediately
+              // even if the component already rendered with empty thumbnail_data.
+              window.dispatchEvent(
+                new CustomEvent<{ id: string; thumbnail_data: string }>(THUMBNAIL_UPDATED_EVENT, {
+                  detail: { id, thumbnail_data: thumb },
+                })
+              );
+            })
             .catch(() => {}); // silently ignore — user can add manually later
         }
       }

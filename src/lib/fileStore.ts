@@ -200,6 +200,64 @@ function relativeAfterMediaDir(path: string, dirName: "results" | "references"):
   return relative && !relative.startsWith("../") ? relative : null;
 }
 
+// ─── Staged media lifecycle ───────────────────────────────────
+
+export interface StagedMedia {
+  originalTemp: string;
+  thumbnailTemp: string;
+  originalFinal: string;
+  thumbnailFinal: string;
+}
+
+export async function stageManagedImage(
+  kind: "result" | "reference",
+  id: string,
+  dataUrl: string
+): Promise<StagedMedia> {
+  if (!isTauri) {
+    return { originalTemp: dataUrl, thumbnailTemp: dataUrl, originalFinal: dataUrl, thumbnailFinal: dataUrl };
+  }
+  const { writeFile, mkdir } = await import("@tauri-apps/plugin-fs");
+  const paths = await getAppDataLibraryPaths();
+  const dir = kind === "result" ? paths.resultsDir : paths.referencesDir;
+  await mkdir(dir, { recursive: true });
+
+  const ext = extFromDataUrl(dataUrl);
+  const originalFinal = `${dir}${id}.${ext}`;
+  const thumbnailFinal = `${dir}${id}_thumb.jpg`;
+  const originalTemp = `${dir}${id}_staging.${ext}`;
+  const thumbnailTemp = `${dir}${id}_staging_thumb.jpg`;
+
+  await writeFile(originalTemp, dataUrlToBytes(dataUrl));
+  const thumbDataUrl = await thumbnailFromDataUrl(dataUrl, 320);
+  await writeFile(thumbnailTemp, dataUrlToBytes(thumbDataUrl));
+
+  return { originalTemp, thumbnailTemp, originalFinal, thumbnailFinal };
+}
+
+export async function publishStagedMedia(media: StagedMedia): Promise<void> {
+  if (!isTauri) return;
+  const { rename } = await import("@tauri-apps/plugin-fs");
+  await rename(media.originalTemp, media.originalFinal);
+  await rename(media.thumbnailTemp, media.thumbnailFinal);
+}
+
+export async function cleanupStagedMedia(media: StagedMedia): Promise<void> {
+  if (!isTauri) return;
+  const { remove } = await import("@tauri-apps/plugin-fs");
+  try { await remove(media.originalTemp); } catch {}
+  try { await remove(media.thumbnailTemp); } catch {}
+}
+
+export async function removeManagedPaths(paths: Array<string | null | undefined>): Promise<void> {
+  if (!isTauri) return;
+  const { remove } = await import("@tauri-apps/plugin-fs");
+  for (const p of paths) {
+    if (!p) continue;
+    try { await remove(p); } catch {}
+  }
+}
+
 export async function deleteResultFiles(resultId: string): Promise<void> {
   if (!isTauri) return;
   const { remove } = await import("@tauri-apps/plugin-fs");

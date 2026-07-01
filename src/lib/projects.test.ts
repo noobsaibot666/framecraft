@@ -93,12 +93,14 @@ describe("projects in-memory CRUD", () => {
       visual_direction: "Premium studio realism",
       constraints: "Avoid over-polished AI skin",
       creative_goals: "Build a reusable craft baseline",
+      campaign_id: "campaign-round-trip",
     });
 
     await updateProject(id, {
       aspect_ratios: ["1:1"],
       provider_targets: ["midjourney", "runway"],
       creative_goals: "Updated production goal",
+      campaign_id: "campaign-round-trip",
     });
 
     const found = await getProjectById(id);
@@ -113,6 +115,7 @@ describe("projects in-memory CRUD", () => {
       visual_direction: "Premium studio realism",
       constraints: "Avoid over-polished AI skin",
       creative_goals: "Updated production goal",
+      campaign_id: "campaign-round-trip",
     });
   });
 

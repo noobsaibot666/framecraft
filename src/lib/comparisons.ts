@@ -7,6 +7,15 @@ import type {
   Provider,
 } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { executeAtomically } from "./dbTransaction";
+import { databaseError } from "./dbErrors";
+import {
+  buildAddComparisonItemStatements,
+  buildClearItemWinnerStatements,
+  buildSetItemRejectedStatements,
+  buildSetItemWinnerStatements,
+  buildSyncDecisionStatements,
+} from "./dbStatements";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -140,8 +149,8 @@ export async function getSessions(projectId?: string): Promise<ComparisonSession
         projectId ? [projectId] : []
       )) as Record<string, unknown>[];
       return rows.map(rowToSession);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("getSessions", err);
     }
   }
 
@@ -162,8 +171,8 @@ export async function getSessionById(id: string): Promise<ComparisonSession | nu
         [id]
       )) as Record<string, unknown>[];
       return rows[0] ? rowToSession(rows[0]) : null;
-    } catch {
-      return null;
+    } catch (err) {
+      throw databaseError("getSessionById", err);
     }
   }
   return _devSessions.find((s) => s.id === id) ?? null;
@@ -219,23 +228,20 @@ export async function addItemToSession(
   if (isTauri) {
     try {
       const db = await getDb();
-      await db.execute(
-        `INSERT OR IGNORE INTO comparison_items
-           (id, session_id, result_id, position, source_role, is_winner, is_rejected, created_at)
-         VALUES ($1, $2, $3, $4, $5, 0, 0, $6)`,
-        [id, sessionId, resultId, position, sourceRole, ts]
+      const results = await executeAtomically(
+        db,
+        buildAddComparisonItemStatements(id, sessionId, resultId, position, sourceRole, ts)
       );
-      await db.execute(
-        "UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2",
-        [ts, sessionId]
-      );
-      return id;
+      const persistedId = results[1]?.rows?.[0]?.id;
+      if (typeof persistedId !== "string") throw new Error("Comparison item was not persisted");
+      return persistedId;
     } catch (err) {
       throw new Error(String(err));
     }
   }
 
-  if (!_devItems.some((i) => i.session_id === sessionId && i.result_id === resultId)) {
+  const existing = _devItems.find((i) => i.session_id === sessionId && i.result_id === resultId);
+  if (!existing) {
     _devItems.push({
       id,
       session_id: sessionId,
@@ -246,13 +252,16 @@ export async function addItemToSession(
       is_rejected: false,
       created_at: ts,
     });
+  } else {
+    existing.position = position;
+    existing.source_role = sourceRole;
   }
   const si = _devSessions.findIndex((s) => s.id === sessionId);
   if (si !== -1) {
     _devSessions[si].item_count = _devItems.filter((i) => i.session_id === sessionId).length;
     _devSessions[si].updated_at = ts;
   }
-  return id;
+  return existing?.id ?? id;
 }
 
 export async function removeItemFromSession(itemId: string): Promise<void> {
@@ -282,8 +291,8 @@ export async function getItemsForSession(sessionId: string): Promise<ComparisonI
         [sessionId]
       )) as Record<string, unknown>[];
       return rows.map(rowToItem);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("getItemsForSession", err);
     }
   }
   return _devItems.filter((i) => i.session_id === sessionId).sort((a, b) => a.position - b.position);
@@ -294,22 +303,15 @@ export async function setItemWinner(itemId: string, sessionId: string): Promise<
   if (isTauri) {
     try {
       const db = await getDb();
-      await db.execute(
-        "UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1",
-        [sessionId]
-      );
-      await db.execute(
-        "UPDATE comparison_items SET is_winner = 1, is_rejected = 0 WHERE id = $1",
-        [itemId]
-      );
-      await db.execute("UPDATE comparison_sessions SET updated_at = $1 WHERE id = $2", [ts, sessionId]);
+      await executeAtomically(db, buildSetItemWinnerStatements(itemId, sessionId, ts));
       return;
     } catch (err) {
       throw new Error(String(err));
     }
   }
+  const item = _devItems.find((i) => i.id === itemId && i.session_id === sessionId);
+  if (!item) return;
   _devItems.filter((i) => i.session_id === sessionId).forEach((i) => { i.is_winner = false; });
-  const item = _devItems.find((i) => i.id === itemId);
   if (item) { item.is_winner = true; item.is_rejected = false; }
 }
 
@@ -317,7 +319,8 @@ export async function clearItemWinner(sessionId: string): Promise<void> {
   if (isTauri) {
     try {
       const db = await getDb();
-      await db.execute("UPDATE comparison_items SET is_winner = 0 WHERE session_id = $1", [sessionId]);
+      const ts = now();
+      await executeAtomically(db, buildClearItemWinnerStatements(sessionId, ts));
       return;
     } catch (err) {
       throw new Error(String(err));
@@ -330,10 +333,7 @@ export async function setItemRejected(itemId: string, isRejected: boolean): Prom
   if (isTauri) {
     try {
       const db = await getDb();
-      await db.execute(
-        "UPDATE comparison_items SET is_rejected = $1, is_winner = 0 WHERE id = $2",
-        [isRejected ? 1 : 0, itemId]
-      );
+      await executeAtomically(db, buildSetItemRejectedStatements(itemId, isRejected));
       return;
     } catch (err) {
       throw new Error(String(err));
@@ -397,8 +397,47 @@ export async function loadProjectResults(projectId: string): Promise<ComparisonR
       [projectId]
     )) as Record<string, unknown>[];
     return rows.map(rowToComparisonResult);
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("loadProjectResults", err);
+  }
+}
+
+// ─── Load results for a specific session ─────────────────────
+
+export async function loadSessionItemResults(sessionId: string): Promise<ComparisonResult[]> {
+  if (!isTauri) return [];
+  try {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT
+         r.id as result_id,
+         r.prompt_id,
+         p.title as prompt_title,
+         p.provider as prompt_provider,
+         p.version as prompt_version,
+         r.thumbnail_path,
+         r.file_path,
+         r.score_overall,
+         r.score_realism,
+         r.score_brand_fit,
+         r.score_composition,
+         r.score_lighting,
+         r.score_ai_risk,
+         r.is_winner,
+         r.is_failed,
+         r.artifacts,
+         r.created_at
+       FROM results r
+       JOIN prompts p ON p.id = r.prompt_id
+       WHERE r.id IN (
+         SELECT result_id FROM comparison_items WHERE session_id = $1
+       )
+       ORDER BY r.created_at DESC`,
+      [sessionId]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToComparisonResult);
+  } catch (err) {
+    throw databaseError("loadSessionItemResults", err);
   }
 }
 
@@ -413,22 +452,8 @@ export async function syncDecisionsToResults(sessionId: string): Promise<number>
   try {
     const db = await getDb();
 
-    const items = (await db.select(
-      "SELECT result_id, is_winner, is_rejected FROM comparison_items WHERE session_id = $1",
-      [sessionId]
-    )) as { result_id: string; is_winner: number; is_rejected: number }[];
-
-    let count = 0;
-    for (const item of items) {
-      if (item.is_winner || item.is_rejected) {
-        await db.execute(
-          "UPDATE results SET is_winner = $1, is_failed = $2 WHERE id = $3",
-          [item.is_winner ? 1 : 0, item.is_rejected ? 1 : 0, item.result_id]
-        );
-        count++;
-      }
-    }
-    return count;
+    const results = await executeAtomically(db, buildSyncDecisionStatements(sessionId));
+    return results[0]?.rowsAffected ?? 0;
   } catch (err) {
     throw new Error(String(err));
   }

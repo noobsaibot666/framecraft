@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("./dbConnection", () => ({ getFramecraftDb: mocks.getDb }));
 import {
   createCreativeDirection,
   deleteCreativeDirection,
@@ -48,5 +51,19 @@ describe("creative direction development store", () => {
     const id = await createCreativeDirection({ project_id: projectId, title: "Delete me" });
     await deleteCreativeDirection(id);
     expect((await getCreativeDirections(projectId)).some((direction) => direction.id === id)).toBe(false);
+  });
+});
+
+// ─── DB error propagation (Tauri branch) ─────────────────────
+
+describe("creativeDirections DB error propagation", () => {
+  beforeEach(() => { vi.resetModules(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("getCreativeDirections propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue({ select: () => Promise.reject("disk I/O error"), execute: vi.fn() });
+    const { getCreativeDirections: fresh } = await import("./creativeDirections");
+    await expect(fresh("proj")).rejects.toThrow("getCreativeDirections: disk I/O error");
   });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
+  AlertCircle, ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
   Star, Check, Image, FileText, Upload, Sparkles,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -591,7 +591,8 @@ export function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "not-found" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -653,42 +654,47 @@ export function ProjectWorkspace() {
     if (!id) return;
     hydratedRef.current = false;
     (async () => {
-      setLoading(true);
-      const [proj, prompts, refs, results, shots] = await Promise.all([
-        getProjectById(id),
-        getPromptsForProject(id),
-        getReferencesForProject(id),
-        getResultsForProject(id),
-        getProjectShots(id),
-      ]);
-      if (!proj) { navigate("/projects"); return; }
+      setLoadState("loading");
+      try {
+        const [proj, prompts, refs, results, shots] = await Promise.all([
+          getProjectById(id),
+          getPromptsForProject(id),
+          getReferencesForProject(id),
+          getResultsForProject(id),
+          getProjectShots(id),
+        ]);
+        if (!proj) { setLoadState("not-found"); return; }
 
-      setTitle(proj.title);
-      setClient(proj.client ?? "");
-      setCampaign(proj.campaign ?? "");
-      setCampaignId(proj.campaign_id ?? "");
-      setStatus(proj.status);
-      setProjectType(proj.project_type ?? "");
-      setIntendedOutput(proj.intended_output ?? "");
-      setImageNeeds(proj.image_needs ?? "");
-      setVideoNeeds(proj.video_needs ?? "");
-      setAspectRatios(proj.aspect_ratios ?? []);
-      setProviderTargets(proj.provider_targets ?? []);
-      setVisualDirection(proj.visual_direction ?? "");
-      setConstraints(proj.constraints ?? "");
-      setCreativeGoals(proj.creative_goals ?? "");
-      setBriefText(proj.brief_text ?? "");
-      setProductionGoal(proj.production_goal ?? "");
-      setCategory(proj.category ?? "");
-      setTags(proj.tags ?? []);
-      setNotes(proj.notes ?? "");
-      setLinkedPrompts(prompts);
-      setLinkedRefs(refs);
-      setLinkedResults(results);
-      setShotCount(shots.length);
-      setShotComplete(shots.filter((s) => s.prompt_id && s.result_id).length);
-      setLoading(false);
-      hydratedRef.current = true;
+        setTitle(proj.title);
+        setClient(proj.client ?? "");
+        setCampaign(proj.campaign ?? "");
+        setCampaignId(proj.campaign_id ?? "");
+        setStatus(proj.status);
+        setProjectType(proj.project_type ?? "");
+        setIntendedOutput(proj.intended_output ?? "");
+        setImageNeeds(proj.image_needs ?? "");
+        setVideoNeeds(proj.video_needs ?? "");
+        setAspectRatios(proj.aspect_ratios ?? []);
+        setProviderTargets(proj.provider_targets ?? []);
+        setVisualDirection(proj.visual_direction ?? "");
+        setConstraints(proj.constraints ?? "");
+        setCreativeGoals(proj.creative_goals ?? "");
+        setBriefText(proj.brief_text ?? "");
+        setProductionGoal(proj.production_goal ?? "");
+        setCategory(proj.category ?? "");
+        setTags(proj.tags ?? []);
+        setNotes(proj.notes ?? "");
+        setLinkedPrompts(prompts);
+        setLinkedRefs(refs);
+        setLinkedResults(results);
+        setShotCount(shots.length);
+        setShotComplete(shots.filter((s) => s.prompt_id && s.result_id).length);
+        setLoadState("ready");
+        hydratedRef.current = true;
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : String(err));
+        setLoadState("error");
+      }
     })();
   }, [id]);
 
@@ -733,7 +739,7 @@ export function ProjectWorkspace() {
   useShortcut("cmd+s", () => { if (!saving) handleSave(); });
 
   useEffect(() => {
-    if (!id || loading || !hydratedRef.current || !title.trim()) return;
+    if (!id || loadState !== "ready" || !hydratedRef.current || !title.trim()) return;
     const timer = window.setTimeout(() => {
       setSaving(true);
       updateProject(id, buildInput())
@@ -749,7 +755,7 @@ export function ProjectWorkspace() {
     }, 650);
     return () => window.clearTimeout(timer);
   }, [
-    id, loading, title, client, campaign, campaignId, status, projectType, intendedOutput,
+    id, loadState, title, client, campaign, campaignId, status, projectType, intendedOutput,
     imageNeeds, videoNeeds, aspectRatios, providerTargets, visualDirection,
     constraints, creativeGoals, briefText, productionGoal, category, tags, notes,
   ]);
@@ -837,11 +843,41 @@ export function ProjectWorkspace() {
   const winnerCount = linkedPrompts.filter((p) => p.is_winner).length;
   const failedCount = linkedPrompts.filter((p) => p.is_failed).length;
 
-  if (loading) {
+  if (loadState === "loading") {
     return (
       <PageContainer title="Project" subtitle="LOADING…">
-        <div className="flex items-center justify-center h-40">
-          <span className="font-mono text-[10px] text-dim/40">Loading…</span>
+        <div className="flex items-center gap-3 py-8">
+          <span className="font-ndot text-[20px] text-dim/30 animate-pulse">···</span>
+          <span className="font-mono text-[12px] text-muted">Loading project…</span>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (loadState === "not-found") {
+    return (
+      <PageContainer title="Project" subtitle="NOT FOUND">
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <AlertCircle size={24} className="text-readable" />
+          <p className="font-mono text-[13px] text-readable">Project not found or has been deleted.</p>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/projects")}>
+            <ArrowLeft size={11} /> Back to Projects
+          </Button>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <PageContainer title="Project" subtitle="ERROR">
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <AlertCircle size={24} className="text-red/60" />
+          <p className="font-mono text-[13px] text-readable">Failed to load project data.</p>
+          {loadError && <p className="font-mono text-[10px] text-red/60 max-w-sm wrap-break-word">{loadError}</p>}
+          <Button variant="ghost" size="sm" onClick={() => navigate("/projects")}>
+            <ArrowLeft size={11} /> Back to Projects
+          </Button>
         </div>
       </PageContainer>
     );

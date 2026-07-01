@@ -1,9 +1,10 @@
 import {
   buildLibraryMetadata,
-  normalizeDir,
   resolveLibraryPaths,
   type LibraryPaths,
 } from "./libraryConfig";
+
+export const MERGE_MANIFEST_VERSION = 1 as const;
 
 export interface LibraryFileSystem {
   exists(path: string): Promise<boolean>;
@@ -60,6 +61,8 @@ export interface LibraryMergeReport {
   prompts: MergeTableReport;
   results: MergeTableReport;
   references: MergeTableReport;
+  tables: Record<string, MergeTableReport>;
+  manifestVersion: typeof MERGE_MANIFEST_VERSION;
   idRemaps: MergeIdRemap[];
   errors: string[];
 }
@@ -67,6 +70,7 @@ export interface LibraryMergeReport {
 export interface MergeTableReport {
   imported: number;
   skippedDuplicates: number;
+  excluded: number;
   remapped: number;
   failed: number;
 }
@@ -84,13 +88,6 @@ export interface BackupLibraryPackageInput {
   referenceFiles: string[];
   fs: LibraryFileSystem;
   createdAt?: string;
-}
-
-export interface PortableMediaPathRewrite {
-  table: "results" | "references";
-  column: "file_path" | "thumbnail_path" | "file_data" | "thumbnail_data";
-  sourcePrefix: string;
-  targetPrefix: string;
 }
 
 export async function createLibraryPackage(
@@ -222,48 +219,6 @@ export async function backupLibraryPackage(input: BackupLibraryPackageInput): Pr
     referenceFiles: input.referenceFiles,
     fs: input.fs,
   });
-}
-
-export function listRelativeMediaFilenames(paths: string[], baseDir: string): string[] {
-  const base = normalizeDir(baseDir);
-  return paths
-    .filter((path) => path.startsWith(base))
-    .map((path) => path.slice(base.length))
-    .filter(Boolean);
-}
-
-export function buildPortableMediaPathRewrites(input: {
-  sourceBaseDir: string;
-  targetBaseDir: string;
-}): PortableMediaPathRewrite[] {
-  const source = resolveLibraryPaths(input.sourceBaseDir);
-  const target = resolveLibraryPaths(input.targetBaseDir);
-  return [
-    {
-      table: "results",
-      column: "file_path",
-      sourcePrefix: source.resultsDir,
-      targetPrefix: target.resultsDir,
-    },
-    {
-      table: "results",
-      column: "thumbnail_path",
-      sourcePrefix: source.resultsDir,
-      targetPrefix: target.resultsDir,
-    },
-    {
-      table: "references",
-      column: "file_data",
-      sourcePrefix: source.referencesDir,
-      targetPrefix: target.referencesDir,
-    },
-    {
-      table: "references",
-      column: "thumbnail_data",
-      sourcePrefix: source.referencesDir,
-      targetPrefix: target.referencesDir,
-    },
-  ];
 }
 
 function assertSafeRelativeMediaPath(path: string): void {

@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("./dbConnection", () => ({ getFramecraftDb: mocks.getDb }));
 import {
   createDeliverable,
   getDeliverablesForProject,
@@ -202,5 +205,33 @@ describe("retreatDeliverable", () => {
     const id = await createDeliverable(del({ status: "planned" }));
     const prev = await retreatDeliverable(id);
     expect(prev).toBeNull();
+  });
+});
+
+// ─── DB error propagation (Tauri branch) ─────────────────────
+
+describe("deliverables DB error propagation", () => {
+  beforeEach(() => { vi.resetModules(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("getDeliverablesForProject propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue({ select: () => Promise.reject("disk I/O error"), execute: vi.fn() });
+    const { getDeliverablesForProject: fresh } = await import("./deliverables");
+    await expect(fresh("proj")).rejects.toThrow("getDeliverablesForProject: disk I/O error");
+  });
+
+  it("getDeliverableById propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue({ select: () => Promise.reject("SQLITE_BUSY"), execute: vi.fn() });
+    const { getDeliverableById: fresh } = await import("./deliverables");
+    await expect(fresh("d")).rejects.toThrow("getDeliverableById: SQLITE_BUSY");
+  });
+
+  it("getReferencesForDeliverable propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue({ select: () => Promise.reject("corrupt page"), execute: vi.fn() });
+    const { getReferencesForDeliverable: fresh } = await import("./deliverables");
+    await expect(fresh("d")).rejects.toThrow("getReferencesForDeliverable: corrupt page");
   });
 });

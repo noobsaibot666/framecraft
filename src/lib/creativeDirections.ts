@@ -1,5 +1,6 @@
 import type { CreativeDirection } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { databaseError } from "./dbErrors";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 const developmentDirections: CreativeDirection[] = [];
@@ -88,8 +89,8 @@ export async function getCreativeDirections(projectId: string): Promise<Creative
         [projectId]
       ) as Record<string, unknown>[];
       return rows.map(rowToDirection);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("getCreativeDirections", err);
     }
   }
   return developmentDirections

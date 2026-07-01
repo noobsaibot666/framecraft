@@ -1,5 +1,6 @@
 import type { Campaign, CampaignStatus, Project } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { databaseError, isSchemaMigrationError } from "./dbErrors";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -40,16 +41,13 @@ export async function getCampaigns(): Promise<Campaign[]> {
        ORDER BY c.created_at DESC`
     );
     return (rows as Record<string, unknown>[]).map(rowToCampaign);
-  } catch {
+  } catch (err) {
+    if (!isSchemaMigrationError(err)) throw databaseError("getCampaigns", err);
     // campaign_id column not yet on projects — return campaigns without counts
-    try {
-      const rows = await db.select(
-        `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns ORDER BY created_at DESC`
-      );
-      return (rows as Record<string, unknown>[]).map(rowToCampaign);
-    } catch {
-      return [];
-    }
+    const rows = await db.select(
+      `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns ORDER BY created_at DESC`
+    );
+    return (rows as Record<string, unknown>[]).map(rowToCampaign);
   }
 }
 
@@ -70,18 +68,15 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
     );
     const typed = rows as Record<string, unknown>[];
     return typed.length > 0 ? rowToCampaign(typed[0]) : null;
-  } catch {
+  } catch (err) {
+    if (!isSchemaMigrationError(err)) throw databaseError("getCampaign", err);
     // campaign_id column not yet on projects — fall back without JOIN
-    try {
-      const rows = await db.select(
-        `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns WHERE id = $1`,
-        [id]
-      );
-      const typed = rows as Record<string, unknown>[];
-      return typed.length > 0 ? rowToCampaign(typed[0]) : null;
-    } catch {
-      return null;
-    }
+    const rows = await db.select(
+      `SELECT *, 0 AS project_count, 0 AS winner_count FROM campaigns WHERE id = $1`,
+      [id]
+    );
+    const typed = rows as Record<string, unknown>[];
+    return typed.length > 0 ? rowToCampaign(typed[0]) : null;
   }
 }
 
@@ -181,8 +176,8 @@ export async function getProjectsForCampaign(campaignId: string): Promise<Projec
     result_count: (r.result_count as number) ?? 0,
     winner_count: (r.winner_count as number) ?? 0,
   }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getProjectsForCampaign", err);
   }
 }
 
@@ -199,8 +194,8 @@ export async function searchCampaigns(query: string): Promise<Campaign[]> {
       [`%${q}%`]
     )) as Record<string, unknown>[];
     return rows.map(rowToCampaign);
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("searchCampaigns", err);
   }
 }
 
@@ -215,7 +210,7 @@ export async function setProjectCampaign(
       `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
       [campaignId, now(), projectId]
     );
-  } catch {
-    // migration 018 column not yet applied — non-fatal
+  } catch (err) {
+    if (!isSchemaMigrationError(err)) throw databaseError("setProjectCampaign", err);
   }
 }

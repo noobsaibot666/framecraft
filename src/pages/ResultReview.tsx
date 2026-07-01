@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckSquare, Square, Star, Upload, Bookmark, Check } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckSquare, Square, Star, Upload, Bookmark, Check } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
@@ -83,6 +83,7 @@ export function ResultReview() {
   const { getById } = usePromptStore();
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const [promptNotFound, setPromptNotFound] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -106,7 +107,11 @@ export function ResultReview() {
   const setScore = (k: keyof typeof scores, v: number) => setScores((p) => ({ ...p, [k]: v }));
 
   useEffect(() => {
-    if (promptId) getById(promptId).then(setPrompt);
+    if (!promptId) return;
+    getById(promptId).then((p) => {
+      setPrompt(p);
+      setPromptNotFound(!p);
+    });
   }, [promptId, getById]);
 
   // Cleanup preview blob URLs
@@ -221,6 +226,20 @@ export function ResultReview() {
       setSaving(false);
     }
   };
+
+  if (promptNotFound) {
+    return (
+      <PageContainer title="ADD RESULT" subtitle="PROMPT NOT FOUND">
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <AlertCircle size={24} className="text-readable" />
+          <p className="font-mono text-[13px] text-readable">Prompt not found or has been deleted.</p>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/library")}>
+            <ArrowLeft size={11} /> Back to Library
+          </Button>
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer

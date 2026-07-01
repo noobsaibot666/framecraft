@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Upload, AlertTriangle, ChevronDown, Layers, X, Check, Link } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -348,10 +348,11 @@ const PROVIDERS: { value: Provider; label: string }[] = [
 
 export function ManualImport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { create, prompts: allPrompts } = usePromptStore();
 
-  // Mode
-  const [mode, setMode] = useState<"single" | "batch">("single");
+  // Mode — read ?batch=1 from URL on mount
+  const [mode, setMode] = useState<"single" | "batch">(searchParams.get("batch") === "1" ? "batch" : "single");
 
   // Single import state
   const [raw, setRaw] = useState("");

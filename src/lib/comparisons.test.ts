@@ -1,4 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("./dbConnection", () => ({ getFramecraftDb: mocks.getDb }));
+vi.mock("./dbStatements", () => ({
+  buildAddComparisonItemStatements: vi.fn(() => []),
+  buildClearItemWinnerStatements: vi.fn(() => []),
+  buildSetItemRejectedStatements: vi.fn(() => []),
+  buildSetItemWinnerStatements: vi.fn(() => []),
+  buildSyncDecisionStatements: vi.fn(() => []),
+}));
+vi.mock("./dbTransaction", () => ({ executeAtomically: vi.fn(async () => []) }));
 import {
   createSession,
   getSessions,
@@ -131,6 +142,15 @@ describe("comparison items in-memory CRUD", () => {
     expect(items.filter((i) => i.result_id === "result_dup")).toHaveLength(1);
   });
 
+  it("duplicate addItemToSession updates mutable fields and returns the persisted id", async () => {
+    const sessionId = await createSession(sess({ title: "Dev Upsert Session" }));
+    const firstId = await addItemToSession(sessionId, "result_dev_upsert", 1, "result");
+    const duplicateId = await addItemToSession(sessionId, "result_dev_upsert", 7, "reference");
+    const stored = (await getItemsForSession(sessionId)).find((item) => item.result_id === "result_dev_upsert");
+    expect(duplicateId).toBe(firstId);
+    expect(stored).toMatchObject({ id: firstId, position: 7, source_role: "reference" });
+  });
+
   it("removeItemFromSession removes the item", async () => {
     const sessionId = await createSession(sess({ title: "Remove Item Session" }));
     const itemId = await addItemToSession(sessionId, "result_to_remove");
@@ -149,6 +169,19 @@ describe("comparison items in-memory CRUD", () => {
     const winners = items.filter((i) => i.is_winner);
     expect(winners).toHaveLength(1);
     expect(winners[0].result_id).toBe("result_win_bbb");
+  });
+
+  it("setItemWinner does not mutate either session when item and session do not match", async () => {
+    const sessionA = await createSession(sess({ title: "Tuple Session A" }));
+    const sessionB = await createSession(sess({ title: "Tuple Session B" }));
+    const itemA = await addItemToSession(sessionA, "result_tuple_a");
+    const itemB = await addItemToSession(sessionB, "result_tuple_b");
+    await setItemWinner(itemB, sessionB);
+
+    await setItemWinner(itemA, sessionB);
+
+    expect((await getItemsForSession(sessionA)).find((item) => item.id === itemA)?.is_winner).toBe(false);
+    expect((await getItemsForSession(sessionB)).find((item) => item.id === itemB)?.is_winner).toBe(true);
   });
 
   it("setItemRejected marks item rejected", async () => {
@@ -195,5 +228,58 @@ describe("getWeakestDimension", () => {
   it("returns null when all dimensions score 4 or above", () => {
     const r = mockResult({ score_realism: 4, score_brand_fit: 5, score_composition: 4, score_lighting: 5 });
     expect(getWeakestDimension(r)).toBeNull();
+  });
+});
+
+// ─── DB error propagation (Tauri branch) ─────────────────────
+
+function fakeDb(error: string) {
+  const reject = () => Promise.reject(error);
+  return { select: reject, execute: reject };
+}
+
+describe("comparisons DB error propagation", () => {
+  beforeEach(() => { vi.resetModules(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("getSessions propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("disk I/O error"));
+    const { getSessions } = await import("./comparisons");
+    await expect(getSessions()).rejects.toThrow("getSessions: disk I/O error");
+  });
+
+  it("getSessionById propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("SQLITE_BUSY"));
+    const { getSessionById } = await import("./comparisons");
+    await expect(getSessionById("x")).rejects.toThrow("getSessionById: SQLITE_BUSY");
+  });
+
+  it("getItemsForSession propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("corrupt page"));
+    const { getItemsForSession } = await import("./comparisons");
+    await expect(getItemsForSession("s")).rejects.toThrow("getItemsForSession: corrupt page");
+  });
+
+  it("loadProjectResults propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("permission denied"));
+    const { loadProjectResults } = await import("./comparisons");
+    await expect(loadProjectResults("p")).rejects.toThrow("loadProjectResults: permission denied");
+  });
+
+  it("loadSessionItemResults propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("disk I/O error"));
+    const { loadSessionItemResults } = await import("./comparisons");
+    await expect(loadSessionItemResults("s")).rejects.toThrow("loadSessionItemResults: disk I/O error");
+  });
+
+  it("loadSessionItemResults returns empty array outside Tauri", async () => {
+    // isTauri is false — no DB access, returns [] immediately
+    const { loadSessionItemResults } = await import("./comparisons");
+    await expect(loadSessionItemResults("s")).resolves.toEqual([]);
   });
 });

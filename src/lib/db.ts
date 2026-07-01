@@ -2,6 +2,9 @@ import type { Prompt, DashboardStats, TokenCategory, Token, AvoidancePattern, Re
 import { summarizePromptFromResults } from "@/lib/resultMemory";
 import { getFramecraftDb } from "./dbConnection";
 import { selectPaged, type PageResult, type PageOptions } from "./pagination";
+import { executeAtomically } from "./dbTransaction";
+import { buildBatchUpdatePromptStatements } from "./dbStatements";
+import { removeManagedPaths } from "./fileStore";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -358,6 +361,12 @@ export async function deletePrompt(id: string): Promise<void> {
 
 export async function batchUpdatePrompts(ids: string[], patch: Partial<Pick<CreatePromptInput, "rating" | "is_winner" | "is_failed" | "tags">>): Promise<void> {
   if (ids.length === 0) return;
+  if (isTauri) {
+    const db = await getDb();
+    const ts = now();
+    await executeAtomically(db, buildBatchUpdatePromptStatements(ids, patch, ts));
+    return;
+  }
   for (const id of ids) await updatePrompt(id, patch);
 }
 
@@ -855,7 +864,13 @@ export async function updateResult(id: string, data: Partial<CreateResultInput>)
 export async function deleteResult(id: string): Promise<void> {
   if (isTauri) {
     const db = await getDb();
+    const rows = (await db.select(
+      "SELECT file_path, thumbnail_path FROM results WHERE id = $1",
+      [id]
+    )) as { file_path: string | null; thumbnail_path: string | null }[];
+    const mediaPaths = rows[0] ? [rows[0].file_path, rows[0].thumbnail_path] : [];
     await db.execute("DELETE FROM results WHERE id = $1", [id]);
+    await removeManagedPaths(mediaPaths);
     return;
   }
   const idx = _devResults.findIndex((r) => r.id === id);

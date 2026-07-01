@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Star, AlertTriangle, Check, X,
+  AlertCircle, ArrowLeft, Star, AlertTriangle, Check, X,
   LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload, Edit2,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -21,6 +21,7 @@ import {
   setItemRejected,
   updateItemNotes,
   loadProjectResults,
+  loadSessionItemResults,
   syncDecisionsToResults,
   getBestDimension,
   getWeakestDimension,
@@ -36,7 +37,7 @@ import {
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl } from "@/lib/imageUtils";
-import { addPromptToProject, addResultToProject } from "@/lib/projects";
+import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type {
@@ -490,6 +491,9 @@ export function ComparisonLab() {
   const [editingOutcome, setEditingOutcome] = useState(false);
   const [outcomeEditValue, setOutcomeEditValue] = useState("");
 
+  // Project validation — only relevant when projectId is set
+  const [projectLoadState, setProjectLoadState] = useState<"idle" | "loading" | "not-found">("idle");
+
   // ── Load sessions ──────────────────────────────────────────
 
   const reloadSessions = useCallback(async () => {
@@ -498,7 +502,15 @@ export function ComparisonLab() {
 
   useEffect(() => { reloadSessions(); }, [reloadSessions]);
 
-  // ── Load available results if projectId set ────────────────
+  // ── Validate project and load available results ────────────
+
+  useEffect(() => {
+    if (!projectId) return;
+    setProjectLoadState("loading");
+    getProjectById(projectId).then((p) => {
+      setProjectLoadState(p ? "idle" : "not-found");
+    });
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -532,10 +544,21 @@ export function ComparisonLab() {
     const session = await getSessionById(id);
     if (!session) return;
     const items = await getItemsForSession(id);
+
+    // Load any results not already in memory (e.g., standalone uploads from a prior session)
+    const knownIds = new Set(availableResults.map((r) => r.result_id));
+    const hasMissing = items.some((item) => !knownIds.has(item.result_id));
+    let allResults = availableResults;
+    if (hasMissing) {
+      const extra = await loadSessionItemResults(id);
+      allResults = [...availableResults, ...extra.filter((r) => !knownIds.has(r.result_id))];
+      setAvailableResults(allResults);
+    }
+
     // Rebuild slots from saved items
     const newSlots: (SlotState | null)[] = [null, null, null, null];
     for (const item of items) {
-      const result = availableResults.find((r) => r.result_id === item.result_id);
+      const result = allResults.find((r) => r.result_id === item.result_id);
       if (result) {
         const pos = Math.min(item.position, 3);
         newSlots[pos] = {
@@ -643,15 +666,31 @@ export function ComparisonLab() {
         };
         setAvailableResults((prev) => [result, ...prev.filter((r) => r.result_id !== result.result_id)]);
       } else {
-        const id = `local_${crypto.randomUUID().replace(/-/g, "")}`;
+        // No project context — still persist to DB so the session can be reopened
+        const promptId = await createPrompt({
+          title: `Standalone comparison — ${title}`,
+          provider: "midjourney",
+          prompt_text: `Uploaded for standalone comparison: ${title}`,
+          tags: ["comparison-upload"],
+        });
+        const resultId = crypto.randomUUID().replace(/-/g, "");
+        const saved = await saveResultImage(resultId, dataUrl);
+        await createResult({
+          id: resultId,
+          prompt_id: promptId,
+          file_path: saved.filePath,
+          thumbnail_path: saved.thumbPath,
+          provider: "midjourney",
+          notes: `Standalone comparison upload from ${file.name}`,
+        });
         result = {
-          result_id: id,
-          prompt_id: id,
+          result_id: resultId,
+          prompt_id: promptId,
           prompt_title: title,
           prompt_provider: "midjourney",
           prompt_version: 1,
-          thumbnail_path: dataUrl,
-          file_path: dataUrl,
+          thumbnail_path: saved.thumbPath,
+          file_path: saved.filePath,
           score_overall: 0,
           score_realism: 0,
           score_brand_fit: 0,
@@ -768,6 +807,20 @@ export function ComparisonLab() {
   const slotRoles = getComparisonRoles(comparisonType, displaySlots.length);
 
   // ── Render ────────────────────────────────────────────────
+
+  if (projectLoadState === "not-found") {
+    return (
+      <PageContainer title="COMPARISON LAB" subtitle="PROJECT NOT FOUND">
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+          <AlertCircle size={24} className="text-readable" />
+          <p className="font-mono text-[13px] text-readable">Project not found or has been deleted.</p>
+          <Button variant="ghost" size="sm" onClick={() => navigate("/compare")}>
+            <ArrowLeft size={11} /> Standalone comparison
+          </Button>
+        </div>
+      </PageContainer>
+    );
+  }
 
   if (!activeSessionId) {
     // Session gallery + create

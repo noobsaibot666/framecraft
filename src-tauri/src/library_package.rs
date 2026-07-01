@@ -1,14 +1,16 @@
 use crate::portable_sqlite::open_portable_database;
 use rusqlite::{
+    backup::Backup,
     params_from_iter,
     types::{Value, ValueRef},
-    OptionalExtension,
+    Connection, OpenFlags, OptionalExtension,
 };
 use serde::Serialize;
 use std::{
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Serialize)]
@@ -63,15 +65,18 @@ pub struct LibraryMergeReport {
     prompts: MergeTableReport,
     results: MergeTableReport,
     references: MergeTableReport,
+    tables: BTreeMap<String, MergeTableReport>,
+    manifest_version: u8,
     id_remaps: Vec<MergeIdRemap>,
     errors: Vec<String>,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MergeTableReport {
     imported: u32,
     skipped_duplicates: u32,
+    excluded: u32,
     remapped: u32,
     failed: u32,
 }
@@ -109,9 +114,7 @@ pub fn validate_library_package_native(
 }
 
 #[tauri::command(rename_all = "camelCase")]
-pub fn inspect_library_package_native(
-    base_dir: String,
-) -> Result<LibraryValidationResult, String> {
+pub fn inspect_library_package_native(base_dir: String) -> Result<LibraryValidationResult, String> {
     Ok(inspect_library_package(&base_dir))
 }
 
@@ -126,27 +129,9 @@ pub fn repair_library_database_schema_native(
 pub fn migrate_app_data_to_library_native(
     source_base_dir: String,
     target_base_dir: String,
-    result_files: Vec<String>,
-    reference_files: Vec<String>,
 ) -> Result<MigrateAppDataResult, String> {
-    let source = resolve_library_paths(&source_base_dir);
-    let target = create_library_package(&target_base_dir, false)?;
-    let mut copied_files = Vec::new();
-
-    copy_file(&source.db_path, &target.db_path)?;
-    copied_files.push(target.db_path.clone());
-    copy_media_files(
-        &result_files,
-        &source.results_dir,
-        &target.results_dir,
-        &mut copied_files,
-    )?;
-    copy_media_files(
-        &reference_files,
-        &source.references_dir,
-        &target.references_dir,
-        &mut copied_files,
-    )?;
+    let (target, copied_files, _) =
+        publish_library_snapshot(&source_base_dir, &target_base_dir, SnapshotMetadata::Create)?;
 
     Ok(MigrateAppDataResult {
         paths: target,
@@ -158,22 +143,13 @@ pub fn migrate_app_data_to_library_native(
 pub fn copy_library_package_native(
     source_base_dir: String,
     target_base_dir: String,
-    result_files: Vec<String>,
-    reference_files: Vec<String>,
 ) -> Result<CopyLibraryPackageResult, String> {
-    copy_library_package(
-        &source_base_dir,
-        &target_base_dir,
-        &result_files,
-        &reference_files,
-    )
+    copy_library_package(&source_base_dir, &target_base_dir)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn backup_library_package_native(
     source_base_dir: String,
-    result_files: Vec<String>,
-    reference_files: Vec<String>,
 ) -> Result<CopyLibraryPackageResult, String> {
     let source = resolve_library_paths(&source_base_dir);
     let target = format!(
@@ -181,7 +157,7 @@ pub fn backup_library_package_native(
         source.backups_dir,
         timestamp_slug()
     );
-    copy_library_package(&source_base_dir, &target, &result_files, &reference_files)
+    copy_library_package(&source_base_dir, &target)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -195,41 +171,9 @@ pub fn merge_library_package_native(
 fn copy_library_package(
     source_base_dir: &str,
     target_base_dir: &str,
-    result_files: &[String],
-    reference_files: &[String],
 ) -> Result<CopyLibraryPackageResult, String> {
-    let source = resolve_library_paths(source_base_dir);
-    let target = resolve_library_paths(target_base_dir);
-    let mut copied_files = Vec::new();
-
-    create_package_dirs(&target)?;
-    copy_file(
-        &format!("{}library.json", source.base_dir),
-        &format!("{}library.json", target.base_dir),
-    )?;
-    copied_files.push(format!("{}library.json", target.base_dir));
-    copy_file(&source.db_path, &target.db_path)?;
-    copied_files.push(target.db_path.clone());
-    copy_media_files(
-        result_files,
-        &source.results_dir,
-        &target.results_dir,
-        &mut copied_files,
-    )?;
-    copy_media_files(
-        reference_files,
-        &source.references_dir,
-        &target.references_dir,
-        &mut copied_files,
-    )?;
-
-    let validation = validate_library_package(&target.base_dir);
-    if !validation.ok {
-        return Err(format!(
-            "Invalid library copy: {}",
-            validation.errors.join(", ")
-        ));
-    }
+    let (target, copied_files, validation) =
+        publish_library_snapshot(source_base_dir, target_base_dir, SnapshotMetadata::Copy)?;
 
     Ok(CopyLibraryPackageResult {
         paths: target,
@@ -238,7 +182,468 @@ fn copy_library_package(
     })
 }
 
-const PROMPT_COLUMNS: [&str; 30] = [
+#[derive(Clone, Copy)]
+enum SnapshotMetadata {
+    Copy,
+    Create,
+}
+
+type BeforePublishHook = dyn Fn(&Path, &Path) -> Result<(), String>;
+
+fn publish_library_snapshot(
+    source_base_dir: &str,
+    target_base_dir: &str,
+    metadata_mode: SnapshotMetadata,
+) -> Result<(LibraryPathsDto, Vec<String>, LibraryValidationResult), String> {
+    publish_library_snapshot_with_hooks(
+        source_base_dir,
+        target_base_dir,
+        metadata_mode,
+        None,
+        &cleanup_staging_directory,
+    )
+}
+
+fn publish_library_snapshot_with_hooks(
+    source_base_dir: &str,
+    target_base_dir: &str,
+    metadata_mode: SnapshotMetadata,
+    before_publish: Option<&BeforePublishHook>,
+    cleanup: &dyn Fn(&Path) -> std::io::Result<()>,
+) -> Result<(LibraryPathsDto, Vec<String>, LibraryValidationResult), String> {
+    let source = resolve_library_paths(source_base_dir);
+    let published = resolve_library_paths(target_base_dir);
+    let target_path = PathBuf::from(target_base_dir);
+    if path_is_occupied(&target_path)? {
+        return Err(format!(
+            "Library destination already exists: {}",
+            target_path.display()
+        ));
+    }
+    let parent = target_path.parent().ok_or_else(|| {
+        format!(
+            "Library destination has no parent directory: {}",
+            target_path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).map_err(format_io_error)?;
+    let staging_path = reserve_staging_sibling(parent)?;
+
+    let build_result = (|| {
+        let staging = resolve_library_paths(staging_path.to_str().ok_or_else(|| {
+            format!(
+                "Library staging path is not valid UTF-8: {}",
+                staging_path.display()
+            )
+        })?);
+        create_package_dirs(&staging)?;
+        let mut copied_relative_paths = Vec::new();
+
+        match metadata_mode {
+            SnapshotMetadata::Copy => {
+                copy_snapshot_file(
+                    &Path::new(&source.base_dir).join("library.json"),
+                    &Path::new(&staging.base_dir).join("library.json"),
+                    Path::new("library.json"),
+                    &mut copied_relative_paths,
+                )?;
+            }
+            SnapshotMetadata::Create => {
+                write_metadata(&staging)?;
+                copied_relative_paths.push(PathBuf::from("library.json"));
+            }
+        }
+
+        snapshot_sqlite_database(Path::new(&source.db_path), Path::new(&staging.db_path))?;
+        copied_relative_paths.push(PathBuf::from("framecraft.db"));
+        rewrite_snapshot_media_paths(&staging.db_path, &source, &published)?;
+
+        for directory in ["results", "references", "inbox", "staging"] {
+            copy_snapshot_tree(
+                &Path::new(&source.base_dir).join(directory),
+                &Path::new(&staging.base_dir).join(directory),
+                Path::new(directory),
+                &staging_path,
+                &mut copied_relative_paths,
+            )?;
+        }
+        for directory in ["sync/applied", "sync/failed"] {
+            copy_snapshot_tree(
+                &Path::new(&source.base_dir).join(directory),
+                &Path::new(&staging.base_dir).join(directory),
+                Path::new(directory),
+                &staging_path,
+                &mut copied_relative_paths,
+            )?;
+        }
+
+        let validation = validate_library_package(&staging.base_dir);
+        if !validation.ok {
+            return Err(format!(
+                "Invalid library copy: {}",
+                validation.errors.join(", ")
+            ));
+        }
+        if let Some(before_publish) = before_publish {
+            before_publish(&staging_path, &target_path)?;
+        }
+        rename_directory_no_replace(&staging_path, &target_path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                format!(
+                    "Library destination already exists: {}",
+                    target_path.display()
+                )
+            } else {
+                format_io_error(error)
+            }
+        })?;
+
+        let copied_files = copied_relative_paths
+            .into_iter()
+            .map(|relative| {
+                Path::new(&published.base_dir)
+                    .join(relative)
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
+        Ok((published, copied_files, validation))
+    })();
+
+    match build_result {
+        Ok(result) => Ok(result),
+        Err(original_error) => match cleanup(&staging_path) {
+            Ok(()) => Err(original_error),
+            Err(cleanup_error) => Err(format!(
+                "{original_error}; staging cleanup also failed for {}: {cleanup_error}",
+                staging_path.display()
+            )),
+        },
+    }
+}
+
+fn rewrite_snapshot_media_paths(
+    db_path: &str,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<(), String> {
+    let mut connection = Connection::open(db_path).map_err(|error| error.to_string())?;
+    let transaction = connection
+        .transaction()
+        .map_err(|error| error.to_string())?;
+    for (table, column, source_prefix, target_prefix) in [
+        (
+            "results",
+            "file_path",
+            &source.results_dir,
+            &target.results_dir,
+        ),
+        (
+            "results",
+            "thumbnail_path",
+            &source.results_dir,
+            &target.results_dir,
+        ),
+        (
+            "\"references\"",
+            "file_data",
+            &source.references_dir,
+            &target.references_dir,
+        ),
+        (
+            "\"references\"",
+            "thumbnail_data",
+            &source.references_dir,
+            &target.references_dir,
+        ),
+    ] {
+        transaction
+            .execute(
+                &format!(
+                    "UPDATE {table}
+                     SET {column} = ?1 || substr({column}, length(?2) + 1)
+                     WHERE {column} IS NOT NULL
+                       AND substr({column}, 1, length(?2)) = ?2"
+                ),
+                (target_prefix, source_prefix),
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    transaction.commit().map_err(|error| error.to_string())
+}
+
+fn reserve_staging_sibling(parent: &Path) -> Result<PathBuf, String> {
+    reserve_staging_sibling_with_nonce(parent, &timestamp_slug())
+}
+
+fn reserve_staging_sibling_with_nonce(parent: &Path, nonce: &str) -> Result<PathBuf, String> {
+    for attempt in 0..100_u8 {
+        let candidate = parent.join(format!(".framecraft-staging-{nonce}-{attempt}"));
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format_io_error(error)),
+        }
+    }
+    Err(format!(
+        "Could not allocate a library staging directory beside {}",
+        parent.display()
+    ))
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn path_to_c_string(path: &Path) -> std::io::Result<std::ffi::CString> {
+    use std::os::unix::ffi::OsStrExt;
+
+    std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Path contains an interior NUL byte: {}", path.display()),
+        )
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn rename_directory_no_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    let source = path_to_c_string(source)?;
+    let target = path_to_c_string(target)?;
+    // SAFETY: Both pointers come from live CStrings and remain valid for the call.
+    let result = unsafe { libc::renamex_np(source.as_ptr(), target.as_ptr(), libc::RENAME_EXCL) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn rename_directory_no_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    let source = path_to_c_string(source)?;
+    let target = path_to_c_string(target)?;
+    // SAFETY: Both pointers come from live CStrings and remain valid for the call.
+    let result = unsafe {
+        libc::renameat2(
+            libc::AT_FDCWD,
+            source.as_ptr(),
+            libc::AT_FDCWD,
+            target.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn rename_directory_no_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    fs::rename(source, target)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn rename_directory_no_replace(_source: &Path, _target: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "Atomic no-replace directory publication is unsupported on this platform",
+    ))
+}
+
+fn cleanup_staging_directory(path: &Path) -> std::io::Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(first_error) => {
+            make_cleanup_tree_writable(path)?;
+            fs::remove_dir_all(path).map_err(|retry_error| {
+                std::io::Error::new(
+                    retry_error.kind(),
+                    format!(
+                        "initial cleanup failed: {first_error}; retry after repairing permissions failed: {retry_error}"
+                    ),
+                )
+            })
+        }
+    }
+}
+
+fn rename_file_no_replace(source: &Path, target: &Path) -> std::io::Result<()> {
+    rename_directory_no_replace(source, target)
+}
+
+fn make_cleanup_tree_writable(path: &Path) -> std::io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    set_cleanup_permissions(path, &metadata)?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path)? {
+            make_cleanup_tree_writable(&entry?.path())?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_cleanup_permissions(path: &Path, metadata: &fs::Metadata) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let required = if metadata.is_dir() { 0o700 } else { 0o600 };
+    let mut permissions = metadata.permissions();
+    permissions.set_mode(permissions.mode() | required);
+    fs::set_permissions(path, permissions)
+}
+
+#[cfg(not(unix))]
+fn set_cleanup_permissions(path: &Path, metadata: &fs::Metadata) -> std::io::Result<()> {
+    let mut permissions = metadata.permissions();
+    permissions.set_readonly(false);
+    fs::set_permissions(path, permissions)
+}
+
+fn snapshot_sqlite_database(source: &Path, target: &Path) -> Result<(), String> {
+    ensure_regular_source_file(source)?;
+    let source = Connection::open_with_flags(
+        source,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
+    )
+    .map_err(|error| error.to_string())?;
+    source
+        .busy_timeout(Duration::from_secs(10))
+        .map_err(|error| error.to_string())?;
+    let mut target = Connection::open(target).map_err(|error| error.to_string())?;
+    {
+        let backup = Backup::new(&source, &mut target).map_err(|error| error.to_string())?;
+        backup
+            .run_to_completion(100, Duration::from_millis(10), None)
+            .map_err(|error| error.to_string())?;
+    }
+    target
+        .pragma_update(None, "journal_mode", "DELETE")
+        .map_err(|error| error.to_string())
+}
+
+fn copy_snapshot_tree(
+    source: &Path,
+    target: &Path,
+    relative: &Path,
+    excluded_path: &Path,
+    copied_relative_paths: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    let source_metadata = match fs::symlink_metadata(source) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(format_io_error(error)),
+    };
+    ensure_managed_entry_type(source, &source_metadata, true)?;
+    fs::create_dir_all(target).map_err(format_io_error)?;
+    for entry in fs::read_dir(source).map_err(format_io_error)? {
+        let entry = entry.map_err(format_io_error)?;
+        let source_path = entry.path();
+        if source_path == excluded_path {
+            continue;
+        }
+        let target_path = target.join(entry.file_name());
+        let relative_path = relative.join(entry.file_name());
+        let file_type = entry.file_type().map_err(format_io_error)?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "Unsupported managed entry type: symlink ({})",
+                source_path.display()
+            ));
+        } else if file_type.is_dir() {
+            copy_snapshot_tree(
+                &source_path,
+                &target_path,
+                &relative_path,
+                excluded_path,
+                copied_relative_paths,
+            )?;
+        } else if file_type.is_file() {
+            copy_snapshot_file(
+                &source_path,
+                &target_path,
+                &relative_path,
+                copied_relative_paths,
+            )?;
+        } else {
+            return Err(format!(
+                "Unsupported managed entry type: special file ({})",
+                source_path.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn copy_snapshot_file(
+    source: &Path,
+    target: &Path,
+    relative: &Path,
+    copied_relative_paths: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    ensure_regular_source_file(source)?;
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(format_io_error)?;
+    }
+    fs::copy(source, target).map_err(|error| {
+        format!(
+            "Could not copy {} to {}: {error}",
+            source.display(),
+            target.display()
+        )
+    })?;
+    copied_relative_paths.push(relative.to_path_buf());
+    Ok(())
+}
+
+fn ensure_regular_source_file(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("Could not inspect source file {}: {error}", path.display()))?;
+    ensure_managed_entry_type(path, &metadata, false)
+}
+
+fn ensure_managed_entry_type(
+    path: &Path,
+    metadata: &fs::Metadata,
+    expect_directory: bool,
+) -> Result<(), String> {
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        return Err(format!(
+            "Unsupported managed entry type: symlink ({})",
+            path.display()
+        ));
+    }
+    let expected_type = if expect_directory {
+        file_type.is_dir()
+    } else {
+        file_type.is_file()
+    };
+    if !expected_type {
+        return Err(format!(
+            "Unsupported managed entry type: special file ({})",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn path_is_occupied(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format_io_error(error)),
+    }
+}
+
+const PROMPT_COLUMNS: [&str; 36] = [
     "id",
     "title",
     "description",
@@ -269,6 +674,12 @@ const PROMPT_COLUMNS: [&str; 30] = [
     "parent_id",
     "created_at",
     "updated_at",
+    "recipe_use_count",
+    "best_use",
+    "risk_notes",
+    "source_url",
+    "thumbnail_data",
+    "builder_state",
 ];
 
 const MIGRATION_022_NANO_BANANA_TITLES: [&str; 4] = [
@@ -365,8 +776,650 @@ const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
             "risk_notes",
             "source_url",
             "thumbnail_data",
+            "builder_state",
         ],
     ),
+];
+
+pub const MERGE_MANIFEST_VERSION: u8 = 1;
+
+#[derive(Clone, Copy)]
+enum MergeIdentity {
+    Id(&'static [&'static [&'static str]]),
+    Composite(&'static [&'static str]),
+    TargetOwned(&'static [&'static str]),
+}
+
+const UNIQUE_TOKEN_CATEGORY: &[&[&str]] = &[&["name"]];
+const UNIQUE_TOKEN_PATTERN: &[&[&str]] = &[&["token_a_id", "token_b_id"]];
+const UNIQUE_COMPARISON_ITEM: &[&[&str]] = &[&["session_id", "result_id"]];
+const UNIQUE_GENERATION_QUEUE: &[&[&str]] = &[&["prompt_id"]];
+
+#[derive(Clone, Copy)]
+struct MergeForeignKey {
+    column: &'static str,
+    table: &'static str,
+}
+
+#[derive(Clone, Copy)]
+struct MergeTableSpec {
+    table: &'static str,
+    columns: &'static [&'static str],
+    identity: MergeIdentity,
+    foreign_keys: &'static [MergeForeignKey],
+    media_columns: &'static [&'static str],
+    user_only: bool,
+}
+
+const FK_PROJECT_CAMPAIGN: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "campaign_id",
+    table: "campaigns",
+}];
+const FK_PROMPT_PARENT: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "parent_id",
+    table: "prompts",
+}];
+const FK_RESULT: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "prompt_id",
+    table: "prompts",
+}];
+const FK_TOKEN: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "category_id",
+    table: "token_categories",
+}];
+const FK_PROMPT_TOKEN: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "token_id",
+        table: "tokens",
+    },
+];
+const FK_PROJECT_PROMPT: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+];
+const FK_PROJECT_RESULT: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "result_id",
+        table: "results",
+    },
+];
+const FK_PROJECT_REFERENCE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "reference_id",
+        table: "references",
+    },
+];
+const FK_PROMPT_REFERENCE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "reference_id",
+        table: "references",
+    },
+];
+const FK_RESULT_REFERENCE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "result_id",
+        table: "results",
+    },
+    MergeForeignKey {
+        column: "reference_id",
+        table: "references",
+    },
+];
+const FK_COMPARISON_SESSION: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "projects",
+}];
+const FK_COMPARISON_ITEM: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "session_id",
+        table: "comparison_sessions",
+    },
+    MergeForeignKey {
+        column: "result_id",
+        table: "results",
+    },
+];
+const FK_DELIVERABLE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "linked_prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "linked_result_id",
+        table: "results",
+    },
+];
+const FK_DELIVERABLE_REFERENCE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "deliverable_id",
+        table: "project_deliverables",
+    },
+    MergeForeignKey {
+        column: "reference_id",
+        table: "references",
+    },
+];
+const FK_THREAD: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "projects",
+}];
+const FK_MESSAGE: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "thread_id",
+    table: "assistant_threads",
+}];
+const FK_EXPORT: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "projects",
+}];
+const FK_QUEUE: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+];
+const FK_DIRECTION: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "projects",
+}];
+const FK_SHOT: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "result_id",
+        table: "results",
+    },
+];
+const FK_PATTERN: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "token_a_id",
+        table: "tokens",
+    },
+    MergeForeignKey {
+        column: "token_b_id",
+        table: "tokens",
+    },
+];
+
+const CAMPAIGN_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "client",
+    "brief",
+    "status",
+    "created_at",
+    "updated_at",
+];
+const PROJECT_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "client",
+    "campaign",
+    "status",
+    "brief_text",
+    "production_goal",
+    "category",
+    "tags",
+    "notes",
+    "created_at",
+    "updated_at",
+    "project_type",
+    "intended_output",
+    "image_needs",
+    "video_needs",
+    "aspect_ratios",
+    "provider_targets",
+    "visual_direction",
+    "constraints",
+    "creative_goals",
+    "campaign_id",
+];
+const RECIPE_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "description",
+    "category",
+    "provider",
+    "structure",
+    "example_prompt",
+    "tags",
+    "use_count",
+    "rating",
+    "notes",
+    "created_at",
+    "updated_at",
+];
+const SREF_COLUMNS: &[&str] = &[
+    "id",
+    "code",
+    "title",
+    "description",
+    "provider",
+    "category",
+    "best_use",
+    "risk_notes",
+    "example_path",
+    "rating",
+    "tags",
+    "notes",
+    "created_at",
+    "updated_at",
+];
+const PROFILE_COLUMNS: &[&str] = &[
+    "id",
+    "code",
+    "title",
+    "description",
+    "provider",
+    "best_use",
+    "risk_notes",
+    "example_path",
+    "rating",
+    "tags",
+    "notes",
+    "created_at",
+];
+const AVOIDANCE_COLUMNS: &[&str] = &[
+    "id",
+    "artifact_type",
+    "label",
+    "category",
+    "description",
+    "correction_prompt",
+    "severity",
+    "provider",
+    "is_builtin",
+    "created_at",
+];
+const TOKEN_CATEGORY_COLUMNS: &[&str] = &["id", "name", "label", "description", "sort_order"];
+const TOKEN_COLUMNS: &[&str] = &[
+    "id",
+    "text",
+    "category_id",
+    "provider",
+    "use_count",
+    "quality_score",
+    "tags",
+    "is_builtin",
+    "created_at",
+    "is_favorite",
+];
+const PROMPT_TOKEN_COLUMNS: &[&str] = &["id", "prompt_id", "token_id", "sort_order", "custom_text"];
+const TOKEN_PATTERN_COLUMNS: &[&str] = &[
+    "id",
+    "token_a_id",
+    "token_b_id",
+    "co_occurrence_count",
+    "avg_rating",
+    "last_updated",
+];
+const PROJECT_PROMPT_COLUMNS: &[&str] = &["project_id", "prompt_id"];
+const PROJECT_RESULT_COLUMNS: &[&str] = &["project_id", "result_id"];
+const PROJECT_REFERENCE_COLUMNS: &[&str] = &["project_id", "reference_id"];
+const PROMPT_REFERENCE_COLUMNS: &[&str] = &["prompt_id", "reference_id", "role"];
+const RESULT_REFERENCE_COLUMNS: &[&str] = &["result_id", "reference_id", "role"];
+const COMPARISON_SESSION_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "project_id",
+    "notes",
+    "created_at",
+    "updated_at",
+    "comparison_type",
+    "outcome_summary",
+];
+const COMPARISON_ITEM_COLUMNS: &[&str] = &[
+    "id",
+    "session_id",
+    "result_id",
+    "position",
+    "is_winner",
+    "is_rejected",
+    "notes",
+    "created_at",
+    "source_role",
+];
+const DELIVERABLE_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "title",
+    "description",
+    "status",
+    "target_format",
+    "aspect_ratio",
+    "linked_prompt_id",
+    "linked_result_id",
+    "notes",
+    "sort_order",
+    "created_at",
+    "updated_at",
+];
+const DELIVERABLE_REFERENCE_COLUMNS: &[&str] = &["deliverable_id", "reference_id"];
+const THREAD_COLUMNS: &[&str] = &["id", "project_id", "title", "created_at", "updated_at"];
+const MESSAGE_COLUMNS: &[&str] = &[
+    "id",
+    "thread_id",
+    "role",
+    "content",
+    "citations",
+    "created_at",
+];
+const EXPORT_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "format",
+    "options",
+    "created_at",
+    "updated_at",
+];
+const QUEUE_COLUMNS: &[&str] = &[
+    "id",
+    "prompt_id",
+    "project_id",
+    "status",
+    "sort_order",
+    "result_path",
+    "notes",
+    "created_at",
+    "updated_at",
+    "is_pinned",
+];
+const DIRECTION_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "title",
+    "campaign_idea",
+    "rationale",
+    "visual_aesthetic",
+    "brand_connection",
+    "product_message",
+    "tone",
+    "prompt_direction",
+    "is_selected",
+    "created_at",
+    "updated_at",
+];
+const SHOT_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "sort_order",
+    "shot_type",
+    "label",
+    "prompt_id",
+    "result_id",
+    "notes",
+    "created_at",
+];
+const APP_META_COLUMNS: &[&str] = &["key", "value", "updated_at"];
+
+const MERGE_MANIFEST: &[MergeTableSpec] = &[
+    MergeTableSpec {
+        table: "campaigns",
+        columns: CAMPAIGN_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "prompts",
+        columns: &PROMPT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_PROMPT_PARENT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "references",
+        columns: &REFERENCE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &["file_data", "thumbnail_data"],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "recipes",
+        columns: RECIPE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "srefs",
+        columns: SREF_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "profiles",
+        columns: PROFILE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "avoidance_patterns",
+        columns: AVOIDANCE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: true,
+    },
+    MergeTableSpec {
+        table: "token_categories",
+        columns: TOKEN_CATEGORY_COLUMNS,
+        identity: MergeIdentity::Id(UNIQUE_TOKEN_CATEGORY),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "tokens",
+        columns: TOKEN_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_TOKEN,
+        media_columns: &[],
+        user_only: true,
+    },
+    MergeTableSpec {
+        table: "projects",
+        columns: PROJECT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_PROJECT_CAMPAIGN,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "results",
+        columns: &RESULT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_RESULT,
+        media_columns: &["file_path", "thumbnail_path"],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "prompt_tokens",
+        columns: PROMPT_TOKEN_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_PROMPT_TOKEN,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "token_patterns",
+        columns: TOKEN_PATTERN_COLUMNS,
+        identity: MergeIdentity::Id(UNIQUE_TOKEN_PATTERN),
+        foreign_keys: FK_PATTERN,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "project_prompts",
+        columns: PROJECT_PROMPT_COLUMNS,
+        identity: MergeIdentity::Composite(&["project_id", "prompt_id"]),
+        foreign_keys: FK_PROJECT_PROMPT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "project_results",
+        columns: PROJECT_RESULT_COLUMNS,
+        identity: MergeIdentity::Composite(&["project_id", "result_id"]),
+        foreign_keys: FK_PROJECT_RESULT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "project_references",
+        columns: PROJECT_REFERENCE_COLUMNS,
+        identity: MergeIdentity::Composite(&["project_id", "reference_id"]),
+        foreign_keys: FK_PROJECT_REFERENCE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "prompt_references",
+        columns: PROMPT_REFERENCE_COLUMNS,
+        identity: MergeIdentity::Composite(&["prompt_id", "reference_id"]),
+        foreign_keys: FK_PROMPT_REFERENCE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "result_references",
+        columns: RESULT_REFERENCE_COLUMNS,
+        identity: MergeIdentity::Composite(&["result_id", "reference_id"]),
+        foreign_keys: FK_RESULT_REFERENCE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "comparison_sessions",
+        columns: COMPARISON_SESSION_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_COMPARISON_SESSION,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "comparison_items",
+        columns: COMPARISON_ITEM_COLUMNS,
+        identity: MergeIdentity::Id(UNIQUE_COMPARISON_ITEM),
+        foreign_keys: FK_COMPARISON_ITEM,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "project_deliverables",
+        columns: DELIVERABLE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_DELIVERABLE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "deliverable_references",
+        columns: DELIVERABLE_REFERENCE_COLUMNS,
+        identity: MergeIdentity::Composite(&["deliverable_id", "reference_id"]),
+        foreign_keys: FK_DELIVERABLE_REFERENCE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "assistant_threads",
+        columns: THREAD_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_THREAD,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "assistant_messages",
+        columns: MESSAGE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_MESSAGE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "export_presets",
+        columns: EXPORT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_EXPORT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "generation_queue",
+        columns: QUEUE_COLUMNS,
+        identity: MergeIdentity::Id(UNIQUE_GENERATION_QUEUE),
+        foreign_keys: FK_QUEUE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "creative_directions",
+        columns: DIRECTION_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_DIRECTION,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "shot_sequence",
+        columns: SHOT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_SHOT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "app_meta",
+        columns: APP_META_COLUMNS,
+        identity: MergeIdentity::TargetOwned(&["key"]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -378,6 +1431,28 @@ fn merge_library_package(
     source_base_dir: &str,
     target_base_dir: &str,
 ) -> Result<LibraryMergeReport, String> {
+    merge_library_package_with_hooks(source_base_dir, target_base_dir, None, None)
+}
+
+type BeforeMergeMediaPublishHook<'a> = dyn Fn(&[StagedMedia]) -> Result<(), String> + 'a;
+
+#[cfg(test)]
+fn merge_library_package_with_media_publish_hook(
+    source_base_dir: &str,
+    target_base_dir: &str,
+    before_media_publish: Option<&BeforeMergeMediaPublishHook<'_>>,
+) -> Result<LibraryMergeReport, String> {
+    merge_library_package_with_hooks(source_base_dir, target_base_dir, before_media_publish, None)
+}
+
+type BeforeMergeCommitHook<'a> = dyn Fn(&Connection) -> Result<(), String> + 'a;
+
+fn merge_library_package_with_hooks(
+    source_base_dir: &str,
+    target_base_dir: &str,
+    before_media_publish: Option<&BeforeMergeMediaPublishHook<'_>>,
+    before_commit: Option<&BeforeMergeCommitHook<'_>>,
+) -> Result<LibraryMergeReport, String> {
     let source = resolve_library_paths(source_base_dir);
     let target = resolve_library_paths(target_base_dir);
     if source.base_dir == target.base_dir {
@@ -388,73 +1463,1137 @@ fn merge_library_package(
 
     let source_conn = open_portable_database(&source.db_path)?;
     let mut target_conn = open_portable_database(&target.db_path)?;
+    validate_merge_manifest_schema(&source_conn, "source")?;
+    validate_merge_manifest_schema(&target_conn, "target")?;
+    let tables = MERGE_MANIFEST
+        .iter()
+        .map(|spec| (spec.table.to_string(), MergeTableReport::default()))
+        .collect();
     let mut report = LibraryMergeReport {
         source_base_dir: source.base_dir.clone(),
         target_base_dir: target.base_dir.clone(),
         prompts: MergeTableReport::default(),
         results: MergeTableReport::default(),
         references: MergeTableReport::default(),
+        tables,
+        manifest_version: MERGE_MANIFEST_VERSION,
         id_remaps: Vec::new(),
         errors: Vec::new(),
     };
-
-    map_builtin_seed_prompt_ids(&source_conn, &mut target_conn, &mut report)?;
-    merge_prompt_rows(&source_conn, &mut target_conn, &mut report)?;
-    merge_result_rows(
+    merge_all_manifest_tables(
         &source_conn,
         &mut target_conn,
         &source,
         &target,
         &mut report,
+        before_media_publish,
+        before_commit,
     )?;
-    merge_reference_rows(
-        &source_conn,
-        &mut target_conn,
-        &source,
-        &target,
-        &mut report,
-    )?;
+    report.prompts = report.tables["prompts"].clone();
+    report.results = report.tables["results"].clone();
+    report.references = report.tables["references"].clone();
     Ok(report)
 }
 
-fn map_builtin_seed_prompt_ids(
-    source_conn: &rusqlite::Connection,
-    target_conn: &mut rusqlite::Connection,
-    report: &mut LibraryMergeReport,
+#[derive(Clone)]
+struct PlannedInsert {
+    spec: MergeTableSpec,
+    record: TableRecord,
+    identity_values: Vec<Value>,
+}
+
+#[derive(Eq, Hash, PartialEq)]
+struct PlannedLookupKey {
+    table: &'static str,
+    columns: Vec<&'static str>,
+    values: MergeIdentityKey,
+}
+
+struct StagedMedia {
+    staged: PathBuf,
+    final_path: PathBuf,
+}
+
+#[derive(Default)]
+struct StagedMediaState {
+    reserved: HashSet<String>,
+    files: Vec<StagedMedia>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum MergeValueKey {
+    Null,
+    Integer(i64),
+    Real(u64),
+    Text(String),
+    Blob(Vec<u8>),
+}
+
+type MergeIdentityKey = Vec<MergeValueKey>;
+type ExcludedIdentities = HashMap<&'static str, HashSet<MergeIdentityKey>>;
+
+fn merge_identity_key(values: &[Value]) -> MergeIdentityKey {
+    values
+        .iter()
+        .map(|value| match value {
+            Value::Null => MergeValueKey::Null,
+            Value::Integer(value) => MergeValueKey::Integer(*value),
+            Value::Real(value) => MergeValueKey::Real(value.to_bits()),
+            Value::Text(value) => MergeValueKey::Text(value.clone()),
+            Value::Blob(value) => MergeValueKey::Blob(value.clone()),
+        })
+        .collect()
+}
+
+fn planned_lookup_key(
+    table: &'static str,
+    columns: &[&'static str],
+    values: &[Value],
+) -> PlannedLookupKey {
+    PlannedLookupKey {
+        table,
+        columns: columns.to_vec(),
+        values: merge_identity_key(values),
+    }
+}
+
+fn index_planned_insert(
+    planned: &mut Vec<PlannedInsert>,
+    planned_identities: &mut HashSet<PlannedLookupKey>,
+    planned_unique: &mut HashMap<PlannedLookupKey, usize>,
+    insert: PlannedInsert,
 ) -> Result<(), String> {
-    let source_rows = read_builtin_seed_prompt_records(source_conn)?;
-    let transaction = target_conn
-        .transaction()
-        .map_err(|error| error.to_string())?;
+    let index = planned.len();
+    let identity_columns = match insert.spec.identity {
+        MergeIdentity::Id(_) => &["id"][..],
+        MergeIdentity::Composite(keys) | MergeIdentity::TargetOwned(keys) => keys,
+    };
+    planned_identities.insert(planned_lookup_key(
+        insert.spec.table,
+        identity_columns,
+        &insert.identity_values,
+    ));
+    if let MergeIdentity::Id(unique_keys) = insert.spec.identity {
+        for keys in unique_keys {
+            let values = key_values(insert.spec, &insert.record, keys)?;
+            planned_unique.insert(planned_lookup_key(insert.spec.table, keys, &values), index);
+        }
+    }
+    planned.push(insert);
+    Ok(())
+}
 
-    for source_row in source_rows {
-        let source_id = value_as_string(&source_row.values[0])?;
-        let title = value_as_string(&source_row.values[1])?;
-        let target_id = transaction
-            .query_row(
-                "SELECT id FROM prompts
-                 WHERE provider = 'nano_banana' AND title = ?1
-                 ORDER BY id
-                 LIMIT 1",
-                [&title],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
+fn merge_all_manifest_tables(
+    source_conn: &Connection,
+    target_conn: &mut Connection,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+    report: &mut LibraryMergeReport,
+    before_media_publish: Option<&BeforeMergeMediaPublishHook<'_>>,
+    before_commit: Option<&BeforeMergeCommitHook<'_>>,
+) -> Result<(), String> {
+    let staging_root =
+        PathBuf::from(&target.staging_dir).join(format!("merge-{}", timestamp_slug()));
+    fs::create_dir_all(&staging_root).map_err(format_io_error)?;
+    let result = (|| {
+        let mut maps: HashMap<&str, HashMap<String, String>> = HashMap::new();
+        let mut excluded = ExcludedIdentities::new();
+        map_builtin_seed_prompt_ids_for_plan(
+            source_conn,
+            target_conn,
+            &mut maps,
+            report,
+            &mut excluded,
+        )?;
+        preallocate_prompt_ids(source_conn, target_conn, &mut maps, report)?;
+        let mut planned: Vec<PlannedInsert> = Vec::new();
+        let mut planned_identities: HashSet<PlannedLookupKey> = HashSet::new();
+        let mut planned_unique: HashMap<PlannedLookupKey, usize> = HashMap::new();
+        let mut media = StagedMediaState::default();
+
+        for spec in MERGE_MANIFEST.iter().copied() {
+            let rows = read_manifest_rows(source_conn, spec, &mut excluded)?;
+            for source_row in rows {
+                let mut row = source_row.clone();
+                if !rewrite_manifest_foreign_keys(spec, &mut row, &maps, &excluded)? {
+                    record_excluded_identity(&mut excluded, spec, &source_row)?;
+                    report.tables.get_mut(spec.table).unwrap().excluded += 1;
+                    continue;
+                }
+                validate_manifest_media_values(spec, &row, source)?;
+                if let MergeIdentity::Id(unique_keys) = spec.identity {
+                    let source_id =
+                        value_as_string(&source_row.values[column_index(spec.columns, "id")?])?;
+                    let mut unique_match = None;
+                    for keys in unique_keys {
+                        let values = key_values(spec, &row, keys)?;
+                        if let Some(index) =
+                            planned_unique.get(&planned_lookup_key(spec.table, keys, &values))
+                        {
+                            unique_match = Some(planned[*index].record.clone());
+                            break;
+                        }
+                        if let Some(existing) =
+                            read_manifest_by_keys(target_conn, spec, keys, &values)?
+                        {
+                            unique_match = Some(existing);
+                            break;
+                        }
+                    }
+                    if let Some(existing) = unique_match {
+                        let target_id =
+                            value_as_string(&existing.values[column_index(spec.columns, "id")?])?;
+                        maps.entry(spec.table)
+                            .or_default()
+                            .insert(source_id.clone(), target_id.clone());
+                        report
+                            .tables
+                            .get_mut(spec.table)
+                            .unwrap()
+                            .skipped_duplicates += 1;
+                        if source_id != target_id {
+                            report.id_remaps.push(MergeIdRemap {
+                                table: spec.table.into(),
+                                source_id,
+                                target_id,
+                                reason: "unique_key".into(),
+                            });
+                        }
+                        continue;
+                    }
+                }
+                match spec.identity {
+                    MergeIdentity::Id(_) => {
+                        let id_index = column_index(spec.columns, "id")?;
+                        let source_id = value_as_string(&source_row.values[id_index])?;
+                        if spec.table == "prompts" {
+                            let target_id = maps["prompts"][&source_id].clone();
+                            row.values[id_index] = Value::Text(target_id.clone());
+                            if let Some(existing) = read_manifest_by_keys(
+                                target_conn,
+                                spec,
+                                &["id"],
+                                &[Value::Text(target_id.clone())],
+                            )? {
+                                if records_equivalent_for_merge(
+                                    spec, &existing, &row, source, target,
+                                )? {
+                                    report
+                                        .tables
+                                        .get_mut(spec.table)
+                                        .unwrap()
+                                        .skipped_duplicates += 1;
+                                    continue;
+                                }
+                            }
+                            if source_id != target_id {
+                                report.tables.get_mut(spec.table).unwrap().remapped += 1;
+                            }
+                            index_planned_insert(
+                                &mut planned,
+                                &mut planned_identities,
+                                &mut planned_unique,
+                                PlannedInsert {
+                                    spec,
+                                    record: row,
+                                    identity_values: vec![Value::Text(target_id)],
+                                },
+                            )?;
+                            report.tables.get_mut(spec.table).unwrap().imported += 1;
+                            continue;
+                        }
+                        let same_id = read_manifest_by_keys(
+                            target_conn,
+                            spec,
+                            &["id"],
+                            &[Value::Text(source_id.clone())],
+                        )?;
+                        if let Some(existing) = same_id.as_ref() {
+                            if records_equivalent_for_merge(spec, existing, &row, source, target)? {
+                                maps.entry(spec.table).or_default().insert(
+                                    source_id,
+                                    value_as_string(&existing.values[id_index])?,
+                                );
+                                report
+                                    .tables
+                                    .get_mut(spec.table)
+                                    .unwrap()
+                                    .skipped_duplicates += 1;
+                                continue;
+                            }
+                        }
+                        if let Some(existing) =
+                            find_equivalent_manifest_row(target_conn, spec, &row, source, target)?
+                        {
+                            let target_id = value_as_string(&existing.values[id_index])?;
+                            maps.entry(spec.table)
+                                .or_default()
+                                .insert(source_id.clone(), target_id.clone());
+                            report
+                                .tables
+                                .get_mut(spec.table)
+                                .unwrap()
+                                .skipped_duplicates += 1;
+                            if source_id != target_id {
+                                report.id_remaps.push(MergeIdRemap {
+                                    table: spec.table.to_string(),
+                                    source_id,
+                                    target_id,
+                                    reason: "existing_match".to_string(),
+                                });
+                            }
+                            continue;
+                        }
+                        let target_id = if same_id.is_some() {
+                            let id = generate_sqlite_id(target_conn)?;
+                            row.values[id_index] = Value::Text(id.clone());
+                            let table_report = report.tables.get_mut(spec.table).unwrap();
+                            table_report.remapped += 1;
+                            report.id_remaps.push(MergeIdRemap {
+                                table: spec.table.to_string(),
+                                source_id: source_id.clone(),
+                                target_id: id.clone(),
+                                reason: "id_collision".to_string(),
+                            });
+                            id
+                        } else {
+                            source_id.clone()
+                        };
+                        maps.entry(spec.table)
+                            .or_default()
+                            .insert(source_id, target_id.clone());
+                        stage_manifest_media(
+                            spec,
+                            &mut row,
+                            source,
+                            target,
+                            &staging_root,
+                            &target_id,
+                            &mut media,
+                        )?;
+                        index_planned_insert(
+                            &mut planned,
+                            &mut planned_identities,
+                            &mut planned_unique,
+                            PlannedInsert {
+                                spec,
+                                record: row,
+                                identity_values: vec![Value::Text(target_id)],
+                            },
+                        )?;
+                        report.tables.get_mut(spec.table).unwrap().imported += 1;
+                    }
+                    MergeIdentity::Composite(keys) => {
+                        let values = key_values(spec, &row, keys)?;
+                        if read_manifest_by_keys(target_conn, spec, keys, &values)?.is_some()
+                            || planned_identities
+                                .contains(&planned_lookup_key(spec.table, keys, &values))
+                        {
+                            report
+                                .tables
+                                .get_mut(spec.table)
+                                .unwrap()
+                                .skipped_duplicates += 1;
+                        } else {
+                            index_planned_insert(
+                                &mut planned,
+                                &mut planned_identities,
+                                &mut planned_unique,
+                                PlannedInsert {
+                                    spec,
+                                    record: row,
+                                    identity_values: values,
+                                },
+                            )?;
+                            report.tables.get_mut(spec.table).unwrap().imported += 1;
+                        }
+                    }
+                    MergeIdentity::TargetOwned(keys) => {
+                        let values = key_values(spec, &row, keys)?;
+                        if read_manifest_by_keys(target_conn, spec, keys, &values)?.is_some() {
+                            report
+                                .tables
+                                .get_mut(spec.table)
+                                .unwrap()
+                                .skipped_duplicates += 1;
+                        } else {
+                            index_planned_insert(
+                                &mut planned,
+                                &mut planned_identities,
+                                &mut planned_unique,
+                                PlannedInsert {
+                                    spec,
+                                    record: row,
+                                    identity_values: values,
+                                },
+                            )?;
+                            report.tables.get_mut(spec.table).unwrap().imported += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let transaction = target_conn
+            .transaction()
             .map_err(|error| error.to_string())?;
+        for item in &planned {
+            insert_manifest_record(&transaction, item.spec, &item.record)?;
+        }
+        let mut published = Vec::new();
+        let publish_result = before_media_publish
+            .map_or(Ok(()), |hook| hook(&media.files))
+            .and_then(|()| publish_staged_media(&media.files, &mut published));
+        if let Err(error) = publish_result {
+            let mut errors = vec![error];
+            if let Err(rollback_error) = transaction.rollback() {
+                errors.push(format!("database rollback failed: {rollback_error}"));
+            }
+            errors.extend(cleanup_owned_merge_media(&media.files, &published));
+            return Err(errors.join("; "));
+        }
+        if let Some(before_commit) = before_commit {
+            if let Err(error) = before_commit(&transaction) {
+                let mut errors = vec![error];
+                if let Err(rollback_error) = transaction.rollback() {
+                    errors.push(format!("database rollback failed: {rollback_error}"));
+                }
+                errors.extend(cleanup_owned_merge_media(&media.files, &published));
+                return Err(errors.join("; "));
+            }
+        }
+        if let Err(error) = transaction.commit() {
+            let mut errors = vec![format!("database commit failed: {error}")];
+            errors.extend(cleanup_owned_merge_media(&media.files, &published));
+            return Err(errors.join("; "));
+        }
+        Ok(())
+    })();
+    match cleanup_staging_directory(&staging_root) {
+        Ok(()) => result,
+        Err(cleanup_error) => match result {
+            Ok(()) => Err(format!(
+                "merge staging cleanup failed for {}: {cleanup_error}",
+                staging_root.display()
+            )),
+            Err(error) => Err(format!(
+                "{error}; merge staging cleanup failed for {}: {cleanup_error}",
+                staging_root.display()
+            )),
+        },
+    }
+}
 
+fn cleanup_owned_merge_media(staged: &[StagedMedia], published: &[PathBuf]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for path in published
+        .iter()
+        .chain(staged.iter().map(|media| &media.staged))
+    {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => errors.push(format!(
+                "owned media cleanup failed for {}: {error}",
+                path.display()
+            )),
+        }
+    }
+    errors
+}
+
+fn map_builtin_seed_prompt_ids_for_plan(
+    source: &Connection,
+    target: &Connection,
+    maps: &mut HashMap<&'static str, HashMap<String, String>>,
+    report: &mut LibraryMergeReport,
+    excluded: &mut ExcludedIdentities,
+) -> Result<(), String> {
+    for row in read_builtin_seed_prompt_records(source)? {
+        let source_id = value_as_string(&row.values[0])?;
+        excluded
+            .entry("prompts")
+            .or_default()
+            .insert(merge_identity_key(&[Value::Text(source_id.clone())]));
+        let title = value_as_string(&row.values[1])?;
+        let target_id = target.query_row("SELECT id FROM prompts WHERE provider='nano_banana' AND title=?1 ORDER BY id LIMIT 1", [&title], |r| r.get::<_,String>(0)).optional().map_err(|e| e.to_string())?;
         if let Some(target_id) = target_id {
-            if target_id != source_id {
+            maps.entry("prompts")
+                .or_default()
+                .insert(source_id.clone(), target_id.clone());
+            if source_id != target_id {
                 report.id_remaps.push(MergeIdRemap {
-                    table: "prompts".to_string(),
+                    table: "prompts".into(),
                     source_id,
                     target_id,
-                    reason: "builtin_seed".to_string(),
+                    reason: "builtin_seed".into(),
                 });
             }
         }
     }
+    Ok(())
+}
 
-    transaction.commit().map_err(|error| error.to_string())
+fn preallocate_prompt_ids(
+    source_conn: &Connection,
+    target_conn: &Connection,
+    maps: &mut HashMap<&'static str, HashMap<String, String>>,
+    report: &mut LibraryMergeReport,
+) -> Result<(), String> {
+    let spec = *MERGE_MANIFEST
+        .iter()
+        .find(|spec| spec.table == "prompts")
+        .unwrap();
+    let mut ignored = HashMap::new();
+    let rows = read_manifest_rows(source_conn, spec, &mut ignored)?;
+    let mut collided_ids = std::collections::HashSet::new();
+    for row in &rows {
+        let source_id = value_as_string(&row.values[column_index(spec.columns, "id")?])?;
+        let same = read_manifest_by_keys(
+            target_conn,
+            spec,
+            &["id"],
+            &[Value::Text(source_id.clone())],
+        )?;
+        if same.is_some() {
+            collided_ids.insert(source_id.clone());
+        }
+        let target_id = if same.as_ref().is_some_and(|candidate| {
+            records_equivalent_ignoring(spec, candidate, row, &["id", "parent_id"])
+        }) {
+            source_id.clone()
+        } else if let Some(candidate) =
+            find_equivalent_ignoring(target_conn, spec, row, &["id", "parent_id"])?
+        {
+            value_as_string(&candidate.values[column_index(spec.columns, "id")?])?
+        } else if same.is_some() {
+            generate_sqlite_id(target_conn)?
+        } else {
+            source_id.clone()
+        };
+        maps.entry("prompts")
+            .or_default()
+            .insert(source_id.clone(), target_id.clone());
+    }
+
+    let mut converged = false;
+    for _ in 0..(rows.len().saturating_mul(2) + 2) {
+        let mut changed = false;
+        for source_row in &rows {
+            let source_id = value_as_string(&source_row.values[column_index(spec.columns, "id")?])?;
+            let current_id = maps["prompts"][&source_id].clone();
+            let mut rewritten = source_row.clone();
+            if let Value::Text(parent_id) =
+                &source_row.values[column_index(spec.columns, "parent_id")?]
+            {
+                if let Some(target_parent) = maps["prompts"].get(parent_id) {
+                    rewritten.values[column_index(spec.columns, "parent_id")?] =
+                        Value::Text(target_parent.clone());
+                }
+            }
+            rewritten.values[column_index(spec.columns, "id")?] = Value::Text(current_id.clone());
+            let occupied = read_manifest_by_keys(
+                target_conn,
+                spec,
+                &["id"],
+                &[Value::Text(current_id.clone())],
+            )?;
+            let next_id = if occupied.as_ref().is_some_and(|candidate| {
+                records_equivalent_ignoring(spec, candidate, &rewritten, &["id"])
+            }) {
+                current_id.clone()
+            } else if let Some(candidate) =
+                find_equivalent_ignoring(target_conn, spec, &rewritten, &["id"])?
+            {
+                value_as_string(&candidate.values[column_index(spec.columns, "id")?])?
+            } else if occupied.is_some() {
+                generate_sqlite_id(target_conn)?
+            } else {
+                current_id.clone()
+            };
+            if next_id != current_id {
+                maps.entry("prompts")
+                    .or_default()
+                    .insert(source_id, next_id);
+                changed = true;
+            }
+        }
+        if !changed {
+            converged = true;
+            break;
+        }
+    }
+    if !converged {
+        return Err(
+            "Unable to resolve cyclic prompt parent identities deterministically".to_string(),
+        );
+    }
+
+    for row in &rows {
+        let source_id = value_as_string(&row.values[column_index(spec.columns, "id")?])?;
+        let target_id = maps["prompts"][&source_id].clone();
+        if source_id != target_id {
+            report.id_remaps.push(MergeIdRemap {
+                table: "prompts".into(),
+                source_id: source_id.clone(),
+                target_id,
+                reason: if collided_ids.contains(&source_id) {
+                    "id_collision".into()
+                } else {
+                    "existing_match".into()
+                },
+            });
+        }
+    }
+    Ok(())
+}
+
+fn records_equivalent_ignoring(
+    spec: MergeTableSpec,
+    left: &TableRecord,
+    right: &TableRecord,
+    ignored: &[&str],
+) -> bool {
+    spec.columns.iter().enumerate().all(|(index, column)| {
+        ignored.contains(column) || left.values[index] == right.values[index]
+    })
+}
+
+fn find_equivalent_ignoring(
+    conn: &Connection,
+    spec: MergeTableSpec,
+    row: &TableRecord,
+    ignored: &[&str],
+) -> Result<Option<TableRecord>, String> {
+    let compare = spec
+        .columns
+        .iter()
+        .enumerate()
+        .filter(|(_, column)| !ignored.contains(column))
+        .collect::<Vec<_>>();
+    let clause = compare
+        .iter()
+        .enumerate()
+        .map(|(parameter, (_, column))| {
+            format!("{} IS ?{}", quote_identifier(column), parameter + 1)
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let sql = format!(
+        "SELECT {} FROM {} WHERE {clause} LIMIT 1",
+        spec.columns
+            .iter()
+            .map(|column| quote_identifier(column))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(spec.table)
+    );
+    conn.query_row(
+        &sql,
+        params_from_iter(compare.iter().map(|(index, _)| &row.values[*index])),
+        |candidate| record_from_row(candidate, spec.columns.len()),
+    )
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+fn quote_identifier(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn column_index(columns: &[&str], column: &str) -> Result<usize, String> {
+    columns
+        .iter()
+        .position(|candidate| *candidate == column)
+        .ok_or_else(|| format!("Merge manifest column {column} is missing"))
+}
+
+fn validate_merge_manifest_schema(conn: &Connection, label: &str) -> Result<(), String> {
+    if label == "source" {
+        let declared = MERGE_MANIFEST
+            .iter()
+            .map(|spec| spec.table)
+            .collect::<std::collections::HashSet<_>>();
+        let mut statement = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
+            .map_err(|e| e.to_string())?;
+        let tables = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for table in tables {
+            if !declared.contains(table.as_str()) && table != "_sqlx_migrations" {
+                return Err(format!(
+                    "Invalid source library: unsupported source schema table {table}"
+                ));
+            }
+        }
+    }
+    for spec in MERGE_MANIFEST {
+        let sql = format!("PRAGMA table_info({})", quote_identifier(spec.table));
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let actual = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        if actual.is_empty() {
+            return Err(format!(
+                "Invalid {label} library: missing declared merge table {}",
+                spec.table
+            ));
+        }
+        for column in spec.columns {
+            if !actual.iter().any(|candidate| candidate == column) {
+                return Err(format!("Invalid {label} library: merge manifest v{MERGE_MANIFEST_VERSION} requires {}.{column}", spec.table));
+            }
+        }
+        if label == "source" {
+            for column in &actual {
+                if !spec.columns.contains(&column.as_str()) {
+                    return Err(format!(
+                        "Invalid source library: unsupported source schema column {}.{column}",
+                        spec.table
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_manifest_rows(
+    conn: &Connection,
+    spec: MergeTableSpec,
+    excluded: &mut ExcludedIdentities,
+) -> Result<Vec<TableRecord>, String> {
+    let select = spec
+        .columns
+        .iter()
+        .map(|c| quote_identifier(c))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut sql = format!("SELECT {select} FROM {}", quote_identifier(spec.table));
+    if spec.table == "prompts" {
+        sql.push_str(" WHERE NOT (COALESCE(provider,'')='nano_banana' AND title IN ('Nano Banana — Skin Texture Macro','Nano Banana — Eye Detail Macro','Nano Banana — Lip Texture Macro','Nano Banana — Tongue Texture Macro'))");
+    } else if spec.user_only {
+        sql.push_str(" WHERE COALESCE(is_builtin,0)=0");
+        let id_index = column_index(spec.columns, "id")?;
+        let all_sql = format!(
+            "SELECT {select} FROM {} WHERE COALESCE(is_builtin,0)<>0",
+            quote_identifier(spec.table)
+        );
+        for row in read_records_with_sql(conn, &all_sql, spec.columns.len())? {
+            excluded
+                .entry(spec.table)
+                .or_default()
+                .insert(merge_identity_key(&[Value::Text(value_as_string(
+                    &row.values[id_index],
+                )?)]));
+        }
+    }
+    read_records_with_sql(conn, &sql, spec.columns.len())
+}
+
+fn rewrite_manifest_foreign_keys(
+    spec: MergeTableSpec,
+    row: &mut TableRecord,
+    maps: &HashMap<&str, HashMap<String, String>>,
+    excluded: &ExcludedIdentities,
+) -> Result<bool, String> {
+    for foreign_key in spec.foreign_keys {
+        let index = column_index(spec.columns, foreign_key.column)?;
+        let Value::Text(source_id) = &row.values[index] else {
+            continue;
+        };
+        if let Some(target_id) = maps
+            .get(foreign_key.table)
+            .and_then(|map| map.get(source_id))
+        {
+            row.values[index] = Value::Text(target_id.clone());
+        } else if excluded.get(foreign_key.table).is_some_and(|identities| {
+            identities.contains(&merge_identity_key(&[Value::Text(source_id.clone())]))
+        }) {
+            match excluded_foreign_key_policy(spec.table, foreign_key.column) {
+                ExcludedForeignKeyPolicy::Null => row.values[index] = Value::Null,
+                ExcludedForeignKeyPolicy::Exclude => return Ok(false),
+            }
+        }
+    }
+    Ok(true)
+}
+
+#[derive(Clone, Copy)]
+enum ExcludedForeignKeyPolicy {
+    Null,
+    Exclude,
+}
+
+fn excluded_foreign_key_policy(table: &str, column: &str) -> ExcludedForeignKeyPolicy {
+    match (table, column) {
+        ("prompts", "parent_id")
+        | ("projects", "campaign_id")
+        | ("comparison_sessions", "project_id")
+        | ("project_deliverables", "linked_prompt_id")
+        | ("project_deliverables", "linked_result_id")
+        | ("generation_queue", "project_id")
+        | ("shot_sequence", "prompt_id")
+        | ("shot_sequence", "result_id") => ExcludedForeignKeyPolicy::Null,
+        _ => ExcludedForeignKeyPolicy::Exclude,
+    }
+}
+
+fn record_excluded_identity(
+    excluded: &mut ExcludedIdentities,
+    spec: MergeTableSpec,
+    source_row: &TableRecord,
+) -> Result<(), String> {
+    let keys = match spec.identity {
+        MergeIdentity::Id(_) => &["id"][..],
+        MergeIdentity::Composite(keys) | MergeIdentity::TargetOwned(keys) => keys,
+    };
+    excluded
+        .entry(spec.table)
+        .or_default()
+        .insert(merge_identity_key(&key_values(spec, source_row, keys)?));
+    Ok(())
+}
+
+fn key_values(
+    spec: MergeTableSpec,
+    row: &TableRecord,
+    keys: &[&str],
+) -> Result<Vec<Value>, String> {
+    keys.iter()
+        .map(|key| column_index(spec.columns, key).map(|index| row.values[index].clone()))
+        .collect()
+}
+
+fn read_manifest_by_keys(
+    conn: &Connection,
+    spec: MergeTableSpec,
+    keys: &[&str],
+    values: &[Value],
+) -> Result<Option<TableRecord>, String> {
+    let where_clause = keys
+        .iter()
+        .enumerate()
+        .map(|(i, key)| format!("{} IS ?{}", quote_identifier(key), i + 1))
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let sql = format!(
+        "SELECT {} FROM {} WHERE {where_clause} LIMIT 1",
+        spec.columns
+            .iter()
+            .map(|c| quote_identifier(c))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(spec.table)
+    );
+    conn.query_row(&sql, params_from_iter(values.iter()), |row| {
+        record_from_row(row, spec.columns.len())
+    })
+    .optional()
+    .map_err(|e| e.to_string())
+}
+
+fn records_equivalent_for_merge(
+    spec: MergeTableSpec,
+    left: &TableRecord,
+    right: &TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<bool, String> {
+    for (index, column) in spec.columns.iter().enumerate() {
+        if *column == "id" {
+            continue;
+        }
+        if spec.media_columns.contains(column) {
+            if !media_values_equivalent(
+                spec.table,
+                &left.values[index],
+                &right.values[index],
+                source,
+                target,
+            )? {
+                return Ok(false);
+            }
+        } else if left.values[index] != right.values[index] {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn media_values_equivalent(
+    table: &str,
+    target_value: &Value,
+    source_value: &Value,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<bool, String> {
+    if target_value == source_value {
+        return Ok(true);
+    }
+    let (Value::Text(target_path), Value::Text(source_path)) = (target_value, source_value) else {
+        return Ok(false);
+    };
+    let Some((source_prefix, target_prefix, _)) = media_prefixes(table, source, target) else {
+        return Ok(false);
+    };
+    if !source_path.starts_with(source_prefix) || !target_path.starts_with(target_prefix) {
+        return Ok(false);
+    }
+    let source_relative = &source_path[source_prefix.len()..];
+    let target_relative = &target_path[target_prefix.len()..];
+    assert_safe_relative_media_path(source_relative)?;
+    assert_safe_relative_media_path(target_relative)?;
+    match (fs::read(source_path), fs::read(target_path)) {
+        (Ok(source_bytes), Ok(target_bytes)) => Ok(source_bytes == target_bytes),
+        _ => Ok(false),
+    }
+}
+
+fn find_equivalent_manifest_row(
+    conn: &Connection,
+    spec: MergeTableSpec,
+    row: &TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+) -> Result<Option<TableRecord>, String> {
+    let compare = spec
+        .columns
+        .iter()
+        .enumerate()
+        .filter(|(_, column)| **column != "id" && !spec.media_columns.contains(column))
+        .collect::<Vec<_>>();
+    let where_clause = compare
+        .iter()
+        .enumerate()
+        .map(|(parameter, (_, column))| {
+            format!("{} IS ?{}", quote_identifier(column), parameter + 1)
+        })
+        .collect::<Vec<_>>()
+        .join(" AND ");
+    let sql = format!(
+        "SELECT {} FROM {} WHERE {where_clause}",
+        spec.columns
+            .iter()
+            .map(|c| quote_identifier(c))
+            .collect::<Vec<_>>()
+            .join(", "),
+        quote_identifier(spec.table)
+    );
+    let values = compare.iter().map(|(index, _)| &row.values[*index]);
+    let mut statement = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = statement
+        .query_map(params_from_iter(values), |candidate| {
+            record_from_row(candidate, spec.columns.len())
+        })
+        .map_err(|e| e.to_string())?;
+    for candidate in rows {
+        let candidate = candidate.map_err(|e| e.to_string())?;
+        if records_equivalent_for_merge(spec, &candidate, row, source, target)? {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+fn media_prefixes<'a>(
+    table: &str,
+    source: &'a LibraryPathsDto,
+    target: &'a LibraryPathsDto,
+) -> Option<(&'a str, &'a str, &'static str)> {
+    match table {
+        "results" => Some((&source.results_dir, &target.results_dir, "results")),
+        "references" => Some((&source.references_dir, &target.references_dir, "references")),
+        _ => None,
+    }
+}
+
+fn stage_manifest_media(
+    spec: MergeTableSpec,
+    row: &mut TableRecord,
+    source: &LibraryPathsDto,
+    target: &LibraryPathsDto,
+    staging_root: &Path,
+    id_hint: &str,
+    state: &mut StagedMediaState,
+) -> Result<(), String> {
+    let Some((source_prefix, target_prefix, kind)) = media_prefixes(spec.table, source, target)
+    else {
+        return Ok(());
+    };
+    for column in spec.media_columns {
+        let index = column_index(spec.columns, column)?;
+        let Value::Text(source_path) = &row.values[index] else {
+            continue;
+        };
+        if is_recognized_direct_media_value(source_path) {
+            continue;
+        }
+        if !source_path.starts_with(source_prefix) {
+            return Err(format!(
+                "Managed media path is outside the source {kind} directory: {source_path}"
+            ));
+        }
+        let relative = source_path[source_prefix.len()..].to_string();
+        assert_safe_relative_media_path(&relative)?;
+        validate_managed_media_source(Path::new(source_prefix), &relative)?;
+        let mut candidate = collision_safe_relative_path(&relative, target_prefix, id_hint)?;
+        let mut counter = 2;
+        while state.reserved.contains(&format!("{kind}/{candidate}")) {
+            candidate = collision_safe_relative_path(
+                &format!("{relative}-stage-{counter}"),
+                target_prefix,
+                id_hint,
+            )?;
+            counter += 1;
+        }
+        state.reserved.insert(format!("{kind}/{candidate}"));
+        let staged_path = staging_root.join(kind).join(&candidate);
+        if let Some(parent) = staged_path.parent() {
+            fs::create_dir_all(parent).map_err(format_io_error)?;
+        }
+        fs::copy(source_path, &staged_path).map_err(format_io_error)?;
+        let final_path = PathBuf::from(format!("{target_prefix}{candidate}"));
+        row.values[index] = Value::Text(final_path.to_string_lossy().to_string());
+        state.files.push(StagedMedia {
+            staged: staged_path,
+            final_path,
+        });
+    }
+    Ok(())
+}
+
+fn validate_manifest_media_values(
+    spec: MergeTableSpec,
+    row: &TableRecord,
+    source: &LibraryPathsDto,
+) -> Result<(), String> {
+    let Some((source_prefix, _, kind)) = media_prefixes(spec.table, source, source) else {
+        return Ok(());
+    };
+    for column in spec.media_columns {
+        let index = column_index(spec.columns, column)?;
+        let Value::Text(source_path) = &row.values[index] else {
+            continue;
+        };
+        if is_recognized_direct_media_value(source_path) {
+            continue;
+        }
+        if !source_path.starts_with(source_prefix) {
+            return Err(format!(
+                "Managed media path is outside the source {kind} directory: {source_path}"
+            ));
+        }
+        let relative = &source_path[source_prefix.len()..];
+        assert_safe_relative_media_path(relative)?;
+        validate_managed_media_source(Path::new(source_prefix), relative)?;
+    }
+    Ok(())
+}
+
+fn is_recognized_direct_media_value(value: &str) -> bool {
+    ["data:", "https://", "http://"]
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
+}
+
+fn validate_managed_media_source(root: &Path, relative: &str) -> Result<(), String> {
+    // Remove a trailing separator: on Unix, lstat("symlink/") follows the link.
+    let root = root.components().collect::<PathBuf>();
+    let root_metadata = fs::symlink_metadata(&root).map_err(|error| {
+        format!(
+            "Could not inspect managed media root {}: {error}",
+            root.display()
+        )
+    })?;
+    if root_metadata.file_type().is_symlink() {
+        return Err(format!(
+            "Managed media root must not be a symlink: {}",
+            root.display()
+        ));
+    }
+    if !root_metadata.is_dir() {
+        return Err(format!(
+            "Managed media root is not a directory: {}",
+            root.display()
+        ));
+    }
+    let canonical_root = root.canonicalize().map_err(format_io_error)?;
+    let mut current = root;
+    for component in Path::new(relative).components() {
+        current.push(component.as_os_str());
+        let metadata = fs::symlink_metadata(&current).map_err(|error| {
+            format!(
+                "Could not inspect managed media component {}: {error}",
+                current.display()
+            )
+        })?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "Managed media path contains a symlink: {}",
+                current.display()
+            ));
+        }
+    }
+    let metadata = fs::symlink_metadata(&current).map_err(format_io_error)?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "Managed media leaf is not a regular file: {}",
+            current.display()
+        ));
+    }
+    let canonical_file = current.canonicalize().map_err(format_io_error)?;
+    if !canonical_file.starts_with(&canonical_root) {
+        return Err(format!(
+            "Managed media path escapes its source root: {}",
+            current.display()
+        ));
+    }
+    Ok(())
+}
+
+fn insert_manifest_record(
+    conn: &Connection,
+    spec: MergeTableSpec,
+    record: &TableRecord,
+) -> Result<(), String> {
+    let placeholders = (1..=spec.columns.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "INSERT INTO {} ({}) VALUES ({placeholders})",
+        quote_identifier(spec.table),
+        spec.columns
+            .iter()
+            .map(|c| quote_identifier(c))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    conn.execute(&sql, params_from_iter(record.values.iter()))
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+fn publish_staged_media(
+    staged: &[StagedMedia],
+    published: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    for media in staged {
+        if let Some(parent) = media.final_path.parent() {
+            fs::create_dir_all(parent).map_err(format_io_error)?;
+        }
+        rename_file_no_replace(&media.staged, &media.final_path).map_err(format_io_error)?;
+        published.push(media.final_path.clone());
+    }
+    Ok(())
 }
 
 fn assert_valid_library_for_merge(label: &str, base_dir: &str) -> Result<(), String> {
@@ -467,279 +2606,6 @@ fn assert_valid_library_for_merge(label: &str, base_dir: &str) -> Result<(), Str
             validation.errors.join(", ")
         ))
     }
-}
-
-fn merge_prompt_rows(
-    source_conn: &rusqlite::Connection,
-    target_conn: &mut rusqlite::Connection,
-    report: &mut LibraryMergeReport,
-) -> Result<(), String> {
-    let source_rows = read_prompt_records(source_conn)?;
-    let transaction = target_conn
-        .transaction()
-        .map_err(|error| error.to_string())?;
-
-    for source_row in source_rows {
-        let source_id = value_as_string(&source_row.values[0])?;
-        match read_record_by_id(&transaction, "prompts", &PROMPT_COLUMNS, &source_id)? {
-            Some(target_row) if target_row == source_row => {
-                report.prompts.skipped_duplicates += 1;
-            }
-            Some(_) => {
-                let new_id = generate_sqlite_id(&transaction)?;
-                let mut remapped_row = source_row.clone();
-                remapped_row.values[0] = Value::Text(new_id.clone());
-                insert_table_record(&transaction, "prompts", &PROMPT_COLUMNS, &remapped_row)?;
-                report.prompts.imported += 1;
-                report.prompts.remapped += 1;
-                report.id_remaps.push(MergeIdRemap {
-                    table: "prompts".to_string(),
-                    source_id,
-                    target_id: new_id,
-                    reason: "id_collision".to_string(),
-                });
-            }
-            None => {
-                insert_table_record(&transaction, "prompts", &PROMPT_COLUMNS, &source_row)?;
-                report.prompts.imported += 1;
-            }
-        }
-    }
-
-    transaction.commit().map_err(|error| error.to_string())
-}
-
-fn merge_result_rows(
-    source_conn: &rusqlite::Connection,
-    target_conn: &mut rusqlite::Connection,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-    report: &mut LibraryMergeReport,
-) -> Result<(), String> {
-    let source_rows = read_table_records(source_conn, "results", &RESULT_COLUMNS, "created_at")?;
-    let transaction = target_conn
-        .transaction()
-        .map_err(|error| error.to_string())?;
-
-    for source_row in source_rows {
-        let source_id = value_as_string(&source_row.values[0])?;
-        let mut merge_row = source_row.clone();
-        remap_result_prompt_id(&mut merge_row, &report.id_remaps)?;
-        rewrite_result_media_paths(&mut merge_row, source, target)?;
-
-        match read_record_by_id(&transaction, "results", &RESULT_COLUMNS, &source_id)? {
-            Some(target_row) if target_row == merge_row => {
-                report.results.skipped_duplicates += 1;
-            }
-            Some(_) => {
-                let new_id = generate_sqlite_id(&transaction)?;
-                merge_row.values[0] = Value::Text(new_id.clone());
-                copy_result_media_files_collision_safe(&mut merge_row, source, target, &new_id)?;
-                insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
-                report.results.imported += 1;
-                report.results.remapped += 1;
-                report.id_remaps.push(MergeIdRemap {
-                    table: "results".to_string(),
-                    source_id,
-                    target_id: new_id,
-                    reason: "id_collision".to_string(),
-                });
-            }
-            None => {
-                copy_result_media_files_collision_safe(&mut merge_row, source, target, &source_id)?;
-                insert_table_record(&transaction, "results", &RESULT_COLUMNS, &merge_row)?;
-                report.results.imported += 1;
-            }
-        }
-    }
-
-    transaction.commit().map_err(|error| error.to_string())
-}
-
-fn merge_reference_rows(
-    source_conn: &rusqlite::Connection,
-    target_conn: &mut rusqlite::Connection,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-    report: &mut LibraryMergeReport,
-) -> Result<(), String> {
-    let source_rows = read_table_records(
-        source_conn,
-        "\"references\"",
-        &REFERENCE_COLUMNS,
-        "created_at",
-    )?;
-    let transaction = target_conn
-        .transaction()
-        .map_err(|error| error.to_string())?;
-
-    for source_row in source_rows {
-        let source_id = value_as_string(&source_row.values[0])?;
-        let mut merge_row = source_row.clone();
-        rewrite_reference_media_paths(&mut merge_row, source, target)?;
-
-        match read_record_by_id(
-            &transaction,
-            "\"references\"",
-            &REFERENCE_COLUMNS,
-            &source_id,
-        )? {
-            Some(target_row) if target_row == merge_row => {
-                report.references.skipped_duplicates += 1;
-            }
-            Some(_) => {
-                let new_id = generate_sqlite_id(&transaction)?;
-                merge_row.values[0] = Value::Text(new_id.clone());
-                copy_reference_media_files_collision_safe(&mut merge_row, source, target, &new_id)?;
-                insert_table_record(
-                    &transaction,
-                    "\"references\"",
-                    &REFERENCE_COLUMNS,
-                    &merge_row,
-                )?;
-                report.references.imported += 1;
-                report.references.remapped += 1;
-                report.id_remaps.push(MergeIdRemap {
-                    table: "references".to_string(),
-                    source_id,
-                    target_id: new_id,
-                    reason: "id_collision".to_string(),
-                });
-            }
-            None => {
-                copy_reference_media_files_collision_safe(&mut merge_row, source, target, &source_id)?;
-                insert_table_record(
-                    &transaction,
-                    "\"references\"",
-                    &REFERENCE_COLUMNS,
-                    &merge_row,
-                )?;
-                report.references.imported += 1;
-            }
-        }
-    }
-
-    transaction.commit().map_err(|error| error.to_string())
-}
-
-fn remap_result_prompt_id(row: &mut TableRecord, remaps: &[MergeIdRemap]) -> Result<(), String> {
-    let prompt_id = value_as_string(&row.values[1])?;
-    if let Some(remap) = remaps
-        .iter()
-        .find(|remap| remap.table == "prompts" && remap.source_id == prompt_id)
-    {
-        row.values[1] = Value::Text(remap.target_id.clone());
-    }
-    Ok(())
-}
-
-fn rewrite_result_media_paths(
-    row: &mut TableRecord,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-) -> Result<(), String> {
-    rewrite_media_value(&mut row.values[2], &source.results_dir, &target.results_dir)?;
-    rewrite_media_value(&mut row.values[3], &source.results_dir, &target.results_dir)?;
-    Ok(())
-}
-
-fn rewrite_reference_media_paths(
-    row: &mut TableRecord,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-) -> Result<(), String> {
-    rewrite_media_value(
-        &mut row.values[4],
-        &source.references_dir,
-        &target.references_dir,
-    )?;
-    rewrite_media_value(
-        &mut row.values[5],
-        &source.references_dir,
-        &target.references_dir,
-    )?;
-    Ok(())
-}
-
-fn rewrite_media_value(
-    value: &mut Value,
-    source_prefix: &str,
-    target_prefix: &str,
-) -> Result<(), String> {
-    let Value::Text(path) = value else {
-        return Ok(());
-    };
-    if !path.starts_with(source_prefix) {
-        return Ok(());
-    }
-    let relative = &path[source_prefix.len()..];
-    assert_safe_relative_media_path(relative)?;
-    *path = format!("{target_prefix}{relative}");
-    Ok(())
-}
-
-fn copy_result_media_files_collision_safe(
-    row: &mut TableRecord,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-    id_hint: &str,
-) -> Result<(), String> {
-    copy_media_value_collision_safe(
-        &mut row.values[2],
-        &source.results_dir,
-        &target.results_dir,
-        id_hint,
-    )?;
-    copy_media_value_collision_safe(
-        &mut row.values[3],
-        &source.results_dir,
-        &target.results_dir,
-        id_hint,
-    )?;
-    Ok(())
-}
-
-fn copy_reference_media_files_collision_safe(
-    row: &mut TableRecord,
-    source: &LibraryPathsDto,
-    target: &LibraryPathsDto,
-    id_hint: &str,
-) -> Result<(), String> {
-    copy_media_value_collision_safe(
-        &mut row.values[4],
-        &source.references_dir,
-        &target.references_dir,
-        id_hint,
-    )?;
-    copy_media_value_collision_safe(
-        &mut row.values[5],
-        &source.references_dir,
-        &target.references_dir,
-        id_hint,
-    )?;
-    Ok(())
-}
-
-fn copy_media_value_collision_safe(
-    value: &mut Value,
-    source_prefix: &str,
-    target_prefix: &str,
-    id_hint: &str,
-) -> Result<(), String> {
-    let Value::Text(target_path) = value else {
-        return Ok(());
-    };
-    if !target_path.starts_with(target_prefix) {
-        return Ok(());
-    }
-    let relative = target_path[target_prefix.len()..].to_string();
-    assert_safe_relative_media_path(&relative)?;
-    let from = format!("{source_prefix}{relative}");
-    let target_relative = collision_safe_relative_path(&relative, target_prefix, id_hint)?;
-    let to = format!("{target_prefix}{target_relative}");
-    copy_file(&from, &to)?;
-    *target_path = to;
-    Ok(())
 }
 
 fn collision_safe_relative_path(
@@ -808,53 +2674,16 @@ fn safe_filename_component(value: &str) -> String {
             }
         })
         .collect();
-    let trimmed = sanitized.trim_matches('-').chars().take(48).collect::<String>();
+    let trimmed = sanitized
+        .trim_matches('-')
+        .chars()
+        .take(48)
+        .collect::<String>();
     if trimmed.is_empty() {
         "item".to_string()
     } else {
         trimmed
     }
-}
-
-fn read_table_records(
-    conn: &rusqlite::Connection,
-    table: &str,
-    columns: &[&str],
-    order_column: &str,
-) -> Result<Vec<TableRecord>, String> {
-    let sql = format!(
-        "SELECT {} FROM {table} ORDER BY {order_column}, id",
-        columns.join(", ")
-    );
-    read_records_with_sql(conn, &sql, columns.len())
-}
-
-fn read_prompt_records(conn: &rusqlite::Connection) -> Result<Vec<TableRecord>, String> {
-    let sql = format!(
-        "SELECT {} FROM prompts
-         WHERE COALESCE(is_recipe, 0) = 0
-           AND NOT (
-             COALESCE(provider, '') = ?1
-             AND title IN (?2, ?3, ?4, ?5)
-           )
-         ORDER BY created_at, id",
-        PROMPT_COLUMNS.join(", ")
-    );
-    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
-    let rows = statement
-        .query_map(
-            params_from_iter(
-                std::iter::once("nano_banana")
-                    .chain(MIGRATION_022_NANO_BANANA_TITLES.iter().copied()),
-            ),
-            |row| record_from_row(row, PROMPT_COLUMNS.len()),
-        )
-        .map_err(|error| error.to_string())?;
-    let mut records = Vec::new();
-    for row in rows {
-        records.push(row.map_err(|error| error.to_string())?);
-    }
-    Ok(records)
 }
 
 fn read_builtin_seed_prompt_records(
@@ -889,7 +2718,7 @@ fn read_records_with_sql(
     sql: &str,
     column_count: usize,
 ) -> Result<Vec<TableRecord>, String> {
-    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
+    let mut statement = conn.prepare(sql).map_err(|error| error.to_string())?;
     let rows = statement
         .query_map([], |row| record_from_row(row, column_count))
         .map_err(|error| error.to_string())?;
@@ -898,40 +2727,6 @@ fn read_records_with_sql(
         records.push(row.map_err(|error| error.to_string())?);
     }
     Ok(records)
-}
-
-fn read_record_by_id(
-    conn: &rusqlite::Connection,
-    table: &str,
-    columns: &[&str],
-    id: &str,
-) -> Result<Option<TableRecord>, String> {
-    let sql = format!("SELECT {} FROM {table} WHERE id = ?1", columns.join(", "));
-    let mut statement = conn.prepare(&sql).map_err(|error| error.to_string())?;
-    match statement.query_row([id], |row| record_from_row(row, columns.len())) {
-        Ok(record) => Ok(Some(record)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-fn insert_table_record(
-    conn: &rusqlite::Connection,
-    table: &str,
-    columns: &[&str],
-    record: &TableRecord,
-) -> Result<(), String> {
-    let placeholders = (1..=columns.len())
-        .map(|index| format!("?{index}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let sql = format!(
-        "INSERT INTO {table} ({}) VALUES ({placeholders})",
-        columns.join(", ")
-    );
-    conn.execute(&sql, params_from_iter(record.values.iter()))
-        .map(|_| ())
-        .map_err(|error| error.to_string())
 }
 
 fn record_from_row(row: &rusqlite::Row<'_>, len: usize) -> rusqlite::Result<TableRecord> {
@@ -1084,7 +2879,9 @@ fn validate_library_package(base_dir: &str) -> LibraryValidationResult {
     if Path::new(&paths.db_path).exists() {
         match has_required_database_schema(&paths.db_path) {
             Ok(true) => {}
-            Ok(false) => validation.errors.push("Missing database schema".to_string()),
+            Ok(false) => validation
+                .errors
+                .push("Missing database schema".to_string()),
             Err(error) => validation.errors.push(error),
         }
     }
@@ -1297,6 +3094,12 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
         "thumbnail_data",
         "ALTER TABLE prompts ADD COLUMN thumbnail_data TEXT;",
     )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "builder_state",
+        "ALTER TABLE prompts ADD COLUMN builder_state TEXT;",
+    )?;
 
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
@@ -1340,7 +3143,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 23] {
+fn migration_sql() -> [&'static str; 25] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -1365,33 +3168,9 @@ fn migration_sql() -> [&'static str; 23] {
         include_str!("../migrations/021_prompt_analysis_fields.sql"),
         include_str!("../migrations/022_nano_banana_library.sql"),
         include_str!("../migrations/023_prompt_thumbnail.sql"),
+        include_str!("../migrations/024_remove_seeded_recipes.sql"),
+        include_str!("../migrations/025_prompt_builder_state.sql"),
     ]
-}
-
-fn copy_media_files(
-    filenames: &[String],
-    source_dir: &str,
-    target_dir: &str,
-    copied_files: &mut Vec<String>,
-) -> Result<(), String> {
-    for filename in filenames {
-        assert_safe_relative_media_path(filename)?;
-        let from = format!("{}{}", source_dir, filename);
-        let to = format!("{}{}", target_dir, filename);
-        if let Some(parent) = Path::new(&to).parent() {
-            fs::create_dir_all(parent).map_err(format_io_error)?;
-        }
-        copy_file(&from, &to)?;
-        copied_files.push(to);
-    }
-    Ok(())
-}
-
-fn copy_file(from: &str, to: &str) -> Result<(), String> {
-    if let Some(parent) = Path::new(to).parent() {
-        fs::create_dir_all(parent).map_err(format_io_error)?;
-    }
-    fs::copy(from, to).map(|_| ()).map_err(format_io_error)
 }
 
 fn assert_safe_relative_media_path(path: &str) -> Result<(), String> {
@@ -1451,6 +3230,488 @@ fn format_io_error(error: std::io::Error) -> String {
 mod tests {
     use super::*;
     use std::{env, fs, path::PathBuf};
+
+    #[test]
+    fn copies_committed_wal_rows_while_source_writer_remains_open() {
+        let root = test_root("copy-wal-snapshot");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let writer = open_portable_database(&source_paths.db_path).unwrap();
+        writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+        writer
+            .execute_batch(
+                "CREATE TABLE snapshot_probe (value TEXT NOT NULL);
+                 INSERT INTO snapshot_probe (value) VALUES ('committed-in-wal');",
+            )
+            .unwrap();
+
+        copy_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        let snapshot =
+            open_portable_database(target.join("framecraft.db").to_str().unwrap()).unwrap();
+        let value: String = snapshot
+            .query_row("SELECT value FROM snapshot_probe", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(value, "committed-in-wal");
+        assert_eq!(fs::read_dir(target.join("backups")).unwrap().count(), 0);
+
+        drop(snapshot);
+        drop(writer);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn metadata_copy_failure_leaves_no_destination_or_staging_sibling() {
+        let root = test_root("copy-metadata-failure");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        fs::remove_file(source.join("library.json")).unwrap();
+
+        assert!(copy_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err());
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn media_copy_failure_leaves_no_destination_or_staging_sibling() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_root("copy-media-failure");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        symlink(
+            source.join("results/missing.png"),
+            source.join("results/broken.png"),
+        )
+        .unwrap();
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("broken symlink must be rejected");
+
+        assert!(
+            error.contains("Unsupported managed entry type: symlink"),
+            "{error}"
+        );
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_file_symlink_without_copying_external_content() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_root("copy-external-file-symlink");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let sensitive = root.join("sensitive.txt");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        fs::write(&sensitive, "external sensitive content").unwrap();
+        symlink(&sensitive, source.join("results/leak.txt")).unwrap();
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("file symlink must be rejected");
+
+        assert!(
+            error.contains("Unsupported managed entry type: symlink"),
+            "{error}"
+        );
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        assert_eq!(
+            fs::read_to_string(sensitive).unwrap(),
+            "external sensitive content"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_directory_symlink_and_cleans_staging() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_root("copy-external-directory-symlink");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let external = root.join("external-directory");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::write(external.join("sensitive.txt"), "external directory content").unwrap();
+        symlink(&external, source.join("references/external")).unwrap();
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("directory symlink must be rejected");
+
+        assert!(
+            error.contains("Unsupported managed entry type: symlink"),
+            "{error}"
+        );
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_destination_symlink_counts_as_occupied() {
+        use std::os::unix::fs::symlink;
+
+        let root = test_root("copy-dangling-destination-symlink");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        symlink(root.join("missing-destination"), &target).unwrap();
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("dangling destination symlink must be occupied");
+
+        assert!(error.contains("already exists"), "{error}");
+        assert!(fs::symlink_metadata(&target)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn staging_reservation_retries_an_existing_candidate_atomically() {
+        let root = test_root("staging-reservation-collision");
+        let first = root.join(".framecraft-staging-fixed-0");
+        fs::create_dir(&first).unwrap();
+
+        let reserved = reserve_staging_sibling_with_nonce(&root, "fixed").unwrap();
+
+        assert_eq!(reserved, root.join(".framecraft-staging-fixed-1"));
+        assert!(reserved.is_dir());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn destination_created_immediately_before_publish_is_not_replaced() {
+        let root = test_root("publish-race");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        let create_competing_target =
+            |_: &Path, target: &Path| fs::create_dir(target).map_err(format_io_error);
+
+        let error = publish_library_snapshot_with_hooks(
+            source.to_str().unwrap(),
+            target.to_str().unwrap(),
+            SnapshotMetadata::Copy,
+            Some(&create_competing_target),
+            &cleanup_staging_directory,
+        )
+        .err()
+        .expect("no-replace publication must reject a competing destination");
+
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 0);
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn cleanup_failure_is_reported_alongside_the_original_error() {
+        use std::{cell::RefCell, io};
+
+        let root = test_root("cleanup-failure-reporting");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        fs::remove_file(source.join("library.json")).unwrap();
+        let leaked_path = RefCell::new(None::<PathBuf>);
+        let fail_cleanup = |path: &Path| {
+            leaked_path.replace(Some(path.to_path_buf()));
+            Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "injected cleanup denial",
+            ))
+        };
+
+        let error = publish_library_snapshot_with_hooks(
+            source.to_str().unwrap(),
+            target.to_str().unwrap(),
+            SnapshotMetadata::Copy,
+            None,
+            &fail_cleanup,
+        )
+        .err()
+        .expect("metadata and cleanup failures must be returned");
+
+        assert!(error.contains("library.json"), "{error}");
+        assert!(error.contains("cleanup"), "{error}");
+        assert!(error.contains("injected cleanup denial"), "{error}");
+        let leaked_path = leaked_path.into_inner().expect("cleanup path was captured");
+        assert!(leaked_path.is_dir());
+        cleanup_staging_directory(&leaked_path).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cleanup_repairs_read_only_staging_content_before_retrying() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = test_root("cleanup-read-only");
+        let staging = root.join(".framecraft-staging-read-only");
+        let locked = staging.join("locked");
+        let file = locked.join("file.txt");
+        fs::create_dir_all(&locked).unwrap();
+        fs::write(&file, "locked").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o400)).unwrap();
+        fs::set_permissions(&locked, fs::Permissions::from_mode(0o500)).unwrap();
+
+        cleanup_staging_directory(&staging).unwrap();
+
+        assert!(!staging.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[test]
+    fn rejects_special_files_in_managed_trees() {
+        use std::{ffi::CString, os::unix::ffi::OsStrExt};
+
+        let root = test_root("copy-special-file");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        let fifo_path = source.join("inbox/local.fifo");
+        let fifo_path_c = CString::new(fifo_path.as_os_str().as_bytes()).unwrap();
+        // SAFETY: The CString is NUL-terminated and remains live for the call.
+        assert_eq!(unsafe { libc::mkfifo(fifo_path_c.as_ptr(), 0o600) }, 0);
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("special files must be rejected");
+
+        assert!(
+            error.contains("Unsupported managed entry type: special file"),
+            "{error}"
+        );
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn full_copy_discovers_managed_trees_and_excludes_runtime_state() {
+        let root = test_root("copy-managed-trees");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        for (relative, contents) in [
+            ("results/nested/result.png", "result"),
+            ("references/nested/reference.png", "reference"),
+            ("inbox/job.json", "inbox"),
+            ("staging/pending.json", "staging"),
+            ("sync/root.json", "excluded sync root"),
+            ("sync/other/skip.json", "excluded sync subtree"),
+            ("sync/applied/done.json", "applied"),
+            ("sync/failed/failed.json", "failed"),
+            ("locks/stale.lock", "stale lock"),
+            ("backups/recursive.framecraftlib/marker", "old backup"),
+        ] {
+            let path = source.join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, contents).unwrap();
+        }
+
+        copy_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        for relative in [
+            "results/nested/result.png",
+            "references/nested/reference.png",
+            "inbox/job.json",
+            "staging/pending.json",
+            "sync/applied/done.json",
+            "sync/failed/failed.json",
+        ] {
+            assert!(target.join(relative).is_file(), "missing {relative}");
+        }
+        assert!(target.join("locks").is_dir());
+        assert!(target.join("backups").is_dir());
+        assert!(!target.join("locks/stale.lock").exists());
+        assert!(!target
+            .join("backups/recursive.framecraftlib/marker")
+            .exists());
+        assert!(!target.join("sync/root.json").exists());
+        assert!(!target.join("sync/other/skip.json").exists());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_rewrites_only_source_managed_media_prefixes_before_publication() {
+        let root = test_root("copy-rewrite-media-paths");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        insert_prompt(
+            &source_paths.db_path,
+            "prompt-rewrite",
+            "Rewrite media paths",
+        );
+        insert_result(
+            &source_paths.db_path,
+            "managed-result",
+            "prompt-rewrite",
+            Some(&format!("{}nested/result.png", source_paths.results_dir)),
+            Some(&format!("{}nested/thumb.png", source_paths.results_dir)),
+        );
+        insert_result(
+            &source_paths.db_path,
+            "external-result",
+            "prompt-rewrite",
+            Some("https://example.com/result.png"),
+            Some("/outside/results/thumb.png"),
+        );
+        insert_reference(
+            &source_paths.db_path,
+            "managed-reference",
+            "Managed reference",
+            Some(&format!(
+                "{}nested/reference.png",
+                source_paths.references_dir
+            )),
+            Some(&format!("{}nested/thumb.png", source_paths.references_dir)),
+        );
+        insert_reference(
+            &source_paths.db_path,
+            "external-reference",
+            "External reference",
+            Some("data:image/png;base64,abc"),
+            Some("https://example.com/reference.png"),
+        );
+
+        copy_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+
+        let target_paths = resolve_library_paths(target.to_str().unwrap());
+        assert_eq!(
+            result_paths(&target_paths.db_path, "managed-result").unwrap(),
+            (
+                "prompt-rewrite".to_string(),
+                Some(format!("{}nested/result.png", target_paths.results_dir)),
+                Some(format!("{}nested/thumb.png", target_paths.results_dir)),
+            )
+        );
+        assert_eq!(
+            result_paths(&target_paths.db_path, "external-result").unwrap(),
+            (
+                "prompt-rewrite".to_string(),
+                Some("https://example.com/result.png".to_string()),
+                Some("/outside/results/thumb.png".to_string()),
+            )
+        );
+        assert_eq!(
+            reference_paths(&target_paths.db_path, "managed-reference").unwrap(),
+            (
+                "Managed reference".to_string(),
+                Some(format!(
+                    "{}nested/reference.png",
+                    target_paths.references_dir
+                )),
+                Some(format!("{}nested/thumb.png", target_paths.references_dir)),
+            )
+        );
+        assert_eq!(
+            reference_paths(&target_paths.db_path, "external-reference").unwrap(),
+            (
+                "External reference".to_string(),
+                Some("data:image/png;base64,abc".to_string()),
+                Some("https://example.com/reference.png".to_string()),
+            )
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn media_path_rewrite_failure_leaves_no_destination_or_staging_sibling() {
+        let root = test_root("copy-rewrite-failure");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        insert_prompt(
+            &source_paths.db_path,
+            "prompt-rewrite-failure",
+            "Rewrite failure",
+        );
+        insert_result(
+            &source_paths.db_path,
+            "rewrite-failure-result",
+            "prompt-rewrite-failure",
+            Some(&format!("{}result.png", source_paths.results_dir)),
+            None,
+        );
+        let connection = rusqlite::Connection::open(&source_paths.db_path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER reject_result_media_rewrite
+                 BEFORE UPDATE OF file_path ON results
+                 BEGIN
+                   SELECT RAISE(ABORT, 'rewrite rejected');
+                 END;",
+            )
+            .unwrap();
+        drop(connection);
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("media path rewrite must fail");
+
+        assert!(error.contains("rewrite rejected"), "{error}");
+        assert!(!target.exists());
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_rejects_an_existing_destination_without_modifying_it() {
+        let root = test_root("copy-existing-target");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        create_library_package(source.to_str().unwrap(), true).unwrap();
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("keep.txt"), "untouched").unwrap();
+
+        let error = copy_library_package(source.to_str().unwrap(), target.to_str().unwrap())
+            .err()
+            .expect("existing destination must be rejected");
+
+        assert!(error.contains("already exists"), "{error}");
+        assert_eq!(
+            fs::read_to_string(target.join("keep.txt")).unwrap(),
+            "untouched"
+        );
+        assert_no_staging_sibling(&root);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn assert_no_staging_sibling(parent: &Path) {
+        let leaked = fs::read_dir(parent)
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".framecraft-staging-")
+            });
+        assert!(!leaked, "staging directory leaked beside destination");
+    }
 
     #[test]
     fn creates_and_validates_package_under_downloads_like_path() {
@@ -1529,21 +3790,20 @@ mod tests {
         let target = root.join("target.framecraftlib");
         fs::create_dir_all(source.join("results/campaign")).unwrap();
         fs::create_dir_all(source.join("references")).unwrap();
-        fs::write(source.join("framecraft.db"), "db").unwrap();
+        fs::write(source.join("framecraft.db"), []).unwrap();
+        initialize_portable_database(source.join("framecraft.db").to_str().unwrap()).unwrap();
         fs::write(source.join("results/campaign/a.png"), "image").unwrap();
 
         let result = migrate_app_data_to_library_native(
             source.to_str().unwrap().to_string(),
             target.to_str().unwrap().to_string(),
-            vec!["campaign/a.png".to_string()],
-            vec![],
         )
         .unwrap();
 
-        assert_eq!(
-            fs::read_to_string(target.join("framecraft.db")).unwrap(),
-            "db"
-        );
+        assert!(sqlite_table_exists(
+            target.join("framecraft.db").to_str().unwrap(),
+            "prompts"
+        ));
         assert_eq!(
             fs::read_to_string(target.join("results/campaign/a.png")).unwrap(),
             "image"
@@ -1606,7 +3866,9 @@ mod tests {
 
         assert!(inspection.ok, "{:?}", inspection.errors);
         assert!(!validation.ok);
-        assert!(validation.errors.contains(&"Missing database schema".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing database schema".to_string()));
         assert_eq!(fs::metadata(&paths.db_path).unwrap().len(), 0);
 
         let _ = fs::remove_dir_all(root);
@@ -1804,7 +4066,9 @@ mod tests {
         let validation = validate_library_package(package.to_str().unwrap());
 
         assert!(!validation.ok);
-        assert!(validation.errors.contains(&"Missing database schema".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing database schema".to_string()));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -1820,7 +4084,9 @@ mod tests {
         let validation = validate_library_package(package.to_str().unwrap());
 
         assert!(!validation.ok);
-        assert!(validation.errors.contains(&"Missing database schema".to_string()));
+        assert!(validation
+            .errors
+            .contains(&"Missing database schema".to_string()));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -2127,15 +4393,26 @@ mod tests {
         fs::create_dir_all(source.join("results/campaign")).unwrap();
         fs::create_dir_all(target.join("results/campaign")).unwrap();
         fs::write(source.join("results/campaign/shared.png"), "source image").unwrap();
-        fs::write(source.join("results/campaign/shared-thumb.png"), "source thumb").unwrap();
+        fs::write(
+            source.join("results/campaign/shared-thumb.png"),
+            "source thumb",
+        )
+        .unwrap();
         fs::write(target.join("results/campaign/shared.png"), "target image").unwrap();
-        fs::write(target.join("results/campaign/shared-thumb.png"), "target thumb").unwrap();
+        fs::write(
+            target.join("results/campaign/shared-thumb.png"),
+            "target thumb",
+        )
+        .unwrap();
         insert_result(
             &source_paths.db_path,
             "shared-result",
             "prompt-a",
             Some(&format!("{}campaign/shared.png", source_paths.results_dir)),
-            Some(&format!("{}campaign/shared-thumb.png", source_paths.results_dir)),
+            Some(&format!(
+                "{}campaign/shared-thumb.png",
+                source_paths.results_dir
+            )),
         );
         insert_result(
             &target_paths.db_path,
@@ -2162,7 +4439,8 @@ mod tests {
             .iter()
             .find(|remap| remap.table == "results" && remap.source_id == "shared-result")
             .unwrap();
-        let (_, file_path, thumb_path) = result_paths(&target_paths.db_path, &remap.target_id).unwrap();
+        let (_, file_path, thumb_path) =
+            result_paths(&target_paths.db_path, &remap.target_id).unwrap();
 
         assert_eq!(
             fs::read_to_string(target.join("results/campaign/shared.png")).unwrap(),
@@ -2174,7 +4452,10 @@ mod tests {
         );
         let file_path = file_path.unwrap();
         let thumb_path = thumb_path.unwrap();
-        assert_ne!(file_path, format!("{}campaign/shared.png", target_paths.results_dir));
+        assert_ne!(
+            file_path,
+            format!("{}campaign/shared.png", target_paths.results_dir)
+        );
         assert_ne!(
             thumb_path,
             format!("{}campaign/shared-thumb.png", target_paths.results_dir)
@@ -2314,15 +4595,26 @@ mod tests {
         fs::create_dir_all(source.join("references/mood")).unwrap();
         fs::create_dir_all(target.join("references/mood")).unwrap();
         fs::write(source.join("references/mood/shared.png"), "source ref").unwrap();
-        fs::write(source.join("references/mood/shared-thumb.png"), "source thumb").unwrap();
+        fs::write(
+            source.join("references/mood/shared-thumb.png"),
+            "source thumb",
+        )
+        .unwrap();
         fs::write(target.join("references/mood/shared.png"), "target ref").unwrap();
-        fs::write(target.join("references/mood/shared-thumb.png"), "target thumb").unwrap();
+        fs::write(
+            target.join("references/mood/shared-thumb.png"),
+            "target thumb",
+        )
+        .unwrap();
         insert_reference(
             &source_paths.db_path,
             "shared-ref",
             "Source Reference",
             Some(&format!("{}mood/shared.png", source_paths.references_dir)),
-            Some(&format!("{}mood/shared-thumb.png", source_paths.references_dir)),
+            Some(&format!(
+                "{}mood/shared-thumb.png",
+                source_paths.references_dir
+            )),
         );
         insert_reference(
             &target_paths.db_path,
@@ -2355,7 +4647,10 @@ mod tests {
         );
         let file_path = file_path.unwrap();
         let thumb_path = thumb_path.unwrap();
-        assert_ne!(file_path, format!("{}mood/shared.png", target_paths.references_dir));
+        assert_ne!(
+            file_path,
+            format!("{}mood/shared.png", target_paths.references_dir)
+        );
         assert_ne!(
             thumb_path,
             format!("{}mood/shared-thumb.png", target_paths.references_dir)
@@ -2372,6 +4667,1010 @@ mod tests {
         assert!(assert_safe_relative_media_path("nested\\escape.png").is_err());
     }
 
+    #[test]
+    fn merge_rejects_result_media_outside_managed_root_without_side_effects() {
+        let root = test_root("merge-media-outside-root");
+        let outside = root.join("secret.png");
+        fs::write(&outside, "outside bytes").unwrap();
+        assert_merge_rejects_media_path(&root, "outside", outside.to_str().unwrap());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_rejects_result_media_relative_escape_without_side_effects() {
+        let root = test_root("merge-media-relative-escape");
+        let source = root.join("Source.framecraftlib");
+        let escaped = source.join("outside.png");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(&escaped, "outside bytes").unwrap();
+        let path = source.join("results/../outside.png");
+        assert_merge_rejects_media_path(&root, "relative-escape", path.to_str().unwrap());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn merge_rejects_symlinked_result_media_components_without_side_effects() {
+        use std::os::unix::fs::symlink;
+
+        for (label, broken, intermediate) in [
+            ("leaf-symlink", false, false),
+            ("broken-symlink", true, false),
+            ("directory-symlink", false, true),
+        ] {
+            let root = test_root(label);
+            let source = root.join("Source.framecraftlib");
+            let external = root.join("external");
+            fs::create_dir_all(&external).unwrap();
+            fs::write(external.join("image.png"), "external bytes").unwrap();
+            create_library_package(source.to_str().unwrap(), true).unwrap();
+            let media_path = if intermediate {
+                symlink(&external, source.join("results/link")).unwrap();
+                source.join("results/link/image.png")
+            } else {
+                let destination = if broken {
+                    external.join("missing.png")
+                } else {
+                    external.join("image.png")
+                };
+                let link = source.join("results/link.png");
+                symlink(destination, &link).unwrap();
+                link
+            };
+            assert_merge_rejects_media_path(&root, label, media_path.to_str().unwrap());
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn merge_rejects_symlinked_managed_media_roots_without_side_effects() {
+        use std::os::unix::fs::symlink;
+
+        for kind in ["results", "references"] {
+            let root = test_root(&format!("merge-{kind}-root-symlink"));
+            let source = root.join("Source.framecraftlib");
+            let target = root.join("Target.framecraftlib");
+            let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+            let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+            let external = root.join(format!("external-{kind}"));
+            fs::create_dir_all(&external).unwrap();
+            fs::write(external.join("image.png"), "external bytes").unwrap();
+            fs::remove_dir(source.join(kind)).unwrap();
+            symlink(&external, source.join(kind)).unwrap();
+            let media_path = source.join(kind).join("image.png");
+            if kind == "results" {
+                insert_prompt(&source_paths.db_path, "root-link-prompt", "Root link");
+                insert_result(
+                    &source_paths.db_path,
+                    "root-link-result",
+                    "root-link-prompt",
+                    Some(media_path.to_str().unwrap()),
+                    None,
+                );
+            } else {
+                insert_reference(
+                    &source_paths.db_path,
+                    "root-link-reference",
+                    "Root link",
+                    Some(media_path.to_str().unwrap()),
+                    None,
+                );
+            }
+
+            assert!(
+                merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err(),
+                "{kind} root symlink must fail"
+            );
+            assert!(prompt_title(&target_paths.db_path, "root-link-prompt").is_none());
+            assert!(result_paths(&target_paths.db_path, "root-link-result").is_none());
+            assert!(reference_paths(&target_paths.db_path, "root-link-reference").is_none());
+            assert!(fs::read_dir(target.join(kind)).unwrap().next().is_none());
+            assert!(fs::read_dir(&target_paths.staging_dir)
+                .unwrap()
+                .next()
+                .is_none());
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn merge_manifest_v1_declares_every_supported_user_table() {
+        assert_eq!(MERGE_MANIFEST_VERSION, 1);
+        let mut tables = MERGE_MANIFEST
+            .iter()
+            .map(|spec| spec.table)
+            .collect::<Vec<_>>();
+        tables.sort_unstable();
+        let mut required = REQUIRED_RELEASE_TABLES.to_vec();
+        required.sort_unstable();
+        assert_eq!(tables, required);
+        let prompts = MERGE_MANIFEST
+            .iter()
+            .find(|spec| spec.table == "prompts")
+            .unwrap();
+        assert!(prompts.columns.contains(&"builder_state"));
+        assert!(MERGE_MANIFEST
+            .iter()
+            .find(|spec| spec.table == "results")
+            .unwrap()
+            .media_columns
+            .contains(&"file_path"));
+        assert!(MERGE_MANIFEST
+            .iter()
+            .find(|spec| spec.table == "references")
+            .unwrap()
+            .media_columns
+            .contains(&"file_data"));
+    }
+
+    #[test]
+    fn merge_manifest_preserves_complete_dependency_graph_and_is_idempotent() {
+        let root = test_root("merge-complete-graph");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        let source_conn = Connection::open(&source_paths.db_path).unwrap();
+        source_conn.execute_batch(
+            "INSERT INTO campaigns(id,title,status) VALUES('c','Source campaign','active');
+             INSERT INTO prompts(id,title,prompt_text,provider,is_recipe,recipe_use_count,best_use,risk_notes,source_url,thumbnail_data,builder_state) VALUES('p','Source prompt','body','midjourney',1,7,'best','risk','https://source','thumb','{\"mode\":\"tokens\"}');
+             INSERT INTO \"references\"(id,title,kind,rating,created_at,updated_at) VALUES('r','Source ref','image',4,'t','t');
+             INSERT INTO recipes(id,title,created_at,updated_at) VALUES('legacy-recipe','Legacy recipe','t','t');
+             INSERT INTO srefs(id,code,title,created_at,updated_at) VALUES('sref','--sref 1','Sref','t','t');
+             INSERT INTO profiles(id,code,title,created_at) VALUES('profile','--profile 1','Profile','t');
+             INSERT INTO avoidance_patterns(id,artifact_type,label,category,is_builtin,created_at) VALUES('avoid','x','Avoid','texture',0,'t');
+             INSERT INTO token_categories(id,name,label) VALUES('tc','custom-category','Custom');
+             INSERT INTO tokens(id,text,category_id,is_builtin,created_at,is_favorite) VALUES('tok','custom token','tc',0,'t',1);
+             INSERT INTO projects(id,title,status,created_at,updated_at,campaign_id,project_type,creative_goals) VALUES('proj','Source project','draft','t','t','c','campaign','goals');
+             INSERT INTO results(id,prompt_id,provider,notes,created_at) VALUES('res','p','test','source result','t');
+             INSERT INTO prompt_tokens(id,prompt_id,token_id,sort_order,custom_text) VALUES('pt','p','tok',3,'custom');
+             INSERT INTO token_patterns(id,token_a_id,token_b_id,co_occurrence_count,last_updated) VALUES('pattern','tok','tok',9,'t');
+             INSERT INTO project_prompts VALUES('proj','p');
+             INSERT INTO project_results VALUES('proj','res');
+             INSERT INTO project_references VALUES('proj','r');
+             INSERT INTO prompt_references VALUES('p','r','character');
+             INSERT INTO result_references VALUES('res','r','composition');
+             INSERT INTO comparison_sessions(id,title,project_id,created_at,updated_at,comparison_type,outcome_summary) VALUES('session','Compare','proj','t','t','result_result','winner');
+             INSERT INTO comparison_items(id,session_id,result_id,created_at,source_role) VALUES('item','session','res','t','candidate');
+             INSERT INTO project_deliverables(id,project_id,title,status,linked_prompt_id,linked_result_id,created_at,updated_at) VALUES('deliverable','proj','Hero','planned','p','res','t','t');
+             INSERT INTO deliverable_references VALUES('deliverable','r');
+             INSERT INTO assistant_threads(id,project_id,title,created_at,updated_at) VALUES('thread','proj','Thread','t','t');
+             INSERT INTO assistant_messages(id,thread_id,role,content,created_at) VALUES('message','thread','user','Hello','t');
+             INSERT INTO export_presets(id,project_id,format,options,created_at,updated_at) VALUES('export','proj','json','{}','t','t');
+             INSERT INTO generation_queue(id,prompt_id,project_id,status,created_at,updated_at,is_pinned) VALUES('queue','p','proj','pending','t','t',1);
+             INSERT INTO creative_directions(id,project_id,title,created_at,updated_at) VALUES('direction','proj','Direction','t','t');
+             INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');
+             UPDATE app_meta SET value='source-must-not-overwrite' WHERE key='schema_version';
+             INSERT INTO app_meta(key,value,updated_at) VALUES('source_custom_setting','kept','t');"
+        ).unwrap();
+        populate_complete_graph_sentinels(&source_conn);
+        assert_complete_graph_sentinel_coverage(&source_conn);
+        let target_conn = Connection::open(&target_paths.db_path).unwrap();
+        target_conn.execute_batch(
+            "INSERT INTO campaigns(id,title,status) VALUES('c','Target campaign','active');
+             INSERT INTO prompts(id,title,prompt_text,provider) VALUES('p','Target prompt','target','midjourney');
+             INSERT INTO \"references\"(id,title,kind,created_at,updated_at) VALUES('r','Target ref','image','t','t');
+             INSERT INTO recipes(id,title,created_at,updated_at) VALUES('legacy-recipe','Target recipe','t','t');
+             INSERT INTO srefs(id,code,title,created_at,updated_at) VALUES('sref','--sref target','Target sref','t','t');
+             INSERT INTO profiles(id,code,title,created_at) VALUES('profile','--profile target','Target profile','t');
+             INSERT INTO avoidance_patterns(id,artifact_type,label,category,is_builtin,created_at) VALUES('avoid','target','Target avoid','texture',0,'t');
+             INSERT INTO token_categories(id,name,label) VALUES('tc','target-category','Target');
+             INSERT INTO tokens(id,text,category_id,is_builtin,created_at) VALUES('tok','target token','tc',0,'t');
+             INSERT INTO projects(id,title,status,created_at,updated_at) VALUES('proj','Target project','draft','t','t');
+             INSERT INTO results(id,prompt_id,notes,created_at) VALUES('res','p','target result','t');
+             INSERT INTO prompt_tokens(id,prompt_id,token_id,sort_order,custom_text) VALUES('pt','p','tok',1,'target');
+             INSERT INTO token_patterns(id,token_a_id,token_b_id,co_occurrence_count,last_updated) VALUES('pattern','tok','tok',1,'t');
+             INSERT INTO project_prompts VALUES('proj','p');
+             INSERT INTO project_results VALUES('proj','res');
+             INSERT INTO project_references VALUES('proj','r');
+             INSERT INTO prompt_references VALUES('p','r','target');
+             INSERT INTO result_references VALUES('res','r','target');
+             INSERT INTO comparison_sessions(id,title,project_id,created_at,updated_at) VALUES('session','Target compare','proj','t','t');
+             INSERT INTO comparison_items(id,session_id,result_id,created_at) VALUES('item','session','res','t');
+             INSERT INTO project_deliverables(id,project_id,title,status,linked_prompt_id,linked_result_id,created_at,updated_at) VALUES('deliverable','proj','Target hero','planned','p','res','t','t');
+             INSERT INTO deliverable_references VALUES('deliverable','r');
+             INSERT INTO assistant_threads(id,project_id,title,created_at,updated_at) VALUES('thread','proj','Target thread','t','t');
+             INSERT INTO assistant_messages(id,thread_id,role,content,created_at) VALUES('message','thread','user','Target','t');
+             INSERT INTO export_presets(id,project_id,format,options,created_at,updated_at) VALUES('export','proj','json','{}','t','t');
+             INSERT INTO generation_queue(id,prompt_id,project_id,status,created_at,updated_at) VALUES('queue','p','proj','pending','t','t');
+             INSERT INTO creative_directions(id,project_id,title,created_at,updated_at) VALUES('direction','proj','Target direction','t','t');
+             INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');"
+        ).unwrap();
+        drop(source_conn);
+        drop(target_conn);
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(report.manifest_version, 1);
+        for table in REQUIRED_RELEASE_TABLES {
+            assert!(
+                report.tables.contains_key(table),
+                "missing report for {table}"
+            );
+        }
+        let remapped = |table: &str, source_id: &str| {
+            report
+                .id_remaps
+                .iter()
+                .find(|r| r.table == table && r.source_id == source_id)
+                .map(|r| r.target_id.clone())
+                .unwrap_or_else(|| source_id.to_string())
+        };
+        let merged_prompt = remapped("prompts", "p");
+        let merged_project = remapped("projects", "proj");
+        let merged_result = remapped("results", "res");
+        let merged_campaign = remapped("campaigns", "c");
+        let merged_category = remapped("token_categories", "tc");
+        let merged_token = remapped("tokens", "tok");
+        for spec in MERGE_MANIFEST {
+            if let MergeIdentity::Id(_) = spec.identity {
+                let (_, identity) = complete_graph_identity(spec.table);
+                let source_id = value_as_string(&identity[0]).unwrap();
+                assert_ne!(
+                    remapped(spec.table, &source_id),
+                    source_id,
+                    "{} did not exercise a differing-ID collision",
+                    spec.table
+                );
+            }
+        }
+        let conn = Connection::open(&target_paths.db_path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT recipe_use_count FROM prompts WHERE id=?1",
+                [&merged_prompt],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            7
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT campaign_id FROM projects WHERE id=?1",
+                [&merged_project],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            merged_campaign
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT prompt_id FROM results WHERE id=?1",
+                [&merged_result],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            merged_prompt
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT category_id FROM tokens WHERE id=?1",
+                [&merged_token],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap(),
+            merged_category
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM project_results WHERE project_id=?1 AND result_id=?2",
+                [&merged_project, &merged_result],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT value FROM app_meta WHERE key='source_custom_setting'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "sentinel-app_meta-value"
+        );
+        assert_ne!(
+            conn.query_row(
+                "SELECT value FROM app_meta WHERE key='schema_version'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "source-must-not-overwrite"
+        );
+        drop(conn);
+        assert_manifest_rows_preserved(&source_paths.db_path, &target_paths.db_path, &report);
+
+        let repeat =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(
+            repeat
+                .tables
+                .values()
+                .map(|table| table.imported)
+                .sum::<u32>(),
+            0
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_db_failure_rolls_back_all_tables_and_staged_media() {
+        let root = test_root("merge-db-rollback");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "new-prompt", "New prompt");
+        fs::write(source.join("results/rollback.png"), "staged image").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "rollback-result",
+            "new-prompt",
+            Some(&format!("{}rollback.png", source_paths.results_dir)),
+            None,
+        );
+        let source_conn = Connection::open(&source_paths.db_path).unwrap();
+        source_conn.execute_batch("INSERT INTO recipes(id,title,created_at,updated_at) VALUES('rollback-recipe','Rollback','t','t'); INSERT INTO projects(id,title,status,created_at,updated_at) VALUES('rollback-project','Project','draft','t','t'); INSERT INTO assistant_threads(id,project_id,title,created_at,updated_at) VALUES('rollback-thread','rollback-project','Thread','t','t'); PRAGMA ignore_check_constraints=ON; INSERT INTO assistant_messages(id,thread_id,role,content,created_at) VALUES('invalid-message','rollback-thread','invalid','bad','t'); PRAGMA ignore_check_constraints=OFF;").unwrap();
+        insert_prompt(&target_paths.db_path, "new-prompt", "New prompt");
+        drop(source_conn);
+
+        assert!(merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err());
+        let conn = Connection::open(&target_paths.db_path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM recipes WHERE id='rollback-recipe'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        assert!(result_paths(&target_paths.db_path, "rollback-result").is_none());
+        assert!(!target.join("results/rollback.png").exists());
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_media_stage_failure_leaves_no_target_rows_or_files() {
+        let root = test_root("merge-media-stage-rollback");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "media-prompt", "Media prompt");
+        insert_result(
+            &source_paths.db_path,
+            "missing-media",
+            "media-prompt",
+            Some(&format!("{}missing.png", source_paths.results_dir)),
+            None,
+        );
+
+        assert!(merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err());
+        assert!(prompt_title(&target_paths.db_path, "media-prompt").is_none());
+        assert!(result_paths(&target_paths.db_path, "missing-media").is_none());
+        assert!(!target.join("results/missing.png").exists());
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_media_publish_failure_rolls_back_transaction_and_preserves_preexisting_rows() {
+        let root = test_root("merge-media-publish-compensation");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "publish-prompt", "Publish prompt");
+        insert_prompt(&target_paths.db_path, "preexisting-prompt", "Keep me");
+        fs::create_dir_all(source.join("results/blocked")).unwrap();
+        fs::write(source.join("results/good.png"), "first published image").unwrap();
+        fs::write(
+            source.join("results/blocked/thumb.png"),
+            "second staged image",
+        )
+        .unwrap();
+        fs::write(target.join("results/blocked"), "pre-existing target file").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "publish-result",
+            "publish-prompt",
+            Some(&format!("{}good.png", source_paths.results_dir)),
+            Some(&format!("{}blocked/thumb.png", source_paths.results_dir)),
+        );
+
+        assert!(merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err());
+        assert!(prompt_title(&target_paths.db_path, "publish-prompt").is_none());
+        assert!(result_paths(&target_paths.db_path, "publish-result").is_none());
+        assert_eq!(
+            prompt_title(&target_paths.db_path, "preexisting-prompt").as_deref(),
+            Some("Keep me")
+        );
+        assert!(!target.join("results/good.png").exists());
+        assert_eq!(
+            fs::read_to_string(target.join("results/blocked")).unwrap(),
+            "pre-existing target file"
+        );
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_media_publish_collision_preserves_race_created_destination() {
+        let root = test_root("merge-media-publish-race");
+        let staged_path = root.join("staging/image.png");
+        let final_path = root.join("results/image.png");
+        fs::create_dir_all(staged_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(final_path.parent().unwrap()).unwrap();
+        fs::write(&staged_path, "staged source bytes").unwrap();
+
+        // Simulate another writer winning the destination name after staging.
+        fs::write(&final_path, "race winner bytes").unwrap();
+        let mut published = Vec::new();
+        let error = publish_staged_media(
+            &[StagedMedia {
+                staged: staged_path.clone(),
+                final_path: final_path.clone(),
+            }],
+            &mut published,
+        )
+        .expect_err("publication must not replace a destination created after staging");
+
+        assert!(!error.is_empty());
+        assert!(published.is_empty());
+        assert_eq!(
+            fs::read_to_string(&final_path).unwrap(),
+            "race winner bytes"
+        );
+        assert!(staged_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_publish_race_rolls_back_rows_and_removes_owned_files_only() {
+        let root = test_root("merge-media-publish-race-compensation");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "race-prompt", "Race prompt");
+        fs::write(source.join("results/owned.png"), "merge-owned bytes").unwrap();
+        fs::write(source.join("results/race.png"), "staged race bytes").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "race-result",
+            "race-prompt",
+            Some(&format!("{}owned.png", source_paths.results_dir)),
+            Some(&format!("{}race.png", source_paths.results_dir)),
+        );
+        let create_race_destination = |staged: &[StagedMedia]| {
+            assert_eq!(staged.len(), 2);
+            assert!(
+                prompt_title(&target_paths.db_path, "race-prompt").is_none(),
+                "planned rows must remain invisible until media publication succeeds"
+            );
+            fs::write(&staged[1].final_path, "race winner bytes").map_err(format_io_error)
+        };
+
+        let error = merge_library_package_with_media_publish_hook(
+            source.to_str().unwrap(),
+            target.to_str().unwrap(),
+            Some(&create_race_destination),
+        )
+        .err()
+        .expect("the publish-time destination collision must fail the merge");
+
+        assert!(!error.is_empty());
+        assert!(prompt_title(&target_paths.db_path, "race-prompt").is_none());
+        assert!(result_paths(&target_paths.db_path, "race-result").is_none());
+        assert!(!target.join("results/owned.png").exists());
+        assert_eq!(
+            fs::read_to_string(target.join("results/race.png")).unwrap(),
+            "race winner bytes"
+        );
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_commit_failure_rolls_back_rows_and_removes_published_media() {
+        let root = test_root("merge-commit-failure");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "commit-prompt", "Commit prompt");
+        fs::write(source.join("results/commit.png"), "published bytes").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "commit-result",
+            "commit-prompt",
+            Some(&format!("{}commit.png", source_paths.results_dir)),
+            None,
+        );
+        let force_deferred_commit_failure = |connection: &Connection| {
+            connection
+                .execute_batch(
+                    "PRAGMA defer_foreign_keys=ON;
+                     INSERT INTO results(id,prompt_id,created_at)
+                     VALUES('invalid-at-commit','missing-prompt','t');",
+                )
+                .map_err(|error| error.to_string())
+        };
+
+        let error = merge_library_package_with_hooks(
+            source.to_str().unwrap(),
+            target.to_str().unwrap(),
+            None,
+            Some(&force_deferred_commit_failure),
+        )
+        .err()
+        .expect("deferred foreign-key violation must fail commit");
+
+        assert!(error.contains("database commit failed"), "{error}");
+        assert!(prompt_title(&target_paths.db_path, "commit-prompt").is_none());
+        assert!(result_paths(&target_paths.db_path, "commit-result").is_none());
+        assert!(!target.join("results/commit.png").exists());
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn owned_media_cleanup_aggregates_failures_and_attempts_every_path() {
+        let root = test_root("merge-cleanup-aggregation");
+        let unremovable_as_file = root.join("directory");
+        let removable = root.join("removable.png");
+        fs::create_dir_all(&unremovable_as_file).unwrap();
+        fs::write(&removable, "owned").unwrap();
+
+        let errors =
+            cleanup_owned_merge_media(&[], &[unremovable_as_file.clone(), removable.clone()]);
+
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains(unremovable_as_file.to_str().unwrap()));
+        assert!(!removable.exists(), "cleanup must continue after an error");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_transitively_excludes_dependents_of_unmapped_builtin_seed() {
+        let root = test_root("merge-transitive-seed-exclusion");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        let seed_title = MIGRATION_022_NANO_BANANA_TITLES[0];
+        let source_seed_id = "legacy-seed";
+        let source_conn = Connection::open(&source_paths.db_path).unwrap();
+        source_conn
+            .execute_batch(&format!(
+                "INSERT INTO prompts(id,title,prompt_text,provider) VALUES('{source_seed_id}','{seed_title}','legacy seed','nano_banana');
+                 INSERT INTO projects(id,title,status,created_at,updated_at) VALUES('source-project','Source project','draft','t','t');
+                 INSERT INTO results(id,prompt_id,notes,created_at) VALUES('legacy-result','{source_seed_id}','must be excluded','t');
+                 INSERT INTO project_results(project_id,result_id) VALUES('source-project','legacy-result');"
+            ))
+            .unwrap();
+
+        let target_conn = Connection::open(&target_paths.db_path).unwrap();
+        target_conn
+            .execute_batch(
+                "INSERT INTO prompts(id,title,prompt_text,provider) VALUES('ordinary-prompt','Ordinary','target','midjourney');
+                 INSERT INTO results(id,prompt_id,notes,created_at) VALUES('legacy-result','ordinary-prompt','unrelated target row','t');",
+            )
+            .unwrap();
+        drop(source_conn);
+        drop(target_conn);
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let conn = Connection::open(&target_paths.db_path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM project_results WHERE result_id='legacy-result'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap(),
+            0,
+            "a dependent must not attach to an unrelated target row reusing the excluded source id"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT notes FROM results WHERE id='legacy-result'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap(),
+            "unrelated target row"
+        );
+        assert_eq!(report.tables["results"].excluded, 1);
+        assert_eq!(report.tables["project_results"].excluded, 1);
+        assert_eq!(report.tables["results"].skipped_duplicates, 0);
+        assert_eq!(report.tables["project_results"].skipped_duplicates, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_media_only_differences_are_imported_and_repeat_is_idempotent() {
+        let root = test_root("merge-media-identity");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "p", "Prompt");
+        insert_prompt(&target_paths.db_path, "p", "Prompt");
+        fs::write(source.join("results/source.png"), "source-result").unwrap();
+        fs::write(target.join("results/target.png"), "target-result").unwrap();
+        insert_result(
+            &source_paths.db_path,
+            "same-result",
+            "p",
+            Some(&format!("{}source.png", source_paths.results_dir)),
+            None,
+        );
+        insert_result(
+            &target_paths.db_path,
+            "same-result",
+            "p",
+            Some(&format!("{}target.png", target_paths.results_dir)),
+            None,
+        );
+        fs::write(source.join("references/source.png"), "source-reference").unwrap();
+        fs::write(target.join("references/target.png"), "target-reference").unwrap();
+        insert_reference(
+            &source_paths.db_path,
+            "same-reference",
+            "Reference",
+            Some(&format!("{}source.png", source_paths.references_dir)),
+            None,
+        );
+        insert_reference(
+            &target_paths.db_path,
+            "same-reference",
+            "Reference",
+            Some(&format!("{}target.png", target_paths.references_dir)),
+            None,
+        );
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(report.results.imported, 1);
+        assert_eq!(report.references.imported, 1);
+        let result_id = report
+            .id_remaps
+            .iter()
+            .find(|r| r.table == "results" && r.source_id == "same-result")
+            .unwrap()
+            .target_id
+            .clone();
+        let reference_id = report
+            .id_remaps
+            .iter()
+            .find(|r| r.table == "references" && r.source_id == "same-reference")
+            .unwrap()
+            .target_id
+            .clone();
+        assert_eq!(
+            fs::read_to_string(
+                result_paths(&target_paths.db_path, &result_id)
+                    .unwrap()
+                    .1
+                    .unwrap()
+            )
+            .unwrap(),
+            "source-result"
+        );
+        assert_eq!(
+            fs::read_to_string(
+                reference_paths(&target_paths.db_path, &reference_id)
+                    .unwrap()
+                    .1
+                    .unwrap()
+            )
+            .unwrap(),
+            "source-reference"
+        );
+
+        let repeat =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(repeat.results.imported, 0);
+        assert_eq!(repeat.references.imported, 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_resolves_all_declared_unique_keys_without_aborting() {
+        let root = test_root("merge-unique-keys");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        for paths in [&source_paths, &target_paths] {
+            insert_prompt(&paths.db_path, "p", "Prompt");
+        }
+        let source_conn = Connection::open(&source_paths.db_path).unwrap();
+        source_conn.execute_batch("INSERT INTO token_categories(id,name,label) VALUES('source-cat','semantic-name','Source'); INSERT INTO tokens(id,text,category_id,is_builtin,created_at) VALUES('source-token','token','source-cat',0,'t'); INSERT INTO token_patterns(id,token_a_id,token_b_id,co_occurrence_count,last_updated) VALUES('source-pattern','source-token','source-token',2,'t'); INSERT INTO results(id,prompt_id,created_at) VALUES('result','p','t'); INSERT INTO comparison_sessions(id,title,created_at,updated_at) VALUES('session','Session','t','t'); INSERT INTO comparison_items(id,session_id,result_id,notes,created_at) VALUES('source-item','session','result','source','t'); INSERT INTO generation_queue(id,prompt_id,status,notes,created_at,updated_at) VALUES('source-queue','p','pending','source','t','t');").unwrap();
+        let target_conn = Connection::open(&target_paths.db_path).unwrap();
+        target_conn.execute_batch("INSERT INTO token_categories(id,name,label) VALUES('target-cat','semantic-name','Target'); INSERT INTO tokens(id,text,category_id,is_builtin,created_at) VALUES('target-token','token','target-cat',0,'t'); INSERT INTO token_patterns(id,token_a_id,token_b_id,co_occurrence_count,last_updated) VALUES('target-pattern','target-token','target-token',8,'t'); INSERT INTO results(id,prompt_id,created_at) VALUES('result','p','t'); INSERT INTO comparison_sessions(id,title,created_at,updated_at) VALUES('session','Session','t','t'); INSERT INTO comparison_items(id,session_id,result_id,notes,created_at) VALUES('target-item','session','result','target','t'); INSERT INTO generation_queue(id,prompt_id,status,notes,created_at,updated_at) VALUES('target-queue','p','pending','target','t','t');").unwrap();
+        drop(source_conn);
+        drop(target_conn);
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert!(report
+            .id_remaps
+            .iter()
+            .any(|r| r.table == "token_categories"
+                && r.source_id == "source-cat"
+                && r.target_id == "target-cat"));
+        assert_eq!(report.tables["token_patterns"].skipped_duplicates, 1);
+        assert_eq!(report.tables["comparison_items"].skipped_duplicates, 1);
+        assert_eq!(report.tables["generation_queue"].skipped_duplicates, 1);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_resolves_unique_keys_against_earlier_planned_rows_after_fk_collapse() {
+        let root = test_root("merge-planned-unique");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "source-prompt-a", "Equivalent");
+        insert_prompt(&source_paths.db_path, "source-prompt-b", "Equivalent");
+        insert_prompt(&target_paths.db_path, "target-prompt", "Equivalent");
+        let source_conn = Connection::open(&source_paths.db_path).unwrap();
+        source_conn.execute_batch("INSERT INTO generation_queue(id,prompt_id,status,notes,created_at,updated_at) VALUES('queue-a','source-prompt-a','pending','first','t','t'); INSERT INTO generation_queue(id,prompt_id,status,notes,created_at,updated_at) VALUES('queue-b','source-prompt-b','pending','second','t','t');").unwrap();
+        drop(source_conn);
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(report.tables["generation_queue"].imported, 1);
+        assert_eq!(report.tables["generation_queue"].skipped_duplicates, 1);
+        let conn = Connection::open(&target_paths.db_path).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM generation_queue WHERE prompt_id='target-prompt'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_plans_thousands_of_join_rows_with_indexed_lookups() {
+        let root = test_root("merge-scale-indexes");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        create_library_package(target.to_str().unwrap(), true).unwrap();
+        let mut source_conn = Connection::open(&source_paths.db_path).unwrap();
+        let transaction = source_conn.transaction().unwrap();
+        transaction
+            .execute(
+                "INSERT INTO projects(id,title,status,created_at,updated_at)
+                 VALUES('scale-project','Scale','draft','t','t')",
+                [],
+            )
+            .unwrap();
+        for index in 0..2_000 {
+            let prompt_id = format!("scale-prompt-{index}");
+            transaction
+                .execute(
+                    "INSERT INTO prompts(id,title,prompt_text,provider)
+                     VALUES(?1,?2,'body','midjourney')",
+                    [&prompt_id, &format!("Prompt {index}")],
+                )
+                .unwrap();
+            transaction
+                .execute(
+                    "INSERT INTO project_prompts(project_id,prompt_id)
+                     VALUES('scale-project',?1)",
+                    [&prompt_id],
+                )
+                .unwrap();
+        }
+        transaction.commit().unwrap();
+        drop(source_conn);
+
+        let started = std::time::Instant::now();
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        assert_eq!(report.tables["prompts"].imported, 2_000);
+        assert_eq!(report.tables["project_prompts"].imported, 2_000);
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "indexed merge planning exceeded generous scale bound: {:?}",
+            started.elapsed()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_remaps_child_before_parent_independent_of_source_row_order() {
+        let root = test_root("merge-prompt-parent-order");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "child", "Child");
+        insert_prompt(&source_paths.db_path, "parent", "Source parent");
+        Connection::open(&source_paths.db_path)
+            .unwrap()
+            .execute("UPDATE prompts SET parent_id='parent' WHERE id='child'", [])
+            .unwrap();
+        insert_prompt(&target_paths.db_path, "parent", "Target parent");
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let parent = report
+            .id_remaps
+            .iter()
+            .find(|r| r.table == "prompts" && r.source_id == "parent")
+            .unwrap()
+            .target_id
+            .clone();
+        assert_eq!(
+            Connection::open(&target_paths.db_path)
+                .unwrap()
+                .query_row("SELECT parent_id FROM prompts WHERE id='child'", [], |r| {
+                    r.get::<_, String>(0)
+                })
+                .unwrap(),
+            parent
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_reallocates_colliding_child_after_parent_sensitive_remap() {
+        let root = test_root("merge-parent-sensitive-child");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "child", "Same child");
+        insert_prompt(&source_paths.db_path, "parent", "Source parent");
+        Connection::open(&source_paths.db_path)
+            .unwrap()
+            .execute("UPDATE prompts SET parent_id='parent' WHERE id='child'", [])
+            .unwrap();
+        insert_prompt(&target_paths.db_path, "child", "Same child");
+        insert_prompt(&target_paths.db_path, "parent", "Target parent");
+        Connection::open(&target_paths.db_path)
+            .unwrap()
+            .execute("UPDATE prompts SET parent_id='parent' WHERE id='child'", [])
+            .unwrap();
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let parent = report
+            .id_remaps
+            .iter()
+            .find(|r| r.table == "prompts" && r.source_id == "parent")
+            .unwrap()
+            .target_id
+            .clone();
+        let child = report
+            .id_remaps
+            .iter()
+            .find(|r| r.table == "prompts" && r.source_id == "child")
+            .unwrap()
+            .target_id
+            .clone();
+        assert_ne!(child, "child");
+        assert_eq!(
+            Connection::open(&target_paths.db_path)
+                .unwrap()
+                .query_row("SELECT parent_id FROM prompts WHERE id=?1", [&child], |r| r
+                    .get::<_, String>(0))
+                .unwrap(),
+            parent
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_remaps_prompt_parent_cycle_to_remapped_cycle() {
+        let root = test_root("merge-prompt-parent-cycle");
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "cycle-a", "Source A");
+        insert_prompt(&source_paths.db_path, "cycle-b", "Source B");
+        Connection::open(&source_paths.db_path)
+            .unwrap()
+            .execute_batch(
+                "UPDATE prompts SET parent_id='cycle-b' WHERE id='cycle-a';
+                 UPDATE prompts SET parent_id='cycle-a' WHERE id='cycle-b';",
+            )
+            .unwrap();
+        insert_prompt(&target_paths.db_path, "cycle-a", "Target A");
+        insert_prompt(&target_paths.db_path, "cycle-b", "Target B");
+
+        let report =
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).unwrap();
+        let remapped = |source_id: &str| {
+            report
+                .id_remaps
+                .iter()
+                .find(|r| r.table == "prompts" && r.source_id == source_id)
+                .unwrap()
+                .target_id
+                .clone()
+        };
+        let a = remapped("cycle-a");
+        let b = remapped("cycle-b");
+        assert_ne!(a, "cycle-a");
+        assert_ne!(b, "cycle-b");
+        let conn = Connection::open(&target_paths.db_path).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT parent_id FROM prompts WHERE id=?1", [&a], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+            b
+        );
+        assert_eq!(
+            conn.query_row("SELECT parent_id FROM prompts WHERE id=?1", [&b], |r| {
+                r.get::<_, String>(0)
+            })
+            .unwrap(),
+            a
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn merge_rejects_unknown_source_tables_and_columns() {
+        for (label, sql) in [
+            (
+                "table",
+                "CREATE TABLE future_user_data(id TEXT PRIMARY KEY)",
+            ),
+            ("column", "ALTER TABLE prompts ADD COLUMN future_field TEXT"),
+        ] {
+            let root = test_root(&format!("merge-unknown-{label}"));
+            let source = root.join("Source.framecraftlib");
+            let target = root.join("Target.framecraftlib");
+            let source_paths = create_library_package(source.to_str().unwrap(), true).unwrap();
+            create_library_package(target.to_str().unwrap(), true).unwrap();
+            Connection::open(&source_paths.db_path)
+                .unwrap()
+                .execute_batch(sql)
+                .unwrap();
+            let error =
+                match merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()) {
+                    Ok(_) => panic!("unknown schema was accepted"),
+                    Err(error) => error,
+                };
+            assert!(error.contains("unsupported source schema"), "{error}");
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
     fn test_root(label: &str) -> PathBuf {
         let root = env::temp_dir().join(format!(
             "framecraft-{label}-{}",
@@ -2382,6 +5681,295 @@ mod tests {
         ));
         fs::create_dir_all(&root).unwrap();
         root
+    }
+
+    fn assert_merge_rejects_media_path(root: &Path, label: &str, media_path: &str) {
+        let source = root.join("Source.framecraftlib");
+        let target = root.join("Target.framecraftlib");
+        let source_paths = if source.join("framecraft.db").exists() {
+            resolve_library_paths(source.to_str().unwrap())
+        } else {
+            create_library_package(source.to_str().unwrap(), true).unwrap()
+        };
+        let target_paths = create_library_package(target.to_str().unwrap(), true).unwrap();
+        insert_prompt(&source_paths.db_path, "unsafe-prompt", "Unsafe prompt");
+        insert_result(
+            &source_paths.db_path,
+            "unsafe-result",
+            "unsafe-prompt",
+            Some(media_path),
+            None,
+        );
+
+        assert!(
+            merge_library_package(source.to_str().unwrap(), target.to_str().unwrap()).is_err(),
+            "{label} media path must fail"
+        );
+        assert!(prompt_title(&target_paths.db_path, "unsafe-prompt").is_none());
+        assert!(result_paths(&target_paths.db_path, "unsafe-result").is_none());
+        assert!(fs::read_dir(&target_paths.results_dir)
+            .unwrap()
+            .next()
+            .is_none());
+        assert!(fs::read_dir(&target_paths.staging_dir)
+            .unwrap()
+            .next()
+            .is_none());
+    }
+
+    fn assert_manifest_rows_preserved(
+        source_db: &str,
+        target_db: &str,
+        report: &LibraryMergeReport,
+    ) {
+        let source = Connection::open(source_db).unwrap();
+        let target = Connection::open(target_db).unwrap();
+        let remapped = |table: &str, id: &str| {
+            report
+                .id_remaps
+                .iter()
+                .find(|entry| entry.table == table && entry.source_id == id)
+                .map(|entry| entry.target_id.clone())
+                .unwrap_or_else(|| id.to_string())
+        };
+        for spec in MERGE_MANIFEST.iter().copied() {
+            let mut excluded = HashMap::new();
+            for source_row in read_manifest_rows(&source, spec, &mut excluded).unwrap() {
+                if spec.table == "app_meta" {
+                    let key = value_as_string(&source_row.values[0]).unwrap();
+                    if key != "source_custom_setting" {
+                        continue;
+                    }
+                }
+                let mut expected = source_row.clone();
+                for foreign_key in spec.foreign_keys {
+                    let index = column_index(spec.columns, foreign_key.column).unwrap();
+                    if let Value::Text(id) = &expected.values[index] {
+                        expected.values[index] = Value::Text(remapped(foreign_key.table, id));
+                    }
+                }
+                let actual = match spec.identity {
+                    MergeIdentity::Id(_) => {
+                        let id_index = column_index(spec.columns, "id").unwrap();
+                        let source_id = value_as_string(&source_row.values[id_index]).unwrap();
+                        let target_id = remapped(spec.table, &source_id);
+                        expected.values[id_index] = Value::Text(target_id.clone());
+                        read_manifest_by_keys(&target, spec, &["id"], &[Value::Text(target_id)])
+                            .unwrap()
+                            .unwrap()
+                    }
+                    MergeIdentity::Composite(keys) | MergeIdentity::TargetOwned(keys) => {
+                        let values = key_values(spec, &expected, keys).unwrap();
+                        read_manifest_by_keys(&target, spec, keys, &values)
+                            .unwrap()
+                            .unwrap()
+                    }
+                };
+                assert_eq!(
+                    actual, expected,
+                    "manifest field mismatch in {}",
+                    spec.table
+                );
+            }
+        }
+    }
+
+    fn complete_graph_identity(table: &str) -> (&'static [&'static str], Vec<Value>) {
+        match table {
+            "campaigns" => (&["id"], vec![Value::Text("c".into())]),
+            "prompts" => (&["id"], vec![Value::Text("p".into())]),
+            "references" => (&["id"], vec![Value::Text("r".into())]),
+            "recipes" => (&["id"], vec![Value::Text("legacy-recipe".into())]),
+            "srefs" => (&["id"], vec![Value::Text("sref".into())]),
+            "profiles" => (&["id"], vec![Value::Text("profile".into())]),
+            "avoidance_patterns" => (&["id"], vec![Value::Text("avoid".into())]),
+            "token_categories" => (&["id"], vec![Value::Text("tc".into())]),
+            "tokens" => (&["id"], vec![Value::Text("tok".into())]),
+            "projects" => (&["id"], vec![Value::Text("proj".into())]),
+            "results" => (&["id"], vec![Value::Text("res".into())]),
+            "prompt_tokens" => (&["id"], vec![Value::Text("pt".into())]),
+            "token_patterns" => (&["id"], vec![Value::Text("pattern".into())]),
+            "project_prompts" => (
+                &["project_id", "prompt_id"],
+                vec![Value::Text("proj".into()), Value::Text("p".into())],
+            ),
+            "project_results" => (
+                &["project_id", "result_id"],
+                vec![Value::Text("proj".into()), Value::Text("res".into())],
+            ),
+            "project_references" => (
+                &["project_id", "reference_id"],
+                vec![Value::Text("proj".into()), Value::Text("r".into())],
+            ),
+            "prompt_references" => (
+                &["prompt_id", "reference_id"],
+                vec![Value::Text("p".into()), Value::Text("r".into())],
+            ),
+            "result_references" => (
+                &["result_id", "reference_id"],
+                vec![Value::Text("res".into()), Value::Text("r".into())],
+            ),
+            "comparison_sessions" => (&["id"], vec![Value::Text("session".into())]),
+            "comparison_items" => (&["id"], vec![Value::Text("item".into())]),
+            "project_deliverables" => (&["id"], vec![Value::Text("deliverable".into())]),
+            "deliverable_references" => (
+                &["deliverable_id", "reference_id"],
+                vec![Value::Text("deliverable".into()), Value::Text("r".into())],
+            ),
+            "assistant_threads" => (&["id"], vec![Value::Text("thread".into())]),
+            "assistant_messages" => (&["id"], vec![Value::Text("message".into())]),
+            "export_presets" => (&["id"], vec![Value::Text("export".into())]),
+            "generation_queue" => (&["id"], vec![Value::Text("queue".into())]),
+            "creative_directions" => (&["id"], vec![Value::Text("direction".into())]),
+            "shot_sequence" => (&["id"], vec![Value::Text("shot".into())]),
+            "app_meta" => (&["key"], vec![Value::Text("source_custom_setting".into())]),
+            _ => panic!("missing complete graph identity for {table}"),
+        }
+    }
+
+    fn sentinel_value(table: &str, column: &str) -> Value {
+        if column == "is_builtin" {
+            return Value::Integer(0);
+        }
+        if column.starts_with("is_") {
+            return Value::Integer(1);
+        }
+        if matches!(
+            column,
+            "rating"
+                | "use_count"
+                | "sort_order"
+                | "recipe_use_count"
+                | "ai_look_risk"
+                | "reuse_potential"
+                | "version"
+                | "score_overall"
+                | "score_realism"
+                | "score_brand_fit"
+                | "score_composition"
+                | "score_lighting"
+                | "score_ai_risk"
+                | "position"
+                | "co_occurrence_count"
+        ) {
+            return Value::Integer(7);
+        }
+        if matches!(column, "quality_score" | "avg_rating") {
+            return Value::Real(7.5);
+        }
+        if column == "status" {
+            return Value::Text(
+                match table {
+                    "project_deliverables" => "final",
+                    "generation_queue" => "done",
+                    _ => "sentinel-status",
+                }
+                .into(),
+            );
+        }
+        if column == "role" && table == "assistant_messages" {
+            return Value::Text("assistant".into());
+        }
+        if column == "format" {
+            return Value::Text("html".into());
+        }
+        if column == "severity" {
+            return Value::Text("critical".into());
+        }
+        if matches!(
+            column,
+            "created_at" | "updated_at" | "last_updated" | "due_date"
+        ) {
+            return Value::Text("2099-01-02T03:04:05Z".into());
+        }
+        if column == "source_url" {
+            return Value::Text("https://example.invalid/sentinel".into());
+        }
+        if matches!(
+            column,
+            "file_path" | "thumbnail_path" | "file_data" | "thumbnail_data"
+        ) {
+            return Value::Text("data:image/png;base64,c2VudGluZWw=".into());
+        }
+        if matches!(
+            column,
+            "tags"
+                | "parameters"
+                | "builder_state"
+                | "options"
+                | "citations"
+                | "aspect_ratios"
+                | "provider_targets"
+                | "image_needs"
+                | "video_needs"
+                | "constraints"
+        ) {
+            return Value::Text("{\"sentinel\":true}".into());
+        }
+        Value::Text(format!("sentinel-{table}-{column}"))
+    }
+
+    fn populate_complete_graph_sentinels(conn: &Connection) {
+        for spec in MERGE_MANIFEST.iter().copied() {
+            let (keys, values) = complete_graph_identity(spec.table);
+            let foreign_keys = spec
+                .foreign_keys
+                .iter()
+                .map(|fk| fk.column)
+                .collect::<Vec<_>>();
+            for column in spec.columns {
+                if keys.contains(column) || foreign_keys.contains(column) {
+                    continue;
+                }
+                let clause = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(index, key)| format!("{}=?{}", quote_identifier(key), index + 2))
+                    .collect::<Vec<_>>()
+                    .join(" AND ");
+                let sql = format!(
+                    "UPDATE {} SET {}=?1 WHERE {clause}",
+                    quote_identifier(spec.table),
+                    quote_identifier(column)
+                );
+                let sentinel = sentinel_value(spec.table, column);
+                assert_eq!(
+                    conn.execute(
+                        &sql,
+                        params_from_iter(std::iter::once(&sentinel).chain(values.iter()))
+                    )
+                    .unwrap(),
+                    1,
+                    "missing fixture row for {}",
+                    spec.table
+                );
+            }
+        }
+    }
+
+    fn assert_complete_graph_sentinel_coverage(conn: &Connection) {
+        for spec in MERGE_MANIFEST.iter().copied() {
+            let (keys, values) = complete_graph_identity(spec.table);
+            let row = read_manifest_by_keys(conn, spec, keys, &values)
+                .unwrap()
+                .unwrap();
+            let foreign_keys = spec
+                .foreign_keys
+                .iter()
+                .map(|fk| fk.column)
+                .collect::<Vec<_>>();
+            for (index, column) in spec.columns.iter().enumerate() {
+                if keys.contains(column) || foreign_keys.contains(column) {
+                    continue;
+                }
+                assert_eq!(
+                    row.values[index],
+                    sentinel_value(spec.table, column),
+                    "complete graph fixture lacks non-default sentinel for {}.{column}",
+                    spec.table
+                );
+            }
+        }
     }
 
     fn create_historical_package(package: &Path, migration_count: usize) -> PathBuf {
@@ -2416,6 +6004,7 @@ mod tests {
         let exists = rows
             .into_iter()
             .any(|row| row.map(|name| name == column).unwrap_or(false));
+        drop(statement);
         exists
     }
 
@@ -2530,7 +6119,10 @@ mod tests {
                     |row| row.get(0),
                 )
                 .unwrap();
-            assert!(count <= 1, "expected at most one built-in prompt titled {title}");
+            assert!(
+                count <= 1,
+                "expected at most one built-in prompt titled {title}"
+            );
         }
     }
 

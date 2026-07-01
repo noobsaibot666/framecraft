@@ -11,6 +11,8 @@ import {
   isStoredImagePath,
   deleteResultFiles,
   deleteReferenceFiles,
+  stageManagedImage,
+  removeManagedPaths,
 } from "./fileStore";
 import { resolveLibraryPaths } from "./libraryConfig";
 
@@ -158,5 +160,30 @@ describe("deleteResultFiles — dev mode", () => {
 describe("deleteReferenceFiles — dev mode", () => {
   it("resolves without error when not in Tauri", async () => {
     await expect(deleteReferenceFiles("ref456")).resolves.toBeUndefined();
+  });
+});
+
+describe("stageManagedImage — dev mode", () => {
+  it("returns all four paths set to the dataUrl in dev mode", async () => {
+    const staged = await stageManagedImage("result", "result-1", JPEG_DATA_URL);
+    expect(staged.originalTemp).toBe(JPEG_DATA_URL);
+    expect(staged.thumbnailTemp).toBe(JPEG_DATA_URL);
+    expect(staged.originalFinal).toBe(JPEG_DATA_URL);
+    expect(staged.thumbnailFinal).toBe(JPEG_DATA_URL);
+  });
+
+  it("returns reference-kind staged paths in dev mode", async () => {
+    const staged = await stageManagedImage("reference", "ref-1", PNG_DATA_URL);
+    expect(staged.originalFinal).toBe(PNG_DATA_URL);
+  });
+});
+
+describe("removeManagedPaths — dev mode", () => {
+  it("resolves without error when not in Tauri", async () => {
+    await expect(removeManagedPaths(["/results/a.png", "/results/a_thumb.jpg"])).resolves.toBeUndefined();
+  });
+
+  it("accepts null and undefined values without error", async () => {
+    await expect(removeManagedPaths([null, undefined, "/results/b.png"])).resolves.toBeUndefined();
   });
 });

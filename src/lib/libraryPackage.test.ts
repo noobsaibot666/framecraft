@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLibraryPackage,
   backupLibraryPackage,
-  buildPortableMediaPathRewrites,
   copyLibraryPackage,
   migrateAppDataToLibrary,
   validateLibraryPackage,
+  MERGE_MANIFEST_VERSION,
   type LibraryFileSystem,
 } from "./libraryPackage";
 
@@ -39,6 +39,9 @@ function createFs(existing: string[] = []): LibraryFileSystem & {
 }
 
 describe("libraryPackage", () => {
+  it("exposes the complete-library merge manifest version", () => {
+    expect(MERGE_MANIFEST_VERSION).toBe(1);
+  });
   it("creates the portable library package structure", async () => {
     const fs = createFs();
 
@@ -256,35 +259,4 @@ describe("libraryPackage", () => {
     expect(result.validation.ok).toBe(true);
   });
 
-  it("plans database media path rewrites from source package paths to target package paths", () => {
-    expect(buildPortableMediaPathRewrites({
-      sourceBaseDir: "/source/Work.framecraftlib",
-      targetBaseDir: "/export/Work Copy.framecraftlib",
-    })).toEqual([
-      {
-        table: "results",
-        column: "file_path",
-        sourcePrefix: "/source/Work.framecraftlib/results/",
-        targetPrefix: "/export/Work Copy.framecraftlib/results/",
-      },
-      {
-        table: "results",
-        column: "thumbnail_path",
-        sourcePrefix: "/source/Work.framecraftlib/results/",
-        targetPrefix: "/export/Work Copy.framecraftlib/results/",
-      },
-      {
-        table: "references",
-        column: "file_data",
-        sourcePrefix: "/source/Work.framecraftlib/references/",
-        targetPrefix: "/export/Work Copy.framecraftlib/references/",
-      },
-      {
-        table: "references",
-        column: "thumbnail_data",
-        sourcePrefix: "/source/Work.framecraftlib/references/",
-        targetPrefix: "/export/Work Copy.framecraftlib/references/",
-      },
-    ]);
-  });
 });

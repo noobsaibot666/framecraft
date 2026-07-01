@@ -1,5 +1,7 @@
 import type { Project, ProjectStatus, ProjectFilters } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { executeAtomically } from "./dbTransaction";
+import { buildCreateProjectStatements, buildProjectRelationshipStatements } from "./dbStatements";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -84,67 +86,11 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
 
   if (isTauri) {
     const db = await getDb();
-    // INSERT only the original migration-010 columns — always safe
     try {
-      await db.execute(
-        `INSERT INTO projects
-          (id, title, client, campaign, status, brief_text, production_goal,
-           category, tags, notes, created_at, updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [
-          id,
-          data.title,
-          data.client ?? null,
-          data.campaign ?? null,
-          data.status ?? "draft",
-          data.brief_text ?? null,
-          data.production_goal ?? null,
-          data.category ?? null,
-          data.tags ? JSON.stringify(data.tags) : null,
-          data.notes ?? null,
-          ts,
-          ts,
-        ]
-      );
+      await executeAtomically(db, buildCreateProjectStatements(data, id, ts));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error("[createProject] INSERT failed:", msg);
-      throw new Error(msg);
-    }
-    // Extended columns from migration 014 — non-fatal if columns don't exist yet
-    try {
-      await db.execute(
-        `UPDATE projects SET
-           project_type = $1, intended_output = $2, image_needs = $3,
-           video_needs = $4, aspect_ratios = $5, provider_targets = $6,
-           visual_direction = $7, constraints = $8, creative_goals = $9
-         WHERE id = $10`,
-        [
-          data.project_type ?? null,
-          data.intended_output ?? null,
-          data.image_needs ?? null,
-          data.video_needs ?? null,
-          data.aspect_ratios ? JSON.stringify(data.aspect_ratios) : null,
-          data.provider_targets ? JSON.stringify(data.provider_targets) : null,
-          data.visual_direction ?? null,
-          data.constraints ?? null,
-          data.creative_goals ?? null,
-          id,
-        ]
-      );
-    } catch {
-      // migration 014 columns not yet applied — non-fatal, data saved via base INSERT
-    }
-    // campaign_id from migration 018 — non-fatal if column doesn't exist yet
-    if (data.campaign_id) {
-      try {
-        await db.execute(
-          `UPDATE projects SET campaign_id = $1, updated_at = $2 WHERE id = $3`,
-          [data.campaign_id, ts, id]
-        );
-      } catch (err) {
-        console.warn("[createProject] campaign_id UPDATE failed (migration 018 not yet applied?):", err);
-      }
+      throw new Error(`Failed to create project atomically: ${msg}`);
     }
     return id;
   }
@@ -154,6 +100,7 @@ export async function createProject(data: CreateProjectInput): Promise<string> {
     title: data.title,
     client: data.client,
     campaign: data.campaign,
+    campaign_id: data.campaign_id,
     status: data.status ?? "draft",
     project_type: data.project_type,
     intended_output: data.intended_output,
@@ -348,11 +295,8 @@ export async function deleteProject(id: string): Promise<void> {
 export async function addPromptToProject(projectId: string, promptId: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
-  await db.execute(
-    "INSERT OR IGNORE INTO project_prompts (project_id, prompt_id) VALUES ($1, $2)",
-    [projectId, promptId]
-  );
-  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
+  const ts = now();
+  await executeAtomically(db, buildProjectRelationshipStatements("prompts", projectId, promptId, ts));
 }
 
 export async function removePromptFromProject(projectId: string, promptId: string): Promise<void> {
@@ -398,11 +342,8 @@ export async function getPromptsForProject(projectId: string): Promise<{
 export async function addResultToProject(projectId: string, resultId: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
-  await db.execute(
-    "INSERT OR IGNORE INTO project_results (project_id, result_id) VALUES ($1, $2)",
-    [projectId, resultId]
-  );
-  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
+  const ts = now();
+  await executeAtomically(db, buildProjectRelationshipStatements("results", projectId, resultId, ts));
 }
 
 export async function removeResultFromProject(projectId: string, resultId: string): Promise<void> {
@@ -443,11 +384,8 @@ export async function getResultsForProject(projectId: string): Promise<{
 export async function addReferenceToProject(projectId: string, referenceId: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
-  await db.execute(
-    "INSERT OR IGNORE INTO project_references (project_id, reference_id) VALUES ($1, $2)",
-    [projectId, referenceId]
-  );
-  await db.execute("UPDATE projects SET updated_at = $1 WHERE id = $2", [now(), projectId]);
+  const ts = now();
+  await executeAtomically(db, buildProjectRelationshipStatements("references", projectId, referenceId, ts));
 }
 
 export async function removeReferenceFromProject(projectId: string, referenceId: string): Promise<void> {

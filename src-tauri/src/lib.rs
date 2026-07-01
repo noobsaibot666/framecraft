@@ -5,6 +5,7 @@ mod library_lock;
 mod library_package;
 mod native_sqlite;
 mod portable_sqlite;
+mod fetch_image;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -189,6 +190,7 @@ pub fn run() {
             native_sqlite::native_sqlite_execute_batch,
             native_sqlite::native_sqlite_execute_transaction,
             native_sqlite::native_sqlite_select,
+            fetch_image::fetch_image_as_data_url,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

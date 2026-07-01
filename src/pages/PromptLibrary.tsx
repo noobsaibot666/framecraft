@@ -102,7 +102,7 @@ function PromptCardThumb({ src }: { src: string }) {
   if (!displaySrc) return null;
   return (
     <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
-      <img src={displaySrc} alt="" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
+      <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
       <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
     </div>
   );

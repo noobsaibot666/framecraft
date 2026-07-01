@@ -18,6 +18,7 @@ import {
   type ImportLearningSignal,
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
+import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
 import type { Provider, Project } from "@/types";
 
 // ─── Parameter Detection ──────────────────────────────────────
@@ -229,16 +230,33 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
   onError: (message: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const isUrl = sourceUrl.startsWith("http");
 
-  const mjSource = useMemo(() => parseMJSourceUrl(sourceUrl), [sourceUrl]);
-  const isDirectImage = isUrl && /\\.(png|jpe?g|webp|gif)(\\?.*)?$/i.test(sourceUrl);
-  const previewUrl = thumbnailData || mjSource?.cdnUrl || (isDirectImage ? sourceUrl : null);
+  // previewUrl: show the stored data URL (from file upload or native fetch), never the raw CDN URL
+  const previewUrl = thumbnailData || null;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(sourceUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  // When the user finishes typing a URL, attempt to resolve it as an image via native Rust fetch
+  const handleUrlCommit = async (url: string) => {
+    if (!url || thumbnailData) return; // don't overwrite an uploaded file
+    if (!isDirectImageUrl(url) && !isMidjourneyUrl(url)) return;
+    setFetching(true);
+    try {
+      const parsed = parseMJSourceUrl(url);
+      const fetchUrl = parsed?.cdnUrl ?? url;
+      const dataUrl = await fetchImageAsDataUrl(fetchUrl);
+      onThumbnailData(dataUrl);
+    } catch {
+      // silently ignore — user can upload manually
+    } finally {
+      setFetching(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,6 +280,8 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     <div className="flex flex-col gap-1.5">
       <div className="relative">
         <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
+          onBlur={(e) => handleUrlCommit(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") handleUrlCommit(sourceUrl); }}
           placeholder="Paste URL or upload image…"
           className={cn(
             "w-full h-8 font-mono text-[12px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
@@ -277,21 +297,34 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
         )}
       </div>
       
-      {previewUrl && (
+      {fetching && (
+        <div className="flex items-center gap-2 p-2 rounded-sm mt-1" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
+          <div className="w-12 h-12 rounded-sm shrink-0 bg-white/5 animate-pulse" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
+          <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50">Fetching thumbnail…</span>
+        </div>
+      )}
+
+      {!fetching && previewUrl && (
         <div className="flex items-center gap-2 p-2 rounded-sm mt-1" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
           <img src={previewUrl} alt="Preview" className="w-12 h-12 object-cover rounded-sm shrink-0" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
           <div className="flex-1 min-w-0">
             <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">
-              {thumbnailData ? "Uploaded image" : "URL Preview"}
+              Thumbnail ready
             </span>
             <p className="font-mono text-[8px] text-dim/40 mt-0.5">Will be used as prompt thumbnail</p>
           </div>
-          {thumbnailData && (
-            <button type="button" onClick={() => onThumbnailData("")} className="text-dim/40 hover:text-red transition-precise shrink-0" title="Remove uploaded image">
-              <X size={10} />
-            </button>
-          )}
+          <button type="button" onClick={() => onThumbnailData("")} className="text-dim/40 hover:text-red transition-precise shrink-0" title="Remove thumbnail">
+            <X size={10} />
+          </button>
         </div>
+      )}
+
+      {!fetching && !previewUrl && isUrl && (
+        <p className="font-mono text-[8px] text-dim/35 mt-0.5">
+          {(isDirectImageUrl(sourceUrl) || isMidjourneyUrl(sourceUrl))
+            ? "Thumbnail will be fetched automatically on save"
+            : "Upload a custom thumbnail below or leave blank"}
+        </p>
       )}
 
       <label className="flex items-center gap-1 cursor-pointer w-fit mt-0.5">
@@ -358,7 +391,7 @@ const PROVIDERS: { value: Provider; label: string }[] = [
 export function ManualImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { create, prompts: allPrompts } = usePromptStore();
+  const { create, update, prompts: allPrompts } = usePromptStore();
 
   // Mode — read ?batch=1 from URL on mount
   const [mode, setMode] = useState<"single" | "batch">(searchParams.get("batch") === "1" ? "batch" : "single");
@@ -479,10 +512,24 @@ export function ManualImport() {
         failure_notes: aiLookNotes.trim() || undefined,
         is_recipe: asRecipe,
         source_url: source.trim() || undefined,
-        thumbnail_data: thumbnailData || parseMJSourceUrl(source)?.cdnUrl || (source.startsWith("http") && /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(source) ? source : undefined),
+        thumbnail_data: (() => {
+          // If user explicitly uploaded a file, always use that
+          if (thumbnailData) return thumbnailData;
+          return undefined; // will be fetched below if needed
+        })(),
       });
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});
+      }
+      // If no thumbnail yet, try to fetch it natively (handles Midjourney CDN + direct image URLs)
+      if (!thumbnailData) {
+        const mj = parseMJSourceUrl(source);
+        const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
+        if (fetchUrl) {
+          fetchImageAsDataUrl(fetchUrl)
+            .then((dataUrl) => update(id, { thumbnail_data: dataUrl }))
+            .catch(() => {}); // silently ignore — user can add manually later
+        }
       }
       navigate(`/library/${id}`);
     } catch (err) {

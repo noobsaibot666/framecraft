@@ -286,7 +286,7 @@ function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; c
       </div>
     );
   }
-  return <img src={displaySrc} alt={alt} className={className} onError={image.onError} />;
+  return <img src={displaySrc} referrerPolicy="no-referrer" alt={alt} className={className} onError={image.onError} />;
 }
 
 // ─── Linked prompt row ────────────────────────────────────────

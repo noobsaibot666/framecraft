@@ -59,7 +59,7 @@ function SafeResultImage({ src, alt = "", className }: { src?: string; alt?: str
       </div>
     );
   }
-  return <img src={displaySrc} alt={alt} className={className} onError={image.onError} />;
+  return <img src={displaySrc} referrerPolicy="no-referrer" alt={alt} className={className} onError={image.onError} />;
 }
 
 function ScoreBar({ label, value }: { label: string; value: number }) {

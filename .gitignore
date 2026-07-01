@@ -28,3 +28,6 @@ src-tauri/target/
 
 # TypeScript build cache
 *.tsbuildinfo
+src-tauri/src/main_test.rs
+test-import.js
+test-reqwest.rs

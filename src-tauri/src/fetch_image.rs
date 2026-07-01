@@ -1,9 +1,13 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use image::imageops::FilterType;
+use std::io::Cursor;
 
 /// Fetches an image from a URL using native Rust HTTP (bypasses browser CSP/CORS),
-/// and returns a `data:<mime>;base64,<data>` string suitable for storing in thumbnail_data.
+/// resizes it in the background if it's too large, and returns a compressed JPEG 
+/// `data:<mime>;base64,<data>` string suitable for storing in thumbnail_data.
 #[tauri::command]
-pub fn fetch_image_as_data_url(url: String) -> Result<String, String> {
+pub async fn fetch_image_as_data_url(url: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
     let client = reqwest::blocking::Client::builder()
         .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(15))
@@ -18,39 +22,40 @@ pub fn fetch_image_as_data_url(url: String) -> Result<String, String> {
         .send()
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
-    if !response.status().is_success() {
-        return Err(format!("Server returned status {}", response.status()));
-    }
+        if !response.status().is_success() {
+            return Err(format!("Server returned status {}", response.status()));
+        }
 
-    // Detect MIME from Content-Type header, default to image/png
-    let mime = response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| {
-            // Strip parameters (e.g. "image/jpeg; charset=utf-8" → "image/jpeg")
-            s.split(';').next().unwrap_or("image/png").trim().to_string()
-        })
-        .unwrap_or_else(|| {
-            // Guess from URL extension
-            if url.contains(".jpg") || url.contains(".jpeg") {
-                "image/jpeg".to_string()
-            } else if url.contains(".webp") {
-                "image/webp".to_string()
-            } else {
-                "image/png".to_string()
-            }
-        });
+    // We decode and compress to jpeg anyway, so we don't strictly need to parse the mime type here.
 
-    let bytes = response
-        .bytes()
-        .map_err(|e| format!("Failed to read image bytes: {}", e))?;
+        let bytes = response
+            .bytes()
+            .map_err(|e| format!("Failed to read image bytes: {}", e))?;
 
-    // Sanity check: first few bytes should look like an image
-    if bytes.len() < 8 {
-        return Err("Response too small to be a valid image".to_string());
-    }
+        // Sanity check: first few bytes should look like an image
+        if bytes.len() < 8 {
+            return Err("Response too small to be a valid image".to_string());
+        }
 
-    let encoded = STANDARD.encode(&bytes);
-    Ok(format!("data:{};base64,{}", mime, encoded))
+        // Parse and compress image
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| format!("Failed to decode image: {}", e))?;
+        
+        let max_dim = 400;
+        let resized = if img.width() > max_dim || img.height() > max_dim {
+            img.resize(max_dim, max_dim, FilterType::Lanczos3)
+        } else {
+            img
+        };
+
+        let mut jpeg_bytes = Cursor::new(Vec::new());
+        resized
+            .write_to(&mut jpeg_bytes, image::ImageFormat::Jpeg)
+            .map_err(|e| format!("Failed to encode jpeg: {}", e))?;
+
+        let encoded = STANDARD.encode(jpeg_bytes.into_inner());
+        Ok(format!("data:image/jpeg;base64,{}", encoded))
+    })
+    .await
+    .map_err(|e| format!("Thread failed: {}", e))?
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/importLearning";
 import { cn } from "@/lib/utils";
 import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
+import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import type { Provider, Project } from "@/types";
 
 // ─── Parameter Detection ──────────────────────────────────────
@@ -250,8 +251,8 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     try {
       const parsed = parseMJSourceUrl(url);
       const fetchUrl = parsed?.cdnUrl ?? url;
-      const dataUrl = await fetchImageAsDataUrl(fetchUrl);
-      onThumbnailData(dataUrl);
+      const thumb = await fetchImageAsDataUrl(fetchUrl);
+      onThumbnailData(thumb);
     } catch {
       // silently ignore — user can upload manually
     } finally {
@@ -270,8 +271,10 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      onThumbnailData(reader.result as string);
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      const thumb = await thumbnailFromDataUrl(dataUrl, 400);
+      onThumbnailData(thumb);
     };
     reader.readAsDataURL(file);
   };
@@ -527,7 +530,7 @@ export function ManualImport() {
         const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
         if (fetchUrl) {
           fetchImageAsDataUrl(fetchUrl)
-            .then((dataUrl) => update(id, { thumbnail_data: dataUrl }))
+            .then((thumb) => update(id, { thumbnail_data: thumb }))
             .catch(() => {}); // silently ignore — user can add manually later
         }
       }

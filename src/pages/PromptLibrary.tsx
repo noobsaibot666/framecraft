@@ -325,6 +325,16 @@ export function PromptLibrary() {
   useEffect(() => { getResultCoverMap().then(setCoverMap); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly, originalsOnly]);
 
+  // One-time URL param init — read ?provider and ?status on mount
+  useEffect(() => {
+    const p = searchParams.get("provider");
+    const s = searchParams.get("status");
+    if (p) setFilters({ provider: p as Provider });
+    if (s === "winner") setFilters({ isWinner: true });
+    else if (s === "failed") setFilters({ isFailed: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleSearch = useCallback(
     (q: string) => {
       setSearchVal(q);

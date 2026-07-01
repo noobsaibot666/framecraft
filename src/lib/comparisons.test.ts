@@ -269,4 +269,17 @@ describe("comparisons DB error propagation", () => {
     const { loadProjectResults } = await import("./comparisons");
     await expect(loadProjectResults("p")).rejects.toThrow("loadProjectResults: permission denied");
   });
+
+  it("loadSessionItemResults propagates DB errors with operation context", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("disk I/O error"));
+    const { loadSessionItemResults } = await import("./comparisons");
+    await expect(loadSessionItemResults("s")).rejects.toThrow("loadSessionItemResults: disk I/O error");
+  });
+
+  it("loadSessionItemResults returns empty array outside Tauri", async () => {
+    // isTauri is false — no DB access, returns [] immediately
+    const { loadSessionItemResults } = await import("./comparisons");
+    await expect(loadSessionItemResults("s")).resolves.toEqual([]);
+  });
 });

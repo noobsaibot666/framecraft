@@ -36,6 +36,7 @@ const CampaignLibrary = lazy(() => import("@/pages/CampaignLibrary").then((m) =>
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => ({ default: m.CampaignDetail })));
 const TokenDetail = lazy(() => import("@/pages/TokenDetail").then((m) => ({ default: m.TokenDetail })));
 const TokenLibrary = lazy(() => import("@/pages/TokenLibrary").then((m) => ({ default: m.TokenLibrary })));
+const NotFound = lazy(() => import("@/pages/NotFound").then((m) => ({ default: m.NotFound })));
 
 // Warm the lazy-chunk module cache immediately at module-evaluation time.
 // Tauri serves assets from local disk so all 31 imports resolve in <50ms total.
@@ -72,6 +73,7 @@ void import("@/pages/CampaignLibrary");
 void import("@/pages/CampaignDetail");
 void import("@/pages/TokenDetail");
 void import("@/pages/TokenLibrary");
+void import("@/pages/NotFound");
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -133,6 +135,7 @@ export default function App() {
               <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
               <Route path="/projects/:id/sequence" element={routeElement(<ProjectSequence />)} />
               <Route path="/settings" element={routeElement(<Settings />)} />
+              <Route path="*" element={routeElement(<NotFound />)} />
             </Route>
           </Routes>
         </BrowserRouter>

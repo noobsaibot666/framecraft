@@ -402,6 +402,45 @@ export async function loadProjectResults(projectId: string): Promise<ComparisonR
   }
 }
 
+// ─── Load results for a specific session ─────────────────────
+
+export async function loadSessionItemResults(sessionId: string): Promise<ComparisonResult[]> {
+  if (!isTauri) return [];
+  try {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT
+         r.id as result_id,
+         r.prompt_id,
+         p.title as prompt_title,
+         p.provider as prompt_provider,
+         p.version as prompt_version,
+         r.thumbnail_path,
+         r.file_path,
+         r.score_overall,
+         r.score_realism,
+         r.score_brand_fit,
+         r.score_composition,
+         r.score_lighting,
+         r.score_ai_risk,
+         r.is_winner,
+         r.is_failed,
+         r.artifacts,
+         r.created_at
+       FROM results r
+       JOIN prompts p ON p.id = r.prompt_id
+       WHERE r.id IN (
+         SELECT result_id FROM comparison_items WHERE session_id = $1
+       )
+       ORDER BY r.created_at DESC`,
+      [sessionId]
+    )) as Record<string, unknown>[];
+    return rows.map(rowToComparisonResult);
+  } catch (err) {
+    throw databaseError("loadSessionItemResults", err);
+  }
+}
+
 // ─── Decision sync ────────────────────────────────────────────
 
 /**

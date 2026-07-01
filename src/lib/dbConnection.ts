@@ -1,5 +1,6 @@
 import { getActiveLibrarySelection, getActiveSqliteUrl, resolveLibraryPaths } from "./libraryConfig";
 import { createNativeSqliteDatabase } from "./nativeSqlite";
+import { startThumbnailMigration } from "./thumbnailMigration";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -62,6 +63,7 @@ export async function getFramecraftDb(): Promise<any> {
     if (!_db || _dbUrl !== dbPath) {
       _db = createNativeSqliteDatabase(dbPath);
       await ensureSchemaUpToDate(_db);
+      startThumbnailMigration(_db);
       _dbUrl = dbPath;
     }
     return _db;
@@ -79,6 +81,7 @@ export async function getFramecraftDb(): Promise<any> {
     const base = (await appConfigDir()).replace(/[\\/]?$/, "/");
     _db = createNativeSqliteDatabase(`${base}${url.slice("sqlite:".length)}`);
     await ensureSchemaUpToDate(_db);
+    startThumbnailMigration(_db);
     _dbUrl = url;
   }
   return _db;

@@ -1246,7 +1246,7 @@ export function CraftPrompt() {
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save prompt");
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -1268,7 +1268,7 @@ export function CraftPrompt() {
         navigate(`/library/${newId}`);
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save new version");
+      toast.error(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingNewVersion(false);
     }

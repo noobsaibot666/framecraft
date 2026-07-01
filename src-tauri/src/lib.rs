@@ -187,6 +187,7 @@ pub fn run() {
             library_package::merge_library_package_native,
             native_sqlite::native_sqlite_execute,
             native_sqlite::native_sqlite_execute_batch,
+            native_sqlite::native_sqlite_execute_transaction,
             native_sqlite::native_sqlite_select,
         ])
         .on_window_event(|window, event| {

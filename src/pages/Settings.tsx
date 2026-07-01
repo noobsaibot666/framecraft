@@ -19,11 +19,13 @@ import {
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
-import { clearAllData, getPrompts, createPrompt } from "@/lib/db";
+import { clearAllData, getPrompts } from "@/lib/db";
+import { exportPromptTransfer, parsePromptTransfer, importPromptTransfer } from "@/lib/promptTransfer";
 import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import {
   backupActiveLibrary,
+  cleanupOrphanedManagedMedia,
   createLibraryFromDialog,
   exportActiveLibraryFromDialog,
   formatLibraryActionError,
@@ -38,8 +40,10 @@ import {
   revealActiveLibraryFolder,
   retryActiveFailedSharedIngestJobs,
   restoreLibraryFromDialog,
+  scanOrphanedManagedMedia,
   useLocalAppDataLibrary,
   type LibrarySettingsState,
+  type OrphanScanResult,
 } from "@/lib/librarySettings";
 import type { SharedIngestStatus } from "@/lib/sharedIngest";
 import {
@@ -58,7 +62,6 @@ import {
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
 import { getLibraryHealth, EMPTY_LIBRARY_HEALTH, type LibraryHealth } from "@/lib/libraryHealth";
 import { useNavigate } from "react-router-dom";
-import type { Prompt } from "@/types";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { getRegisteredShortcuts, formatShortcutKeys } from "@/lib/shortcuts";
@@ -192,6 +195,9 @@ export function Settings() {
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [sharedIngestStatus, setSharedIngestStatus] = useState<SharedIngestStatus | null>(null);
   const [health, setHealth] = useState<LibraryHealth>(EMPTY_LIBRARY_HEALTH);
+  const [orphanScan, setOrphanScan] = useState<OrphanScanResult | null>(null);
+  const [orphanBusy, setOrphanBusy] = useState(false);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
   const navigate = useNavigate();
 
   const canRepairLibraryPackage =
@@ -247,12 +253,12 @@ export function Settings() {
     setExporting(true);
     try {
       const prompts = await getPrompts();
-      const data = JSON.stringify({ version: 1, exported_at: new Date().toISOString(), prompts }, null, 2);
+      const data = JSON.stringify(exportPromptTransfer(prompts), null, 2);
       const blob = new Blob([data], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `framecraft-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `framecraft-prompt-transfer-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -298,7 +304,7 @@ export function Settings() {
       "merge-library",
       importLibraryIntoActiveFromDialog,
       (report) => report
-        ? `Library merged. Prompts ${report.prompts.imported} imported, ${report.prompts.skippedDuplicates} skipped, ${report.prompts.remapped} remapped. Results ${report.results.imported} imported, ${report.results.skippedDuplicates} skipped, ${report.results.remapped} remapped. References ${report.references.imported} imported, ${report.references.skippedDuplicates} skipped, ${report.references.remapped} remapped.`
+        ? `Library merged (29-table manifest v${report.manifestVersion}). ${Object.values(report.tables).reduce((sum, table) => sum + table.imported, 0)} rows imported. Prompts ${report.prompts.imported}, results ${report.results.imported}, references ${report.references.imported}.`
         : "Library import cancelled."
     );
   };
@@ -336,6 +342,34 @@ export function Settings() {
     );
   };
 
+  const handleScanOrphans = async () => {
+    setOrphanBusy(true);
+    setConfirmCleanup(false);
+    try {
+      setOrphanScan(await scanOrphanedManagedMedia());
+    } catch (err) {
+      toast.error(`Orphan scan failed: ${String(err instanceof Error ? err.message : err)}`);
+    } finally {
+      setOrphanBusy(false);
+    }
+  };
+
+  const handleCleanupOrphans = async () => {
+    if (!orphanScan) return;
+    if (!confirmCleanup) { setConfirmCleanup(true); setTimeout(() => setConfirmCleanup(false), 5000); return; }
+    setOrphanBusy(true);
+    try {
+      const { removed } = await cleanupOrphanedManagedMedia(orphanScan.orphanPaths);
+      setOrphanScan(null);
+      setConfirmCleanup(false);
+      toast.success(`Removed ${removed} orphaned media file${removed === 1 ? "" : "s"}.`);
+    } catch (err) {
+      toast.error(`Cleanup failed: ${String(err instanceof Error ? err.message : err)}`);
+    } finally {
+      setOrphanBusy(false);
+    }
+  };
+
   const handleRevealLibrary = () => {
     runLibraryAction("reveal", async () => {
       await revealActiveLibraryFolder();
@@ -357,51 +391,23 @@ export function Settings() {
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      let data: { version: number; prompts: Prompt[] };
+      let data;
       try {
-        data = JSON.parse(await file.text()) as { version: number; prompts: Prompt[] };
-      } catch {
-        alert("Failed to read import file.");
-        return;
-      }
-      if (!data.prompts || !Array.isArray(data.prompts)) {
-        alert("Invalid export file format.");
+        data = parsePromptTransfer(await file.text());
+      } catch (err) {
+        toast.error(String(err instanceof Error ? err.message : err));
         return;
       }
       const total = data.prompts.length;
       setImportStatus({ done: 0, total, finished: false });
-      let done = 0;
-      for (const p of data.prompts) {
-        await createPrompt({
-          title: p.title,
-          description: p.description ?? undefined,
-          provider: p.provider,
-          category: p.category ?? undefined,
-          use_case: p.use_case ?? undefined,
-          prompt_text: p.prompt_text,
-          avoidance_text: p.avoidance_text ?? undefined,
-          aspect_ratio: p.aspect_ratio ?? undefined,
-          model_version: p.model_version ?? undefined,
-          camera: p.camera ?? undefined,
-          lens: p.lens ?? undefined,
-          lighting: p.lighting ?? undefined,
-          style_ref: p.style_ref ?? undefined,
-          parameters: p.parameters ?? undefined,
-          tags: p.tags ?? undefined,
-          rating: p.rating ?? undefined,
-          ai_look_risk: p.ai_look_risk ?? undefined,
-          is_winner: p.is_winner ?? undefined,
-          is_failed: p.is_failed ?? undefined,
-          is_recipe: p.is_recipe ?? undefined,
-          failure_notes: p.failure_notes ?? undefined,
-          notes: p.notes ?? undefined,
-          version: p.version ?? undefined,
-        });
-        done++;
-        setImportStatus({ done, total, finished: false });
+      try {
+        const count = await importPromptTransfer(data);
+        setImportStatus({ done: count, total, finished: true });
+        fetchStats();
+      } catch (err) {
+        setImportStatus(null);
+        toast.error(`Prompt transfer failed: ${String(err instanceof Error ? err.message : err)}`);
       }
-      setImportStatus({ done, total, finished: true });
-      fetchStats();
     };
     input.click();
   };
@@ -995,7 +1001,7 @@ export function Settings() {
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
             <p className="font-mono text-[13px] text-readable leading-relaxed">
-              Export your prompt library as JSON to back it up or transfer to another device.
+              Transfer your prompt library to another device using the Framecraft Prompt Transfer format (.json). Full-library snapshots use the library export action above.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -1005,12 +1011,12 @@ export function Settings() {
                 disabled={exporting || stats.total_prompts === 0}
               >
                 <Download size={11} />
-                {exporting ? "Exporting…" : `Export Library (${stats.total_prompts} prompts)`}
+                {exporting ? "Exporting…" : `Download Prompt Transfer (${stats.total_prompts})`}
               </Button>
               <Button variant="ghost" size="sm" onClick={handleImport}
                 disabled={importStatus !== null && !importStatus.finished}>
                 <Upload size={11} />
-                Import JSON
+                Import Prompt Transfer
               </Button>
             </div>
             {importStatus && (
@@ -1018,6 +1024,42 @@ export function Settings() {
                 {importStatus.finished
                   ? <span className="flex items-center gap-1.5"><Check size={10} className="text-white/40" /> Imported {importStatus.done} of {importStatus.total} prompts.</span>
                   : `Importing… ${importStatus.done} / ${importStatus.total}`}
+              </div>
+            )}
+          </div>
+        </Section>
+
+        {/* Media Reconciliation */}
+        <Section label="MEDIA" className="order-45">
+          <div
+            className="flex flex-col gap-6 p-7 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <p className="font-mono text-[13px] text-readable leading-relaxed">
+              Scan for orphaned media files in the active library that are no longer referenced by any result or reference record.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={handleScanOrphans} disabled={orphanBusy}>
+                <Database size={11} />
+                {orphanBusy ? "Scanning…" : "Scan Orphaned Files"}
+              </Button>
+              {orphanScan && orphanScan.orphanPaths.length > 0 && (
+                <Button
+                  variant={confirmCleanup ? "primary" : "ghost"}
+                  size="sm"
+                  onClick={handleCleanupOrphans}
+                  disabled={orphanBusy}
+                >
+                  <AlertTriangle size={11} />
+                  {confirmCleanup ? `Confirm — Remove ${orphanScan.orphanPaths.length} Files` : `Clean Up ${orphanScan.orphanPaths.length} Files`}
+                </Button>
+              )}
+            </div>
+            {orphanScan && (
+              <div className="font-mono text-[12px] text-readable">
+                {orphanScan.orphanPaths.length === 0
+                  ? <span className="flex items-center gap-1.5"><Check size={10} className="text-white/40" /> No orphaned media files found.</span>
+                  : `${orphanScan.orphanPaths.length} orphaned media file${orphanScan.orphanPaths.length === 1 ? "" : "s"} detected.`}
               </div>
             )}
           </div>

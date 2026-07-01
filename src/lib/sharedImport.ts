@@ -1,14 +1,20 @@
 import type { CreateResultInput } from "./db";
-import { createResult } from "./db";
-import { saveReferenceImage, saveResultImage, thumbnailFromDataUrl } from "./fileStore";
+import { createResult, deleteResult } from "./db";
+import {
+  cleanupStagedMedia,
+  publishStagedMedia,
+  removeManagedPaths,
+  stageManagedImage,
+  thumbnailFromDataUrl,
+} from "./fileStore";
 import {
   createTauriSharedIngestFileSystem,
   getLibrarySettingsState,
   type LibrarySettingsState,
 } from "./librarySettings";
 import { getLibraryLockIdentityNative } from "./libraryLockNative";
-import { addResultToProject } from "./projects";
-import { createReference, type CreateReferenceInput } from "./references";
+import { addResultToProject, removeResultFromProject } from "./projects";
+import { createReference, deleteReference, type CreateReferenceInput } from "./references";
 import {
   createProjectResultLinkJob,
   createReferenceImportJob,
@@ -29,11 +35,16 @@ export interface SharedImportDeps {
   getIdentity: () => Promise<SharedIngestIdentity>;
   createFs: () => Promise<SharedIngestFileSystem>;
   publishSharedIngestJob: typeof publishSharedIngestJob;
-  saveReferenceImage: typeof saveReferenceImage;
+  stageManagedImage: typeof stageManagedImage;
+  publishStagedMedia: typeof publishStagedMedia;
+  cleanupStagedMedia: typeof cleanupStagedMedia;
+  removeManagedPaths: typeof removeManagedPaths;
   createReference: typeof createReference;
-  saveResultImage: typeof saveResultImage;
+  deleteReference: typeof deleteReference;
   createResult: typeof createResult;
+  deleteResult: typeof deleteResult;
   addResultToProject: typeof addResultToProject;
+  removeResultFromProject: typeof removeResultFromProject;
   thumbnailFromDataUrl: typeof thumbnailFromDataUrl;
   generateId: () => string;
   now: () => string;
@@ -63,11 +74,16 @@ const defaultDeps: SharedImportDeps = {
   getIdentity: async () => getLibraryLockIdentityNative(),
   createFs: createTauriSharedIngestFileSystem,
   publishSharedIngestJob,
-  saveReferenceImage,
+  stageManagedImage,
+  publishStagedMedia,
+  cleanupStagedMedia,
+  removeManagedPaths,
   createReference,
-  saveResultImage,
+  deleteReference,
   createResult,
+  deleteResult,
   addResultToProject,
+  removeResultFromProject,
   thumbnailFromDataUrl,
   generateId: () => crypto.randomUUID().replace(/-/g, ""),
   now: () => new Date().toISOString(),
@@ -94,13 +110,26 @@ export async function importReferenceImage(
     return { id: input.referenceId, queued: true };
   }
 
-  const saved = await deps.saveReferenceImage(input.referenceId, input.dataUrl);
-  const id = await deps.createReference({
-    id: input.referenceId,
-    ...input.reference,
-    file_data: saved.filePath,
-    thumbnail_data: saved.thumbPath,
-  });
+  const staged = await deps.stageManagedImage("reference", input.referenceId, input.dataUrl);
+  let id: string;
+  try {
+    id = await deps.createReference({
+      id: input.referenceId,
+      ...input.reference,
+      file_data: staged.originalFinal,
+      thumbnail_data: staged.thumbnailFinal,
+    });
+  } catch (err) {
+    await deps.cleanupStagedMedia(staged);
+    throw err;
+  }
+  try {
+    await deps.publishStagedMedia(staged);
+  } catch (err) {
+    await deps.deleteReference(id);
+    await deps.removeManagedPaths([staged.originalTemp, staged.thumbnailTemp, staged.originalFinal, staged.thumbnailFinal]);
+    throw err;
+  }
   return { id, queued: false };
 }
 
@@ -126,14 +155,27 @@ export async function importResultImage(
     return { id: input.resultId, queued: true };
   }
 
-  const saved = await deps.saveResultImage(input.resultId, input.dataUrl);
-  const id = await deps.createResult({
-    id: input.resultId,
-    prompt_id: input.promptId,
-    file_path: saved.filePath,
-    thumbnail_path: saved.thumbPath,
-    ...input.result,
-  });
+  const staged = await deps.stageManagedImage("result", input.resultId, input.dataUrl);
+  let id: string;
+  try {
+    id = await deps.createResult({
+      id: input.resultId,
+      prompt_id: input.promptId,
+      file_path: staged.originalFinal,
+      thumbnail_path: staged.thumbnailFinal,
+      ...input.result,
+    });
+  } catch (err) {
+    await deps.cleanupStagedMedia(staged);
+    throw err;
+  }
+  try {
+    await deps.publishStagedMedia(staged);
+  } catch (err) {
+    await deps.deleteResult(id);
+    await deps.removeManagedPaths([staged.originalTemp, staged.thumbnailTemp, staged.originalFinal, staged.thumbnailFinal]);
+    throw err;
+  }
   return { id, queued: false };
 }
 
@@ -178,15 +220,35 @@ export async function importProjectResultImage(
     return { id: input.resultId, queued: true };
   }
 
-  const saved = await deps.saveResultImage(input.resultId, input.dataUrl);
-  const id = await deps.createResult({
-    id: input.resultId,
-    prompt_id: input.promptId,
-    file_path: saved.filePath,
-    thumbnail_path: saved.thumbPath,
-    ...input.result,
-  });
-  await deps.addResultToProject(input.projectId, id);
+  const staged = await deps.stageManagedImage("result", input.resultId, input.dataUrl);
+  let id: string;
+  try {
+    id = await deps.createResult({
+      id: input.resultId,
+      prompt_id: input.promptId,
+      file_path: staged.originalFinal,
+      thumbnail_path: staged.thumbnailFinal,
+      ...input.result,
+    });
+  } catch (err) {
+    await deps.cleanupStagedMedia(staged);
+    throw err;
+  }
+  try {
+    await deps.addResultToProject(input.projectId, id);
+  } catch (err) {
+    await deps.deleteResult(id);
+    await deps.cleanupStagedMedia(staged);
+    throw err;
+  }
+  try {
+    await deps.publishStagedMedia(staged);
+  } catch (err) {
+    await deps.removeResultFromProject(input.projectId, id);
+    await deps.deleteResult(id);
+    await deps.removeManagedPaths([staged.originalTemp, staged.thumbnailTemp, staged.originalFinal, staged.thumbnailFinal]);
+    throw err;
+  }
   return { id, queued: false };
 }
 

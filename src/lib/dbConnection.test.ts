@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const load = vi.fn(async (url: string) => ({ url }));
+const close = vi.fn(async () => true);
+const load = vi.fn(async (url: string) => ({ url, close }));
 const invoke = vi.fn(async () => []);
 
 vi.mock("@tauri-apps/plugin-sql", () => ({
@@ -9,6 +10,10 @@ vi.mock("@tauri-apps/plugin-sql", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke,
+}));
+
+vi.mock("@tauri-apps/api/path", () => ({
+  appConfigDir: vi.fn(async () => "/Users/test/Library/Application Support/framecraft/"),
 }));
 
 describe("dbConnection", () => {
@@ -28,6 +33,24 @@ describe("dbConnection", () => {
     expect(first).toBe(second);
     expect(load).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledWith("sqlite:framecraft.db");
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the parameterized native transaction bridge after initializing default migrations", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    const { getFramecraftDb } = await import("./dbConnection");
+    const db = await getFramecraftDb();
+    const statements = [{ operation: "execute" as const, sql: "UPDATE prompts SET rating = $1", bindValues: [5] }];
+
+    expect(typeof db.executeTransaction).toBe("function");
+    await db.executeTransaction(statements);
+
+    expect(load).toHaveBeenCalledWith("sqlite:framecraft.db");
+    expect(invoke).toHaveBeenCalledWith("native_sqlite_execute_transaction", {
+      dbPath: "/Users/test/Library/Application Support/framecraft/framecraft.db",
+      statements,
+    });
+    expect(close.mock.invocationCallOrder[0]).toBeLessThan(invoke.mock.invocationCallOrder[0]);
   });
 
   it("uses native sqlite bridge for selected portable libraries", async () => {

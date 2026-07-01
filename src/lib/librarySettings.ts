@@ -6,19 +6,12 @@ import {
   getActiveLibraryPaths,
   getActiveLibrarySelection,
   isFramecraftLibraryPath,
-  resolveLibraryPaths,
   setSelectedLibraryPath,
   type ActiveLibrarySelection,
   type LibraryPaths,
   type LibraryStorage,
 } from "./libraryConfig";
-import {
-  buildPortableMediaPathRewrites,
-  listRelativeMediaFilenames,
-  type LibraryMergeReport,
-  type LibraryValidationResult,
-  type PortableMediaPathRewrite,
-} from "./libraryPackage";
+import type { LibraryMergeReport, LibraryValidationResult } from "./libraryPackage";
 import {
   backupLibraryPackageNative,
   copyLibraryPackageNative,
@@ -30,7 +23,6 @@ import {
   validateLibraryPackageNative,
 } from "./libraryNative";
 import { getFramecraftDb } from "./dbConnection";
-import { createNativeSqliteDatabase, type NativeSqliteDatabase } from "./nativeSqlite";
 import {
   getSharedIngestStatus,
   processSharedIngestInbox,
@@ -63,16 +55,6 @@ export interface SelectValidatedLibraryResult {
   restartRequired: true;
 }
 
-export interface PortableMediaSources {
-  resultPaths: string[];
-  referencePaths: string[];
-}
-
-export interface PortableMediaDirs {
-  resultsDir: string;
-  referencesDir: string;
-}
-
 export async function selectValidatedLibrary(
   path: string,
   deps: SelectValidatedLibraryDeps
@@ -87,16 +69,6 @@ export async function selectValidatedLibrary(
   }
   setSelectedLibraryPath(path, deps.storage);
   return { path, restartRequired: true };
-}
-
-export function collectPortableMediaFilenames(
-  sources: PortableMediaSources,
-  dirs: PortableMediaDirs
-): { resultFiles: string[]; referenceFiles: string[] } {
-  return {
-    resultFiles: unique(listRelativeMediaFilenames(sources.resultPaths, dirs.resultsDir)),
-    referenceFiles: unique(listRelativeMediaFilenames(sources.referencePaths, dirs.referencesDir)),
-  };
 }
 
 export async function getLibrarySettingsState(): Promise<LibrarySettingsState> {
@@ -147,16 +119,11 @@ export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectVal
 
   const targetBaseDir = ensureLibraryExtension(path);
   const sourceBaseDir = await appDataDir();
-  const sourcePaths = getActiveLibraryPaths(sourceBaseDir, createEmptyStorage());
-  const media = await collectCurrentMedia(sourcePaths);
 
   await migrateAppDataToLibraryNative({
     sourceBaseDir,
     targetBaseDir,
-    resultFiles: media.resultFiles,
-    referenceFiles: media.referenceFiles,
   });
-  await repairCopiedLibraryMediaPaths(sourceBaseDir, targetBaseDir);
 
   return selectValidatedLibrary(targetBaseDir, {
     validateLibrary: validateLibraryPackageNative,
@@ -166,13 +133,9 @@ export async function migrateCurrentDataToLibraryFromDialog(): Promise<SelectVal
 export async function backupActiveLibrary(): Promise<string> {
   if (!isTauri()) throw new Error("Library backup can only run in the native app.");
   const state = await getLibrarySettingsState();
-  const media = await collectCurrentMedia(state.paths);
   const result = await backupLibraryPackageNative({
     sourceBaseDir: state.paths.baseDir,
-    resultFiles: media.resultFiles,
-    referenceFiles: media.referenceFiles,
   });
-  await repairCopiedLibraryMediaPaths(state.paths.baseDir, result.paths.baseDir);
   return result.paths.baseDir;
 }
 
@@ -185,15 +148,11 @@ export async function exportActiveLibraryFromDialog(): Promise<string | null> {
   if (!path) return null;
 
   const state = await getLibrarySettingsState();
-  const media = await collectCurrentMedia(state.paths);
   const targetBaseDir = ensureLibraryExtension(path);
   const result = await copyLibraryPackageNative({
     sourceBaseDir: state.paths.baseDir,
     targetBaseDir,
-    resultFiles: media.resultFiles,
-    referenceFiles: media.referenceFiles,
   });
-  await repairCopiedLibraryMediaPaths(state.paths.baseDir, result.paths.baseDir);
   return result.paths.baseDir;
 }
 
@@ -295,72 +254,60 @@ export function formatLibraryActionError(error: unknown): string {
   }
 }
 
-async function collectCurrentMedia(sourcePaths: LibraryPaths): Promise<{ resultFiles: string[]; referenceFiles: string[] }> {
-  const db = await getFramecraftDb();
-  const resultRows = await db.select(
-    "SELECT file_path, thumbnail_path FROM results WHERE file_path IS NOT NULL OR thumbnail_path IS NOT NULL"
-  ) as Array<{ file_path?: string | null; thumbnail_path?: string | null }>;
-  const referenceRows = await db.select(
-    `SELECT file_data, thumbnail_data FROM "references" WHERE file_data IS NOT NULL OR thumbnail_data IS NOT NULL`
-  ) as Array<{ file_data?: string | null; thumbnail_data?: string | null }>;
+export interface OrphanScanResult {
+  orphanPaths: string[];
+}
 
-  return collectPortableMediaFilenames(
-    {
-      resultPaths: resultRows.flatMap((row) => [row.file_path, row.thumbnail_path]).filter(isString),
-      referencePaths: referenceRows.flatMap((row) => [row.file_data, row.thumbnail_data]).filter(isString),
-    },
-    sourcePaths
-  );
+export async function scanOrphanedManagedMedia(): Promise<OrphanScanResult> {
+  if (!isTauri()) return { orphanPaths: [] };
+  const state = await getLibrarySettingsState();
+  const { resultsDir, referencesDir } = state.paths;
+  const db = await getFramecraftDb();
+  const { readDir } = await import("@tauri-apps/plugin-fs");
+
+  const knownPaths = new Set<string>();
+  const resultRows = (await db.select(
+    "SELECT file_path, thumbnail_path FROM results"
+  )) as { file_path: string | null; thumbnail_path: string | null }[];
+  const refRows = (await db.select(
+    'SELECT file_data, thumbnail_data FROM "references"'
+  )) as { file_data: string | null; thumbnail_data: string | null }[];
+  for (const r of resultRows) {
+    if (r.file_path) knownPaths.add(r.file_path);
+    if (r.thumbnail_path) knownPaths.add(r.thumbnail_path);
+  }
+  for (const r of refRows) {
+    if (r.file_data) knownPaths.add(r.file_data);
+    if (r.thumbnail_data) knownPaths.add(r.thumbnail_data);
+  }
+
+  const orphanPaths: string[] = [];
+  for (const dir of [resultsDir, referencesDir]) {
+    let entries: { name: string }[] = [];
+    try { entries = await readDir(dir); } catch { continue; }
+    for (const entry of entries) {
+      const fullPath = `${dir}${entry.name}`;
+      if (!knownPaths.has(fullPath)) orphanPaths.push(fullPath);
+    }
+  }
+  return { orphanPaths };
+}
+
+export async function cleanupOrphanedManagedMedia(paths: string[]): Promise<{ removed: number }> {
+  if (!isTauri()) return { removed: 0 };
+  const state = await getLibrarySettingsState();
+  const { resultsDir, referencesDir } = state.paths;
+  const { remove } = await import("@tauri-apps/plugin-fs");
+  let removed = 0;
+  for (const p of paths) {
+    if (!p.startsWith(resultsDir) && !p.startsWith(referencesDir)) continue;
+    try { await remove(p); removed++; } catch {}
+  }
+  return { removed };
 }
 
 function ensureLibraryExtension(path: string): string {
   return isFramecraftLibraryPath(path) ? path : `${path}.framecraftlib`;
-}
-
-function createEmptyStorage(): LibraryStorage {
-  return {
-    getItem: () => null,
-    setItem: () => {},
-    removeItem: () => {},
-  };
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function unique(values: string[]): string[] {
-  return Array.from(new Set(values));
-}
-
-async function repairCopiedLibraryMediaPaths(sourceBaseDir: string, targetBaseDir: string): Promise<void> {
-  if (!isTauri()) return;
-  const rewrites = buildPortableMediaPathRewrites({ sourceBaseDir, targetBaseDir });
-  const target = resolveLibraryPaths(targetBaseDir);
-  const db = createNativeSqliteDatabase(target.dbPath);
-
-  try {
-    for (const rewrite of rewrites) {
-      await executeMediaPathRewrite(db, rewrite);
-    }
-  } finally {
-    await db.close?.();
-  }
-}
-
-async function executeMediaPathRewrite(
-  db: Pick<NativeSqliteDatabase, "execute" | "close">,
-  rewrite: PortableMediaPathRewrite
-): Promise<void> {
-  const table = rewrite.table === "references" ? "\"references\"" : "results";
-  const column = rewrite.column;
-  await db.execute(
-    `UPDATE ${table}
-     SET ${column} = $1 || substr(${column}, length($2) + 1)
-     WHERE ${column} IS NOT NULL
-       AND substr(${column}, 1, length($2)) = $2`,
-    [rewrite.targetPrefix, rewrite.sourcePrefix]
-  );
 }
 
 export async function createTauriSharedIngestFileSystem(): Promise<SharedIngestFileSystem> {

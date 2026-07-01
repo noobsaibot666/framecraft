@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ getDb: vi.fn() }));
+vi.mock("./dbConnection", () => ({ getFramecraftDb: mocks.getDb }));
+vi.mock("./fileStore", () => ({ removeManagedPaths: vi.fn(async () => undefined) }));
 import {
   createReference,
   getReferences,
@@ -96,5 +100,45 @@ describe("references in-memory CRUD", () => {
     const all = await getReferences();
     const searched = await searchReferences("");
     expect(searched.length).toBe(all.length);
+  });
+});
+
+// ─── DB error propagation (Tauri branch) ─────────────────────
+
+function fakeDb(error: string) {
+  const reject = () => Promise.reject(error);
+  return { select: reject, execute: reject };
+}
+
+describe("references DB error propagation", () => {
+  beforeEach(() => { vi.resetModules(); });
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("getReferences propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("disk I/O error"));
+    const { getReferences: fresh } = await import("./references");
+    await expect(fresh()).rejects.toThrow("getReferences: disk I/O error");
+  });
+
+  it("getReferenceById propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("SQLITE_BUSY"));
+    const { getReferenceById: fresh } = await import("./references");
+    await expect(fresh("r")).rejects.toThrow("getReferenceById: SQLITE_BUSY");
+  });
+
+  it("searchReferences propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("corrupt page"));
+    const { searchReferences: fresh } = await import("./references");
+    await expect(fresh("brand")).rejects.toThrow("searchReferences: corrupt page");
+  });
+
+  it("getReferencesForPrompt propagates DB errors", async () => {
+    vi.stubGlobal("window", { __TAURI_INTERNALS__: {} });
+    mocks.getDb.mockResolvedValue(fakeDb("permission denied"));
+    const { getReferencesForPrompt: fresh } = await import("./references");
+    await expect(fresh("p")).rejects.toThrow("getReferencesForPrompt: permission denied");
   });
 });

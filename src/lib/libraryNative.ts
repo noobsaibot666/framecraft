@@ -29,8 +29,6 @@ export async function repairLibraryDatabaseSchemaNative(baseDir: string): Promis
 export async function migrateAppDataToLibraryNative(input: {
   sourceBaseDir: string;
   targetBaseDir: string;
-  resultFiles: string[];
-  referenceFiles: string[];
 }): Promise<MigrateAppDataResult> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<MigrateAppDataResult>("migrate_app_data_to_library_native", input);
@@ -39,8 +37,6 @@ export async function migrateAppDataToLibraryNative(input: {
 export async function copyLibraryPackageNative(input: {
   sourceBaseDir: string;
   targetBaseDir: string;
-  resultFiles: string[];
-  referenceFiles: string[];
 }): Promise<CopyLibraryPackageResult> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<CopyLibraryPackageResult>("copy_library_package_native", input);
@@ -48,8 +44,6 @@ export async function copyLibraryPackageNative(input: {
 
 export async function backupLibraryPackageNative(input: {
   sourceBaseDir: string;
-  resultFiles: string[];
-  referenceFiles: string[];
 }): Promise<CopyLibraryPackageResult> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<CopyLibraryPackageResult>("backup_library_package_native", input);

@@ -1,5 +1,6 @@
 import type { Deliverable, DeliverableStatus, Reference } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { databaseError } from "./dbErrors";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -123,8 +124,8 @@ export async function getDeliverablesForProject(projectId: string): Promise<Deli
         [projectId]
       )) as Record<string, unknown>[];
       return rows.map(rowToDeliverable);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("getDeliverablesForProject", err);
     }
   }
   return _devStore
@@ -140,8 +141,8 @@ export async function getDeliverableById(id: string): Promise<Deliverable | null
         "SELECT * FROM project_deliverables WHERE id = $1", [id]
       )) as Record<string, unknown>[];
       return rows[0] ? rowToDeliverable(rows[0]) : null;
-    } catch {
-      return null;
+    } catch (err) {
+      throw databaseError("getDeliverableById", err);
     }
   }
   return _devStore.find((d) => d.id === id) ?? null;
@@ -277,8 +278,8 @@ export async function getReferencesForDeliverable(deliverableId: string): Promis
       created_at: row.created_at as string,
       updated_at: row.updated_at as string,
     }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getReferencesForDeliverable", err);
   }
 }
 

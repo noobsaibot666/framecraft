@@ -1,5 +1,7 @@
 import type { Reference, ReferenceKind, ReferenceRole, ReferenceFilters } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
+import { removeManagedPaths } from "./fileStore";
+import { databaseError } from "./dbErrors";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -152,8 +154,8 @@ export async function getReferences(filters?: ReferenceFilters): Promise<Referen
         values
       )) as Record<string, unknown>[];
       return rows.map(rowToReference);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("getReferences", err);
     }
   }
 
@@ -174,8 +176,8 @@ export async function getReferenceById(id: string): Promise<Reference | null> {
         [id]
       )) as Record<string, unknown>[];
       return rows[0] ? rowToReference(rows[0]) : null;
-    } catch {
-      return null;
+    } catch (err) {
+      throw databaseError("getReferenceById", err);
     }
   }
   return _devStore.find((r) => r.id === id) ?? null;
@@ -203,8 +205,8 @@ export async function searchReferences(query: string, filters?: ReferenceFilters
         values
       )) as Record<string, unknown>[];
       return rows.map(rowToReference);
-    } catch {
-      return [];
+    } catch (err) {
+      throw databaseError("searchReferences", err);
     }
   }
 
@@ -259,13 +261,15 @@ export async function updateReference(id: string, data: Partial<CreateReferenceI
 
 export async function deleteReference(id: string): Promise<void> {
   if (isTauri) {
-    try {
-      const db = await getDb();
-      await db.execute(`DELETE FROM "references" WHERE id = $1`, [id]);
-      return;
-    } catch (err) {
-      throw new Error(String(err));
-    }
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT file_data, thumbnail_data FROM "references" WHERE id = $1`,
+      [id]
+    )) as { file_data: string | null; thumbnail_data: string | null }[];
+    const mediaPaths = rows[0] ? [rows[0].file_data, rows[0].thumbnail_data] : [];
+    await db.execute(`DELETE FROM "references" WHERE id = $1`, [id]);
+    await removeManagedPaths(mediaPaths);
+    return;
   }
   const idx = _devStore.findIndex((r) => r.id === id);
   if (idx !== -1) _devStore.splice(idx, 1);
@@ -318,8 +322,8 @@ export async function getReferencesForPrompt(promptId: string): Promise<(Referen
       [promptId]
     )) as Record<string, unknown>[];
     return rows.map((row) => ({ ...rowToReference(row), role: row.role as ReferenceRole }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getReferencesForPrompt", err);
   }
 }
 
@@ -336,8 +340,8 @@ export async function getPromptsForReference(referenceId: string): Promise<{ id:
       [referenceId]
     )) as Record<string, unknown>[];
     return rows.map((r) => ({ id: r.id as string, title: r.title as string, role: r.role as ReferenceRole }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getPromptsForReference", err);
   }
 }
 
@@ -370,8 +374,8 @@ export async function getReferencesForResult(resultId: string): Promise<(Referen
       [resultId]
     )) as Record<string, unknown>[];
     return rows.map((row) => ({ ...rowToReference(row), role: row.role as ReferenceRole }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getReferencesForResult", err);
   }
 }
 
@@ -384,7 +388,7 @@ export async function getResultsForReference(referenceId: string): Promise<{ id:
       [referenceId]
     )) as Record<string, unknown>[];
     return rows.map((r) => ({ id: r.id as string, role: r.role as ReferenceRole }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw databaseError("getResultsForReference", err);
   }
 }

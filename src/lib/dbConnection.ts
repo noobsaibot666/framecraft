@@ -24,7 +24,14 @@ export async function getFramecraftDb(): Promise<any> {
   const url = await getActiveSqliteUrl();
   if (!_db || _dbUrl !== url) {
     const SqlPlugin = await import("@tauri-apps/plugin-sql");
-    _db = await SqlPlugin.default.load(url);
+    // Loading the plugin applies registered migrations. Runtime access then uses
+    // the single-connection native bridge so multi-statement operations are real
+    // SQLite transactions rather than calls distributed across a connection pool.
+    const migrationDb = await SqlPlugin.default.load(url);
+    await migrationDb.close();
+    const { appConfigDir } = await import("@tauri-apps/api/path");
+    const base = (await appConfigDir()).replace(/[\\/]?$/, "/");
+    _db = createNativeSqliteDatabase(`${base}${url.slice("sqlite:".length)}`);
     _dbUrl = url;
   }
   return _db;

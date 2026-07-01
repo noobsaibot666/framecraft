@@ -7,6 +7,23 @@
  */
 export async function fetchImageAsDataUrl(url: string): Promise<string> {
   const { invoke } = await import("@tauri-apps/api/core");
+
+  try {
+    // Attempt to fetch natively via browser. This bypasses Cloudflare bot protection 
+    // because it uses the real WebKit browser engine with correct TLS fingerprint.
+    const res = await fetch(url, { mode: "cors" });
+    if (res.ok) {
+      const buffer = await res.arrayBuffer();
+      // Pass the raw bytes to Rust for background CPU processing (resizing & compression)
+      // Tauri v2 natively optimizes passing Uint8Array to Vec<u8> IPC
+      const uint8Array = new Uint8Array(buffer);
+      return await invoke<string>("compress_image_from_bytes", { bytes: uint8Array });
+    }
+  } catch (err) {
+    console.warn("Browser fetch failed, falling back to Rust reqwest", err);
+  }
+
+  // Fallback to pure Rust reqwest if browser fetch fails (e.g. CORS block that reqwest wouldn't care about)
   return invoke<string>("fetch_image_as_data_url", { url });
 }
 

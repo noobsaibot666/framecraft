@@ -191,6 +191,7 @@ pub fn run() {
             native_sqlite::native_sqlite_execute_transaction,
             native_sqlite::native_sqlite_select,
             fetch_image::fetch_image_as_data_url,
+            fetch_image::compress_image_from_bytes,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

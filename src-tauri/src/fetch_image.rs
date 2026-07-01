@@ -32,30 +32,46 @@ pub async fn fetch_image_as_data_url(url: String) -> Result<String, String> {
             .bytes()
             .map_err(|e| format!("Failed to read image bytes: {}", e))?;
 
-        // Sanity check: first few bytes should look like an image
-        if bytes.len() < 8 {
-            return Err("Response too small to be a valid image".to_string());
-        }
-
-        // Parse and compress image
-        let img = image::load_from_memory(&bytes)
-            .map_err(|e| format!("Failed to decode image: {}", e))?;
-        
-        let max_dim = 400;
-        let resized = if img.width() > max_dim || img.height() > max_dim {
-            img.resize(max_dim, max_dim, FilterType::Lanczos3)
-        } else {
-            img
-        };
-
-        let mut jpeg_bytes = Cursor::new(Vec::new());
-        resized
-            .write_to(&mut jpeg_bytes, image::ImageFormat::Jpeg)
-            .map_err(|e| format!("Failed to encode jpeg: {}", e))?;
-
-        let encoded = STANDARD.encode(jpeg_bytes.into_inner());
-        Ok(format!("data:image/jpeg;base64,{}", encoded))
+        compress_bytes_to_data_url(&bytes)
     })
     .await
     .map_err(|e| format!("Thread failed: {}", e))?
+}
+
+/// Takes a raw byte array from JS (e.g. from browser fetch), resizes, and returns a data URL.
+/// This allows the browser to do the fetching (bypassing Cloudflare/bot blocks) while
+/// Rust handles the heavy CPU lifting of image decoding/encoding off the main thread.
+#[tauri::command]
+pub async fn compress_image_from_bytes(bytes: Vec<u8>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        compress_bytes_to_data_url(&bytes)
+    })
+    .await
+    .map_err(|e| format!("Thread failed: {}", e))?
+}
+
+fn compress_bytes_to_data_url(bytes: &[u8]) -> Result<String, String> {
+    // Sanity check: first few bytes should look like an image
+    if bytes.len() < 8 {
+        return Err("Response too small to be a valid image".to_string());
+    }
+
+    // Parse and compress image
+    let img = image::load_from_memory(bytes)
+        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    
+    let max_dim = 400;
+    let resized = if img.width() > max_dim || img.height() > max_dim {
+        img.resize(max_dim, max_dim, FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    let mut jpeg_bytes = Cursor::new(Vec::new());
+    resized
+        .write_to(&mut jpeg_bytes, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("Failed to encode jpeg: {}", e))?;
+
+    let encoded = STANDARD.encode(jpeg_bytes.into_inner());
+    Ok(format!("data:image/jpeg;base64,{}", encoded))
 }

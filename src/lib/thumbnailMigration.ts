@@ -8,6 +8,8 @@
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+import { fetchImageAsDataUrl } from "@/lib/fetchImageUrl";
+
 /** How long to wait between fetches so we don't hammer the network. */
 const BETWEEN_MS = 300;
 
@@ -61,8 +63,6 @@ async function runMigration(db: DbHandle): Promise<void> {
 
     console.info(`[thumbnail-migration] ${rows.length} prompts need thumbnails — fetching in background…`);
 
-    const { invoke } = await import("@tauri-apps/api/core");
-
     for (const row of rows) {
       const id = row.id as string;
       const url = row.source_url as string;
@@ -71,8 +71,9 @@ async function runMigration(db: DbHandle): Promise<void> {
       if (!looksLikeImageUrl(url)) continue;
 
       try {
-        // fetch_image_as_data_url already downscales & JPEG-encodes in Rust
-        const thumb = await invoke<string>("fetch_image_as_data_url", { url });
+        // fetchImageAsDataUrl uses JS fetch first to bypass Cloudflare bot protection, 
+        // then falls back to Rust reqwest. Both eventually use Rust for resizing/compression.
+        const thumb = await fetchImageAsDataUrl(url);
         if (thumb && thumb.startsWith("data:")) {
           await db.execute(
             `UPDATE prompts SET thumbnail_data = $1, updated_at = $2 WHERE id = $3`,

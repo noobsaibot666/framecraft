@@ -14,6 +14,12 @@ const BETWEEN_MS = 300;
 let migrationStarted = false;
 
 /**
+ * Custom DOM event fired on `window` whenever a thumbnail is saved.
+ * Payload: CustomEvent<{ id: string; thumbnail_data: string }>
+ */
+export const THUMBNAIL_UPDATED_EVENT = "framecraft:thumbnail-updated";
+
+/**
  * Start the background thumbnail migration.  Safe to call multiple times —
  * it only ever runs once per app session.
  *
@@ -73,6 +79,13 @@ async function runMigration(db: DbHandle): Promise<void> {
             [thumb, new Date().toISOString(), id]
           );
           console.info(`[thumbnail-migration] ✓ ${id}`);
+
+          // Notify the UI so it can patch in-memory state without a full reload.
+          window.dispatchEvent(
+            new CustomEvent<{ id: string; thumbnail_data: string }>(THUMBNAIL_UPDATED_EVENT, {
+              detail: { id, thumbnail_data: thumb },
+            })
+          );
         }
       } catch {
         // Silently skip — URL may be expired/unreachable

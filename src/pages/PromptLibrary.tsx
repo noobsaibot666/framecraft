@@ -15,6 +15,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { getPreferences } from "@/lib/userPreferences";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
+import { THUMBNAIL_UPDATED_EVENT } from "@/lib/thumbnailMigration";
 
 registerShortcutLabel("cmd+n", "New prompt (Prompt Library)");
 registerShortcutLabel("escape", "Exit batch mode (Prompt Library)");
@@ -296,6 +297,7 @@ export function PromptLibrary() {
     sortBy,
     remove,
     update,
+    patch,
     filteredAndSorted,
   } = usePromptStore();
 
@@ -321,6 +323,17 @@ export function PromptLibrary() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
+
+  // Listen for background thumbnail migrations and patch the store live
+  useEffect(() => {
+    const handleThumbUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string; thumbnail_data: string }>;
+      patch(customEvent.detail.id, { thumbnail_data: customEvent.detail.thumbnail_data });
+    };
+    window.addEventListener(THUMBNAIL_UPDATED_EVENT, handleThumbUpdate);
+    return () => window.removeEventListener(THUMBNAIL_UPDATED_EVENT, handleThumbUpdate);
+  }, [patch]);
+
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
   useEffect(() => { getResultCoverMap().then(setCoverMap); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly, originalsOnly]);

@@ -26,6 +26,7 @@ interface PromptState {
   getById: (id: string) => Promise<Prompt | null>;
   create: (data: CreatePromptInput) => Promise<string>;
   update: (id: string, data: Partial<CreatePromptInput>) => Promise<void>;
+  patch: (id: string, data: Partial<Prompt>) => void;
   remove: (id: string) => Promise<void>;
   filteredAndSorted: (resultSummary?: ResultSummaryMap) => Prompt[];
 }
@@ -79,6 +80,12 @@ export const usePromptStore = create<PromptState>((set, get) => ({
     // Refresh only the changed record in-place.
     const updated = await getPromptById(id);
     if (updated) set((s) => ({ prompts: s.prompts.map((p) => (p.id === id ? updated : p)) }));
+  },
+
+  patch: (id, data) => {
+    set((s) => ({
+      prompts: s.prompts.map((p) => (p.id === id ? { ...p, ...data } : p)),
+    }));
   },
 
   remove: async (id) => {

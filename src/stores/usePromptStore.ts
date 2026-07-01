@@ -1,12 +1,12 @@
 import { create } from "zustand";
 import type { Prompt, LibraryFilters, SortOption } from "@/types";
 import {
-  getPrompts,
+  getPromptSummaries,
   getPromptById,
   createPrompt,
   updatePrompt,
   deletePrompt,
-  searchPrompts,
+  searchPromptSummaries,
   type CreatePromptInput,
 } from "@/lib/db";
 import { filterAndSortPrompts, type ResultSummaryMap } from "@/lib/promptFilters";
@@ -41,7 +41,7 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   fetchPrompts: async () => {
     set({ loading: true, error: null });
     try {
-      const prompts = await getPrompts();
+      const prompts = await getPromptSummaries();
       set({ prompts, loading: false });
     } catch (e) {
       set({ error: String(e), loading: false });
@@ -51,7 +51,7 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   search: async (query: string) => {
     set({ searchQuery: query, loading: true });
     try {
-      const prompts = await searchPrompts(query);
+      const prompts = await searchPromptSummaries(query);
       set({ prompts, loading: false });
     } catch (e) {
       set({ error: String(e), loading: false });
@@ -63,8 +63,6 @@ export const usePromptStore = create<PromptState>((set, get) => ({
   setSortBy: (sortBy) => set({ sortBy }),
 
   getById: async (id) => {
-    const local = get().prompts.find((p) => p.id === id);
-    if (local) return local;
     return getPromptById(id);
   },
 

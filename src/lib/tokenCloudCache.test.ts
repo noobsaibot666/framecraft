@@ -51,4 +51,19 @@ describe("createTokenCategoryCache", () => {
       "lighting-sd",
     ]);
   });
+
+  it("evicts rejected loads and bounds retained categories", async () => {
+    const loader = vi.fn(async (categoryId: string) => {
+      if (categoryId === "bad" && loader.mock.calls.length === 1) throw new Error("temporary");
+      return [makeToken({ id: categoryId, category_id: categoryId })];
+    });
+    const cache = createTokenCategoryCache(loader, { maxEntries: 2 });
+
+    await expect(cache.get("bad")).rejects.toThrow("temporary");
+    await expect(cache.get("bad")).resolves.toHaveLength(1);
+    await cache.get("lighting");
+    await cache.get("camera");
+
+    expect(cache.size()).toBe(2);
+  });
 });

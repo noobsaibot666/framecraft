@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, Plus, ImageOff, GitBranch, BookOpen,
@@ -20,6 +20,7 @@ import { formatPromptForProvider, getSupportedFormatterProviders } from "@/lib/p
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { generatePromptVariations, validatePromptForAnalysis } from "@/lib/analyzePrompt";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
 import type { Project, Prompt, Result } from "@/types";
 
 registerShortcutLabel("cmd+e", "Edit prompt (Prompt Detail)");
@@ -66,6 +67,8 @@ export function PromptDetail() {
 
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copiedFormatted, setCopiedFormatted] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -90,19 +93,36 @@ export function PromptDetail() {
   const [linkedProjects, setLinkedProjects] = useState<{ id: string; title: string }[]>([]);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [showProjectLinker, setShowProjectLinker] = useState(false);
+  const loadGuard = useRef(createLatestRequestGuard());
 
   useEffect(() => {
     if (!id) return;
-    getById(id).then((p) => {
-      setPrompt(p);
-      setLoading(false);
+    const token = loadGuard.current.begin();
+    setLoading(true);
+    setLoadError(null);
+    setPrompt(null);
+    Promise.all([
+      getById(id),
+      getResultsForPrompt(id),
+      getPromptVersions(id).catch(() => []),
+      getChildPrompts(id).catch(() => []),
+      getProjectsForPrompt(id).catch(() => []),
+      getProjects({ excludeArchived: true }).catch(() => []),
+    ]).then(([nextPrompt, nextResults, nextVersions, nextChildren, nextLinked, nextProjects]) => {
+      if (!loadGuard.current.isCurrent(token)) return;
+      setPrompt(nextPrompt);
+      setResults(nextResults);
+      setVersions(nextVersions);
+      setChildPrompts(nextChildren);
+      setLinkedProjects(nextLinked);
+      setAllProjects(nextProjects);
+    }).catch(() => {
+      if (loadGuard.current.isCurrent(token)) setLoadError("Could not load this prompt.");
+    }).finally(() => {
+      if (loadGuard.current.isCurrent(token)) setLoading(false);
     });
-    getResultsForPrompt(id).then(setResults);
-    getPromptVersions(id).then(setVersions).catch(() => {});
-    getChildPrompts(id).then(setChildPrompts).catch(() => {});
-    getProjectsForPrompt(id).then(setLinkedProjects).catch(() => {});
-    getProjects({ excludeArchived: true }).then(setAllProjects).catch(() => {});
-  }, [id, getById]);
+    return () => loadGuard.current.invalidate();
+  }, [id, getById, loadAttempt]);
 
   useShortcut("cmd+e", () => prompt && navigate(`/craft/${prompt.id}`), !!prompt);
   useShortcut("cmd+enter", () => { if (prompt) handleAddToQueue(); }, !!prompt);
@@ -381,6 +401,22 @@ export function PromptDetail() {
       <PageContainer>
         <div className="flex items-center justify-center py-32">
           <span className="font-ndot text-[32px] text-dim/30">···</span>
+        </div>
+      </PageContainer>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <PageContainer title="Load Failed">
+        <div className="flex flex-col items-center gap-4 py-20">
+          <span className="font-mono text-[13px] text-dim">{loadError}</span>
+          <div className="flex gap-2">
+            <Button variant="primary" size="sm" onClick={() => setLoadAttempt((value) => value + 1)}>Retry</Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/library")}>
+              <ArrowLeft size={11} /> Back to Library
+            </Button>
+          </div>
         </div>
       </PageContainer>
     );

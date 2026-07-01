@@ -6,6 +6,8 @@ import { PageTransition } from "./PageTransition";
 import { CommandSearch } from "@/components/ui/CommandSearch";
 import { ToastContainer } from "@/components/ui/ToastContainer";
 import { useShortcut, registerShortcutLabel, getRegisteredShortcuts, formatShortcutKeys } from "@/lib/shortcuts";
+import { getFramecraftDb } from "@/lib/dbConnection";
+import { scheduleLikelyRoutePrefetch } from "@/lib/routePrefetch";
 
 registerShortcutLabel("cmd+k", "Open command search");
 registerShortcutLabel("cmd+?", "Show keyboard shortcuts");
@@ -17,11 +19,11 @@ export function AppShell() {
   // Warm the DB connection at startup so the first data page loads instantly.
   useEffect(() => {
     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-      import("@/lib/dbConnection").then(({ getFramecraftDb }) => {
-        getFramecraftDb().catch(() => {});
-      });
+      getFramecraftDb().catch(() => {});
     }
   }, []);
+
+  useEffect(() => scheduleLikelyRoutePrefetch(), []);
 
   const openSearch = useCallback(() => setSearchOpen((open) => !open), []);
   useShortcut("cmd+k", openSearch);

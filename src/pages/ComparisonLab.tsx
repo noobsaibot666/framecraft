@@ -36,7 +36,7 @@ import {
 } from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
-import { fileToDataUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, validateImageFile } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -620,6 +620,7 @@ export function ComparisonLab() {
     setUploading(true);
     setUploadError("");
     try {
+      await validateImageFile(file);
       const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ") || "Comparison upload";
       const dataUrl = await fileToDataUrl(file);
       let result: ComparisonResult;

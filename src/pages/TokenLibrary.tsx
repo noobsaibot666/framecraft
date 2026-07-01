@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { getAllTokens, searchTokens, getTokenCategories, toggleTokenFavorite } from "@/lib/db";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast";
 import type { Token, TokenCategory } from "@/types";
 
 registerShortcutLabel("cmd+f", "Focus search (Token Library)");
@@ -44,8 +45,13 @@ function TokenCard({ token, onFavoriteToggle }: { token: Token; onFavoriteToggle
     e.stopPropagation();
     const next = !fav;
     setFav(next);
-    await toggleTokenFavorite(token.id, next);
-    onFavoriteToggle(token.id, next);
+    try {
+      await toggleTokenFavorite(token.id, next);
+      onFavoriteToggle(token.id, next);
+    } catch {
+      setFav(!next);
+      toast.error("Could not update favorite");
+    }
   };
 
   const handleCopy = async (e: React.MouseEvent) => {
@@ -121,6 +127,8 @@ export function TokenLibrary() {
         ? await searchTokens(q, catId || undefined)
         : await getAllTokens(s);
       setTokens(results);
+    } catch {
+      toast.error("Could not load tokens");
     } finally {
       setLoading(false);
     }

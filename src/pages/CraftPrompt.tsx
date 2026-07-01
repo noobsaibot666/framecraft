@@ -1,4 +1,4 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch, Sparkles } from "lucide-react";
 import { ChevronDown } from "lucide-react";
@@ -25,6 +25,7 @@ import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { useShortcut } from "@/lib/shortcuts";
 import { toast } from "@/lib/toast";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
@@ -812,11 +813,16 @@ export function CraftPrompt() {
   const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
   const [insightsReady, setInsightsReady] = useState(false);
+  const promptLoadGuard = useRef(createLatestRequestGuard());
+  const projectLoadGuard = useRef(createLatestRequestGuard());
+  const impactLoadGuard = useRef(createLatestRequestGuard());
+  const analysisGuard = useRef(createLatestRequestGuard());
 
   useEffect(() => {
     if (!id) return;
+    const token = promptLoadGuard.current.begin();
     getById(id).then((p) => {
-      if (!p) return;
+      if (!promptLoadGuard.current.isCurrent(token) || !p) return;
       setFields({
         ...EMPTY,
         title: p.title, description: p.description ?? "",
@@ -879,6 +885,7 @@ export function CraftPrompt() {
         setMode("manual");
       }
     });
+    return () => promptLoadGuard.current.invalidate();
   }, [id, getById]);
 
   useEffect(() => {
@@ -887,12 +894,17 @@ export function CraftPrompt() {
   }, []);
 
   useEffect(() => {
+    projectLoadGuard.current.invalidate();
     if (!projectId) {
       setProjectContext(null);
       setImpactRefs([]);
       return;
     }
-    getProjectById(projectId).then((project) => setProjectContext(project));
+    const token = projectLoadGuard.current.begin();
+    getProjectById(projectId).then((project) => {
+      if (projectLoadGuard.current.isCurrent(token)) setProjectContext(project);
+    });
+    return () => projectLoadGuard.current.invalidate();
   }, [projectId]);
 
   // Pre-seed token from ?tokenId= when navigating from Token Library
@@ -906,12 +918,19 @@ export function CraftPrompt() {
   }, []);
 
   useEffect(() => {
+    impactLoadGuard.current.invalidate();
     if (!projectId || !insightsReady) return;
     const timer = window.setTimeout(() => {
-      getHighImpactReferences(4, projectId).then(setImpactRefs).catch(() => {});
+      const token = impactLoadGuard.current.begin();
+      getHighImpactReferences(4, projectId).then((references) => {
+        if (impactLoadGuard.current.isCurrent(token)) setImpactRefs(references);
+      }).catch(() => {});
     }, 120);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      impactLoadGuard.current.invalidate();
+    };
   }, [insightsReady, projectId]);
 
   useEffect(() => {
@@ -1048,19 +1067,31 @@ export function CraftPrompt() {
 
   // Auto-analyze when preference is enabled and draft is long enough
   useEffect(() => {
-    if (!insightsReady || !getPreferences().autoAnalyzeDraft) return;
-    if (!validatePromptForAnalysis(deferredAssembled).valid) return;
+    const request = analysisGuard.current.begin();
+    if (!insightsReady || !getPreferences().autoAnalyzeDraft) {
+      setAdviceLoading(false);
+      return;
+    }
+    if (!validatePromptForAnalysis(deferredAssembled).valid) {
+      setAdviceLoading(false);
+      return;
+    }
     const timer = setTimeout(async () => {
       setAdviceLoading(true);
       setAdviceDismissed(false);
       try {
         const result = await analyzePromptDraft({ promptText: deferredAssembled });
-        setAdvice(result);
+        if (analysisGuard.current.isCurrent(request)) setAdvice(result);
+      } catch {
+        if (analysisGuard.current.isCurrent(request)) setAdvice(EMPTY_ADVICE);
       } finally {
-        setAdviceLoading(false);
+        if (analysisGuard.current.isCurrent(request)) setAdviceLoading(false);
       }
     }, 1800);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      analysisGuard.current.invalidate();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deferredAssembled, insightsReady]);
 
@@ -2071,6 +2102,7 @@ export function CraftPrompt() {
                   disabled={!canAnalyze || adviceLoading}
                   title={!canAnalyze ? analyzeCheck.message : "Analyze with Claude Haiku"}
                   onClick={async () => {
+                    const request = analysisGuard.current.begin();
                     setAdviceLoading(true);
                     setAdviceDismissed(false);
                     try {
@@ -2089,11 +2121,13 @@ export function CraftPrompt() {
                         } : undefined,
                         userDirection: analyzeDirection || undefined,
                       });
-                      setAdvice(result);
+                      if (analysisGuard.current.isCurrent(request)) setAdvice(result);
                     } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "Analysis failed — check your Anthropic API key in Settings");
+                      if (analysisGuard.current.isCurrent(request)) {
+                        toast.error(err instanceof Error ? err.message : "Analysis failed — check your Anthropic API key in Settings");
+                      }
                     } finally {
-                      setAdviceLoading(false);
+                      if (analysisGuard.current.isCurrent(request)) setAdviceLoading(false);
                     }
                   }}
                   className="w-full justify-center"

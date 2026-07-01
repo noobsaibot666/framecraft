@@ -1,6 +1,7 @@
 import type { Prompt } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
 import { executeAtomically, type AtomicStatement } from "./dbTransaction";
+import { invalidateRecommendationCache } from "./recommendations";
 
 export interface PromptTransferRecordV2 {
   source_id: string;
@@ -183,5 +184,6 @@ export async function importPromptTransfer(data: PromptTransferV2): Promise<numb
   }));
 
   await executeAtomically(db, statements);
+  invalidateRecommendationCache();
   return data.prompts.length;
 }

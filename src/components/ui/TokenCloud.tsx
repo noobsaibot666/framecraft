@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Plus, Search, Star } from "lucide-react";
 import { getTokenCategories, getTokensByCategory, createToken, toggleTokenFavorite } from "@/lib/db";
 import { createTokenCategoryCache, filterTokensForProvider } from "@/lib/tokenCloudCache";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { TokenCategory, Token } from "@/types";
 
@@ -32,6 +34,7 @@ interface TokenCloudProps {
 
 export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressedText }: TokenCloudProps) {
   const tokenCacheRef = useRef(createTokenCategoryCache(getTokensByCategory));
+  const loadGuardRef = useRef(createLatestRequestGuard());
   const [categories, setCategories] = useState<TokenCategory[]>([]);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string>("");
@@ -57,23 +60,29 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
           setActiveCategoryName(cats[0].name);
         }
       })
+      .catch(() => toast.error("Could not load token categories"))
       .finally(() => setLoadingCats(false));
   }, []);
 
   // Only fetches from DB/cache when the category changes — not when providerFilter changes.
   const loadTokens = useCallback(async (categoryId: string) => {
+    const request = loadGuardRef.current.begin();
     setLoadingTokens(true);
     try {
       const raw = await tokenCacheRef.current.get(categoryId);
-      setRawTokens(raw);
+      if (loadGuardRef.current.isCurrent(request)) setRawTokens(raw);
+    } catch {
+      if (loadGuardRef.current.isCurrent(request)) toast.error("Could not load tokens");
     } finally {
-      setLoadingTokens(false);
+      if (loadGuardRef.current.isCurrent(request)) setLoadingTokens(false);
     }
   }, []);
 
   useEffect(() => {
     if (activeCategoryId) void loadTokens(activeCategoryId);
   }, [activeCategoryId, loadTokens]);
+
+  useEffect(() => () => loadGuardRef.current.invalidate(), []);
 
   // Provider filter applied synchronously — no DB call, no loading flash.
   const tokens = useMemo(() => filterTokensForProvider(rawTokens, providerFilter), [rawTokens, providerFilter]);
@@ -112,7 +121,15 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
     await tokenCacheRef.current.mutate(token.category_id, (prev) =>
       prev.map((current) => current.id === token.id ? { ...current, is_favorite: next } : current)
     );
-    await toggleTokenFavorite(token.id, next);
+    try {
+      await toggleTokenFavorite(token.id, next);
+    } catch {
+      setRawTokens((prev) => prev.map((t) => t.id === token.id ? { ...t, is_favorite: token.is_favorite } : t));
+      await tokenCacheRef.current.mutate(token.category_id, (prev) =>
+        prev.map((current) => current.id === token.id ? { ...current, is_favorite: token.is_favorite } : current)
+      );
+      toast.error("Could not update favorite");
+    }
   };
 
   const selectedSet = new Set(selectedTexts);

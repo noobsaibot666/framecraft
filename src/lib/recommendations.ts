@@ -12,6 +12,7 @@
  */
 
 import type { Prompt, Token, SREF, Profile, Reference, Recipe } from "@/types";
+import { createBoundedAsyncCache } from "./boundedCache";
 import { getFramecraftDb } from "./dbConnection";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -582,7 +583,27 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
   });
 }
 
-const _recCache = new Map<string, { result: RecommendationSet; ts: number }>();
+const _recCache = createBoundedAsyncCache<string, RecommendationSet>({
+  maxEntries: 32,
+  ttlMs: 30_000,
+});
+
+export function buildRecommendationCacheKey(ctx: RecommendationContext): string {
+  return JSON.stringify({
+    provider: ctx.provider ?? "",
+    category: ctx.category ?? "",
+    projectId: ctx.projectId ?? "",
+    excludePromptId: ctx.excludePromptId ?? "",
+    // Recommendation scoring intentionally considers the caller's first tags.
+    // Preserve their order so distinct scoring inputs cannot share a cache key.
+    tags: ctx.tags ?? [],
+    promptText: ctx.promptText ?? "",
+  });
+}
+
+export function invalidateRecommendationCache(): void {
+  _recCache.invalidate();
+}
 
 /** Run all recommendation scorers in parallel, with a 30s in-memory cache per context key. */
 export async function getRecommendations(ctx: RecommendationContext): Promise<RecommendationSet> {
@@ -590,21 +611,11 @@ export async function getRecommendations(ctx: RecommendationContext): Promise<Re
     return { tokens: [], prompts: [], recipes: [], srefs: [], profiles: [], references: [], avoidance: [] };
   }
 
-  const key = `${ctx.provider ?? ""}|${ctx.category ?? ""}|${ctx.projectId ?? ""}|${ctx.excludePromptId ?? ""}`;
-  const cached = _recCache.get(key);
-  if (cached && Date.now() - cached.ts < 30_000) return cached.result;
-
-  const [tokens, prompts, recipes, srefs, profiles, references, avoidance] = await Promise.all([
-    recommendTokens(ctx),
-    recommendPrompts(ctx),
-    recommendRecipes(ctx),
-    recommendSREFs(ctx),
-    recommendProfiles(ctx),
-    recommendReferences(ctx),
-    recommendAvoidance(ctx),
-  ]);
-
-  const result = { tokens, prompts, recipes, srefs, profiles, references, avoidance };
-  _recCache.set(key, { result, ts: Date.now() });
-  return result;
+  return _recCache.get(buildRecommendationCacheKey(ctx), async () => {
+    const [tokens, prompts, recipes, srefs, profiles, references, avoidance] = await Promise.all([
+      recommendTokens(ctx), recommendPrompts(ctx), recommendRecipes(ctx), recommendSREFs(ctx),
+      recommendProfiles(ctx), recommendReferences(ctx), recommendAvoidance(ctx),
+    ]);
+    return { tokens, prompts, recipes, srefs, profiles, references, avoidance };
+  });
 }

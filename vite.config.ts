@@ -16,6 +16,20 @@ export default defineConfig(async () => ({
   },
 
   clearScreen: false,
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("@tauri-apps")) return "vendor-tauri";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("framer-motion") || id.includes("@dnd-kit")) return "vendor-motion";
+          if (id.includes("react") || id.includes("@tanstack")) return "vendor-react";
+          return undefined;
+        },
+      },
+    },
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,

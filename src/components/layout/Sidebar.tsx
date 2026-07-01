@@ -18,6 +18,7 @@ import {
 import { getQueue } from "@/lib/queue";
 import { getActiveSharedIngestStatus } from "@/lib/librarySettings";
 import { cn } from "@/lib/utils";
+import { prefetchRoute } from "@/lib/routePrefetch";
 
 const NAV_GROUPS = [
   {
@@ -77,6 +78,8 @@ function NavItem({
   return (
     <NavLink
       to={to}
+      onMouseEnter={() => prefetchRoute(to)}
+      onFocus={() => prefetchRoute(to)}
       end={to === "/"}
       className={({ isActive }) =>
         cn(
@@ -158,6 +161,8 @@ export function Sidebar() {
       <div className="py-2">
         <NavLink
           to="/settings"
+          onMouseEnter={() => prefetchRoute("/settings")}
+          onFocus={() => prefetchRoute("/settings")}
           className={({ isActive }) =>
             cn(
               "relative flex min-h-10 items-center gap-3 px-4 py-2.5",

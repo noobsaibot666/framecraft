@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Copy, Check, Star, AlertTriangle, ChevronDown, ChevronUp, Lightbulb } from "lucide-react";
 import { getRecommendations, type RecommendationSet, type RecommendationContext } from "@/lib/recommendations";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
 
 // ─── Section wrapper ──────────────────────────────────────────
 
@@ -222,26 +223,38 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
   const [recs, setRecs] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const loadGuard = useRef(createLatestRequestGuard());
+  const tagKey = (context.tags ?? []).join("\u0000");
 
   const load = useCallback(async () => {
+    const request = loadGuard.current.begin();
     if (!context.provider && !context.category) {
       setRecs(null);
+      setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      setRecs(await getRecommendations(context));
+      const next = await getRecommendations(context);
+      if (loadGuard.current.isCurrent(request)) setRecs(next);
+    } catch {
+      if (loadGuard.current.isCurrent(request)) setRecs(null);
     } finally {
-      setLoading(false);
+      if (loadGuard.current.isCurrent(request)) setLoading(false);
     }
-  }, [context.provider, context.category, context.excludePromptId, context.projectId, context.promptText]);
+  // tagKey captures ordered tag changes without depending on the array identity.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.provider, context.category, context.excludePromptId, context.projectId, context.promptText, tagKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load();
     }, 250);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      loadGuard.current.invalidate();
+    };
   }, [load]);
 
   const handleCopyToken = (text: string) => {

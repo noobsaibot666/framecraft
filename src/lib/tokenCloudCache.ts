@@ -1,4 +1,5 @@
 import type { Token } from "@/types";
+import { createBoundedAsyncCache } from "./boundedCache";
 
 type TokenLoader = (categoryId: string) => Promise<Token[]>;
 
@@ -7,21 +8,22 @@ export function filterTokensForProvider(tokens: Token[], providerFilter?: string
   return tokens.filter((token) => !token.provider || token.provider === providerFilter);
 }
 
-export function createTokenCategoryCache(loadTokens: TokenLoader) {
-  const cache = new Map<string, Promise<Token[]>>();
+export function createTokenCategoryCache(
+  loadTokens: TokenLoader,
+  options: { maxEntries?: number; ttlMs?: number } = {}
+) {
+  const cache = createBoundedAsyncCache<string, Token[]>({
+    maxEntries: options.maxEntries ?? 24,
+    ttlMs: options.ttlMs ?? 5 * 60_000,
+    load: async (categoryId) => [...await loadTokens(categoryId)],
+  });
 
   const read = async (categoryId: string): Promise<Token[]> => {
-    let pending = cache.get(categoryId);
-    if (!pending) {
-      pending = loadTokens(categoryId).then((tokens) => [...tokens]);
-      cache.set(categoryId, pending);
-    }
-
-    return [...await pending];
+    return [...await cache.get(categoryId)];
   };
 
   const write = (categoryId: string, tokens: Token[]) => {
-    cache.set(categoryId, Promise.resolve([...tokens]));
+    cache.set(categoryId, [...tokens]);
   };
 
   const mutate = async (categoryId: string, updater: (tokens: Token[]) => Token[]) => {
@@ -31,11 +33,11 @@ export function createTokenCategoryCache(loadTokens: TokenLoader) {
 
   const invalidate = (categoryId?: string) => {
     if (categoryId) {
-      cache.delete(categoryId);
+      cache.invalidate(categoryId);
       return;
     }
-    cache.clear();
+    cache.invalidate();
   };
 
-  return { get: read, set: write, mutate, invalidate };
+  return { get: read, set: write, mutate, invalidate, size: cache.size };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRecommendations, type RecommendationContext } from "./recommendations";
+import { buildRecommendationCacheKey, getRecommendations, type RecommendationContext } from "./recommendations";
 
 // isTauri is false in Vitest — all scorers return empty arrays.
 // These tests verify the public contract: shape, non-throwing, context flexibility.
@@ -10,6 +10,15 @@ const baseCtx: RecommendationContext = {
 };
 
 describe("getRecommendations", () => {
+  it("keys every context field that changes recommendation output", () => {
+    const base = buildRecommendationCacheKey({
+      provider: "midjourney", category: "product", projectId: "p", excludePromptId: "x",
+      tags: ["shoe", "studio"], promptText: "red shoe",
+    });
+    expect(buildRecommendationCacheKey({ provider: "midjourney", category: "product", projectId: "p", excludePromptId: "x", tags: ["shoe", "studio"], promptText: "blue shoe" })).not.toBe(base);
+    expect(buildRecommendationCacheKey({ provider: "midjourney", category: "product", projectId: "p", excludePromptId: "x", tags: ["shoe", "outdoor"], promptText: "red shoe" })).not.toBe(base);
+    expect(buildRecommendationCacheKey({ provider: "midjourney", category: "product", projectId: "p", excludePromptId: "x", tags: ["studio", "shoe"], promptText: "red shoe" })).not.toBe(base);
+  });
   it("returns the full RecommendationSet shape", async () => {
     const result = await getRecommendations(baseCtx);
     expect(result).toHaveProperty("tokens");

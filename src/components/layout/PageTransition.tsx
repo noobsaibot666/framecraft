@@ -28,6 +28,21 @@ export function getPageTransitionProps(reduceMotion: boolean) {
   };
 }
 
+export function retainTransitionOutlets(
+  cache: Map<string, React.ReactNode>,
+  currentKey: string,
+  outlet: React.ReactNode,
+  _previousKey?: string
+): void {
+  cache.delete(currentKey);
+  cache.set(currentKey, outlet);
+  while (cache.size > 2) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
 export function PageTransition() {
   const location = useLocation();
   const outlet = useOutlet();
@@ -39,7 +54,7 @@ export function PageTransition() {
   // and entering elements would show the new page during the crossfade.
   const outletCache = useRef<Map<string, React.ReactNode>>(new Map());
   if (outlet) {
-    outletCache.current.set(key, outlet);
+    retainTransitionOutlets(outletCache.current, key, outlet);
   }
 
   return (

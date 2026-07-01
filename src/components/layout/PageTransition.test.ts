@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getPageTransitionKey, getPageTransitionProps } from "./PageTransition";
+import { getPageTransitionKey, getPageTransitionProps, retainTransitionOutlets } from "./PageTransition";
 
 describe("PageTransition", () => {
   it("keys transitions by pathname + search so distinct URLs get distinct transitions", () => {
@@ -27,5 +27,13 @@ describe("PageTransition", () => {
       exit: { opacity: 1 },
       transition: { duration: 0 },
     });
+  });
+
+  it("retains only the current and previous route outlets", () => {
+    const cache = new Map<string, React.ReactNode>();
+    retainTransitionOutlets(cache, "/a", "A", undefined);
+    retainTransitionOutlets(cache, "/b", "B", "/a");
+    retainTransitionOutlets(cache, "/c", "C", "/b");
+    expect([...cache.entries()]).toEqual([["/b", "B"], ["/c", "C"]]);
   });
 });

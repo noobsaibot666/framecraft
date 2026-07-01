@@ -5,6 +5,7 @@ import { selectPaged, type PageResult, type PageOptions } from "./pagination";
 import { executeAtomically } from "./dbTransaction";
 import { buildBatchUpdatePromptStatements } from "./dbStatements";
 import { removeManagedPaths } from "./fileStore";
+import { invalidateRecommendationCache } from "./recommendations";
 
 // ─── Environment Detection ───────────────────────────────────
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -81,6 +82,12 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
   };
 }
 
+export const PROMPT_SUMMARY_COLUMNS = [
+  "id", "title", "description", "provider", "category", "prompt_text", "aspect_ratio",
+  "tags", "rating", "ai_look_risk", "is_recipe", "is_winner", "is_failed",
+  "parent_id", "thumbnail_data", "created_at", "updated_at",
+].join(", ");
+
 // ─── Public API ──────────────────────────────────────────────
 
 export interface CreatePromptInput {
@@ -131,6 +138,13 @@ export async function getPrompts(): Promise<Prompt[]> {
   return loadMemStore().prompts.sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
+}
+
+export async function getPromptSummaries(): Promise<Prompt[]> {
+  if (!isTauri) return getPrompts();
+  const db = await getDb();
+  const rows = await db.select(`SELECT ${PROMPT_SUMMARY_COLUMNS} FROM prompts ORDER BY created_at DESC`) as Record<string, unknown>[];
+  return rows.map(rowToPrompt);
 }
 
 export async function getRecipePrompts(): Promise<Prompt[]> {
@@ -223,6 +237,7 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         ts,
       ]
     );
+    invalidateRecommendationCache();
     return id;
   }
 
@@ -330,6 +345,7 @@ export async function updatePrompt(
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
+    invalidateRecommendationCache();
     return;
   }
 
@@ -352,6 +368,7 @@ export async function deletePrompt(id: string): Promise<void> {
     if (result?.rowsAffected === 0) {
       throw new Error(`Prompt not found in database (id: ${id})`);
     }
+    invalidateRecommendationCache();
     return;
   }
   const store = loadMemStore();
@@ -365,9 +382,11 @@ export async function batchUpdatePrompts(ids: string[], patch: Partial<Pick<Crea
     const db = await getDb();
     const ts = now();
     await executeAtomically(db, buildBatchUpdatePromptStatements(ids, patch, ts));
+    invalidateRecommendationCache();
     return;
   }
   for (const id of ids) await updatePrompt(id, patch);
+  invalidateRecommendationCache();
 }
 
 export async function searchPrompts(query: string): Promise<Prompt[]> {
@@ -396,6 +415,20 @@ export async function searchPrompts(query: string): Promise<Prompt[]> {
       p.prompt_text.toLowerCase().includes(q) ||
       p.tags?.some((t) => t.toLowerCase().includes(q))
   );
+}
+
+export async function searchPromptSummaries(query: string): Promise<Prompt[]> {
+  const q = query.toLowerCase().trim();
+  if (!q) return getPromptSummaries();
+  if (!isTauri) return searchPrompts(query);
+  const db = await getDb();
+  const rows = await db.select(
+    `SELECT ${PROMPT_SUMMARY_COLUMNS} FROM prompts
+     WHERE lower(title) LIKE $1 OR lower(description) LIKE $1 OR lower(prompt_text) LIKE $1 OR lower(tags) LIKE $1
+     ORDER BY created_at DESC`,
+    [`%${q}%`]
+  ) as Record<string, unknown>[];
+  return rows.map(rowToPrompt);
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -441,13 +474,18 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 export async function clearAllData(): Promise<void> {
   if (isTauri) {
     const db = await getDb();
-    await db.execute("DELETE FROM prompts");
-    await db.execute("DELETE FROM results");
-    await db.execute("DELETE FROM recipes");
-    await db.execute("DELETE FROM srefs");
+    try {
+      await db.execute("DELETE FROM prompts");
+      await db.execute("DELETE FROM results");
+      await db.execute("DELETE FROM recipes");
+      await db.execute("DELETE FROM srefs");
+    } finally {
+      invalidateRecommendationCache();
+    }
     return;
   }
   localStorage.removeItem("framecraft_dev");
+  invalidateRecommendationCache();
 }
 
 // ─── Token Library ────────────────────────────────────────────
@@ -574,6 +612,7 @@ export async function createToken(text: string, categoryId: string): Promise<Tok
       [trimmed, categoryId]
     )) as Record<string, unknown>[];
     if (!rows[0]) throw new Error("Token insert returned no row");
+    invalidateRecommendationCache();
     return rowToToken(rows[0]);
   }
   // Dev mode: return a synthetic token
@@ -592,6 +631,7 @@ export async function toggleTokenFavorite(id: string, isFavorite: boolean): Prom
   if (isTauri) {
     const db = await getDb();
     await db.execute("UPDATE tokens SET is_favorite = $1 WHERE id = $2", [isFavorite ? 1 : 0, id]);
+    invalidateRecommendationCache();
     return;
   }
   // dev mode: no-op (tokens are stateless in dev)
@@ -683,6 +723,7 @@ export async function createAvoidancePattern(data: {
        VALUES ($1, $2, $3, 'all', $4, $5, $6, 0)`,
       [pattern.id, pattern.artifact_type, pattern.label, pattern.description ?? null, pattern.correction_prompt ?? null, pattern.severity]
     );
+    invalidateRecommendationCache();
   }
   return pattern;
 }
@@ -691,6 +732,7 @@ export async function deleteAvoidancePattern(id: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
   await db.execute("DELETE FROM avoidance_patterns WHERE id = $1 AND is_builtin = 0", [id]);
+  invalidateRecommendationCache();
 }
 
 // ─── Results ─────────────────────────────────────────────────
@@ -768,6 +810,7 @@ export async function createResult(data: CreateResultInput): Promise<string> {
         data.notes ?? null,
       ]
     );
+    invalidateRecommendationCache();
     return id;
   }
   const id = data.id ?? `dev_result_${Date.now()}`;
@@ -855,6 +898,7 @@ export async function updateResult(id: string, data: Partial<CreateResultInput>)
         id,
       ]
     );
+    invalidateRecommendationCache();
     return;
   }
   const idx = _devResults.findIndex((r) => r.id === id);
@@ -871,6 +915,7 @@ export async function deleteResult(id: string): Promise<void> {
     const mediaPaths = rows[0] ? [rows[0].file_path, rows[0].thumbnail_path] : [];
     await db.execute("DELETE FROM results WHERE id = $1", [id]);
     await removeManagedPaths(mediaPaths);
+    invalidateRecommendationCache();
     return;
   }
   const idx = _devResults.findIndex((r) => r.id === id);
@@ -1048,6 +1093,7 @@ export async function updateTokenQualityFromResult(
        AND instr(lower($2), lower(text)) > 0`,
     [clampedDelta, promptText]
   );
+  invalidateRecommendationCache();
 }
 
 export async function getFailedResultArtifacts(
@@ -1146,6 +1192,7 @@ export async function updateSREFRating(id: string, rating: number): Promise<void
   if (!isTauri) return;
   const db = await getDb();
   await db.execute("UPDATE srefs SET rating = $1, updated_at = datetime('now') WHERE id = $2", [rating, id]);
+  invalidateRecommendationCache();
 }
 
 export async function createSREF(data: { code: string; title?: string; description?: string; category?: string; best_use?: string; risk_notes?: string; notes?: string; tags?: string[] }): Promise<string> {
@@ -1158,6 +1205,7 @@ export async function createSREF(data: { code: string; title?: string; descripti
       [data.code, data.title ?? null, data.description ?? null, data.category ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
     )) as { id: string }[];
     if (!rows[0]) throw new Error("SREF insert returned no row");
+    invalidateRecommendationCache();
     return rows[0].id;
   }
   return crypto.randomUUID();
@@ -1167,6 +1215,7 @@ export async function deleteSREF(id: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
   await db.execute("DELETE FROM srefs WHERE id = $1", [id]);
+  invalidateRecommendationCache();
 }
 
 export async function getProfiles(): Promise<Profile[]> {
@@ -1182,6 +1231,7 @@ export async function updateProfileRating(id: string, rating: number): Promise<v
   if (!isTauri) return;
   const db = await getDb();
   await db.execute("UPDATE profiles SET rating = $1 WHERE id = $2", [rating, id]);
+  invalidateRecommendationCache();
 }
 
 export async function createProfile(data: { code: string; title?: string; description?: string; best_use?: string; risk_notes?: string; notes?: string; tags?: string[] }): Promise<string> {
@@ -1194,6 +1244,7 @@ export async function createProfile(data: { code: string; title?: string; descri
       [data.code, data.title ?? null, data.description ?? null, data.best_use ?? null, data.risk_notes ?? null, data.notes ?? null, data.tags ? JSON.stringify(data.tags) : null]
     )) as { id: string }[];
     if (!rows[0]) throw new Error("Profile insert returned no row");
+    invalidateRecommendationCache();
     return rows[0].id;
   }
   return crypto.randomUUID();
@@ -1203,4 +1254,5 @@ export async function deleteProfile(id: string): Promise<void> {
   if (!isTauri) return;
   const db = await getDb();
   await db.execute("DELETE FROM profiles WHERE id = $1", [id]);
+  invalidateRecommendationCache();
 }

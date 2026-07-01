@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload, Trophy } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { getReferences, searchReferences, deleteReference } from "@/lib/references";
+import { getReferenceSummaries, searchReferenceSummaries, deleteReference } from "@/lib/references";
 import { getHighImpactReferences } from "@/lib/referenceImpact";
-import { fileToDataUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, validateImageFile } from "@/lib/imageUtils";
 import { importReferenceImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -198,6 +198,7 @@ export function ReferenceLibrary() {
   const [ratingFilter, setRatingFilter] = useState("all");
   const [dropping, setDropping] = useState(false);
   const [dropImporting, setDropImporting] = useState(false);
+  const [dropError, setDropError] = useState("");
   const dropRef = useRef<HTMLDivElement>(null);
 
   const buildFilters = (): ReferenceFilters => {
@@ -214,8 +215,8 @@ export function ReferenceLibrary() {
     try {
       const filters = buildFilters();
       const results = search.trim()
-        ? await searchReferences(search.trim(), filters)
-        : await getReferences(filters);
+        ? await searchReferenceSummaries(search.trim(), filters)
+        : await getReferenceSummaries(filters);
 
       const filtered = ratingFilter === "unrated" ? results.filter((r) => r.rating === 0) : results;
       setRefs(filtered);
@@ -239,8 +240,10 @@ export function ReferenceLibrary() {
     const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
     if (!imageFiles.length) return;
     setDropImporting(true);
+    setDropError("");
     try {
       for (const file of imageFiles) {
+        await validateImageFile(file);
         const refId = crypto.randomUUID().replace(/-/g, "");
         const dataUrl = await fileToDataUrl(file);
         const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
@@ -257,6 +260,8 @@ export function ReferenceLibrary() {
         else await load();
         return; // navigate to first dropped file for confirmation
       }
+    } catch (error) {
+      setDropError(String(error));
     } finally {
       setDropImporting(false);
     }
@@ -308,6 +313,7 @@ export function ReferenceLibrary() {
           {dropImporting ? "Importing..." : "Drop images to add as references"}
         </span>
       </div>
+      {dropError && <p className="font-mono text-[10px] text-red/80 mb-4">{dropError}</p>}
 
       {/* Content */}
       {loading ? (

@@ -8,7 +8,7 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { updateCoOccurrences } from "@/lib/tokenPatterns";
-import { fileToDataUrl, fileToPreviewUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, fileToPreviewUrl, validateImageFile } from "@/lib/imageUtils";
 import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
@@ -88,6 +88,7 @@ export function ResultReview() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [scores, setScores] = useState({
@@ -119,10 +120,18 @@ export function ResultReview() {
     return () => { if (previewUrl && previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl); };
   }, [previewUrl]);
 
-  const handleFile = useCallback((f: File) => {
-    if (!f.type.startsWith("image/")) return;
-    setFile(f);
-    setPreviewUrl(fileToPreviewUrl(f));
+  const handleFile = useCallback(async (f: File) => {
+    try {
+      await validateImageFile(f);
+      setUploadError("");
+      setFile(f);
+      setPreviewUrl((current) => {
+        if (current?.startsWith("blob:")) URL.revokeObjectURL(current);
+        return fileToPreviewUrl(f);
+      });
+    } catch (error) {
+      setUploadError(String(error));
+    }
   }, []);
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,11 +299,12 @@ export function ResultReview() {
                 <Upload size={20} className="text-dim/40" />
                 <div className="flex flex-col items-center gap-1">
                   <span className="font-mono text-[12px] text-dim">Drop image here or click to browse</span>
-                  <span className="font-mono text-[9px] text-dim/50">JPEG, PNG, WEBP — any size</span>
+                  <span className="font-mono text-[9px] text-dim/50">JPEG, PNG, WEBP — up to 25 MiB</span>
                 </div>
                 <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={onInputChange} />
               </div>
             )}
+            {uploadError && <p className="font-mono text-[10px] text-red/80">{uploadError}</p>}
           </div>
 
           {/* AI Artifact Checklist */}

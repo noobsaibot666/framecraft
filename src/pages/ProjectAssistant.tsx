@@ -20,6 +20,7 @@ import {
 import { createPrompt } from "@/lib/db";
 import { addPromptToProject, updateProject } from "@/lib/projects";
 import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { cn } from "@/lib/utils";
 import type {
   AssistantThread, AssistantMessage, AssistantSuggestion,
@@ -257,6 +258,8 @@ export function ProjectAssistant() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const reloadGuard = useRef(createLatestRequestGuard());
+  const messagesGuard = useRef(createLatestRequestGuard());
 
   // Confirm modal state
   const [confirm, setConfirm] = useState<{
@@ -267,22 +270,32 @@ export function ProjectAssistant() {
 
   const reload = useCallback(async () => {
     if (!id) return;
+    const token = reloadGuard.current.begin();
     const [p, t] = await Promise.all([
       buildContextPack(id),
       getThreadsForProject(id),
     ]);
+    if (!reloadGuard.current.isCurrent(token)) return;
     setPack(p);
     setSuggestions(p ? generateSuggestions(p) : []);
     setThreads(t);
     setLoading(false);
   }, [id]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+    return () => reloadGuard.current.invalidate();
+  }, [reload]);
 
   // Load messages when thread changes
   useEffect(() => {
+    messagesGuard.current.invalidate();
     if (!activeThreadId) { setMessages([]); return; }
-    getMessages(activeThreadId).then(setMessages);
+    const token = messagesGuard.current.begin();
+    getMessages(activeThreadId).then((next) => {
+      if (messagesGuard.current.isCurrent(token)) setMessages(next);
+    });
+    return () => messagesGuard.current.invalidate();
   }, [activeThreadId]);
 
   // Scroll to bottom on new messages
@@ -310,10 +323,8 @@ export function ProjectAssistant() {
     }
   };
 
-  const handleSelectThread = async (tid: string) => {
+  const handleSelectThread = (tid: string) => {
     setActiveThreadId(tid);
-    const msgs = await getMessages(tid);
-    setMessages(msgs);
   };
 
   // ── Send message ─────────────────────────────────────────

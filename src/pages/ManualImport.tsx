@@ -8,6 +8,9 @@ import { Badge } from "@/components/ui/Badge";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getSREFByCode, createSREF } from "@/lib/db";
 import { getProjects, addPromptToProject } from "@/lib/projects";
+import { validateImageFile } from "@/lib/imageUtils";
+import { runManualBatchImport, type ManualBatchItem } from "@/lib/manualBatchImport";
+import { toast } from "@/lib/toast";
 import { findSimilarPrompts } from "@/lib/memoryEngine";
 import {
   analyzeImportedPromptLearning,
@@ -135,13 +138,7 @@ function detectProvider(text: string): Provider {
 
 // ─── Batch Import ─────────────────────────────────────────────
 
-interface BatchItem {
-  title: string;
-  prompt_text: string;
-  provider?: Provider;
-  tags?: string[];
-  notes?: string;
-}
+type BatchItem = ManualBatchItem;
 
 function parseBatchJson(raw: string): { items: BatchItem[]; error?: string } {
   try {
@@ -203,9 +200,10 @@ function FieldSelect({ label, value, onChange, options }: {
   );
 }
 
-function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData }: {
+function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailData, onError }: {
   sourceUrl: string; onSourceUrl: (v: string) => void;
   thumbnailData: string; onThumbnailData: (v: string) => void;
+  onError: (message: string) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const isUrl = sourceUrl.startsWith("http");
@@ -216,9 +214,16 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    try {
+      await validateImageFile(file);
+    } catch (error) {
+      onError(String(error));
+      e.target.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       onThumbnailData(reader.result as string);
@@ -491,22 +496,18 @@ export function ManualImport() {
     if (!batchParsed.length) return;
     setBatchSaving(true);
     setBatchDone(0);
-    let count = 0;
-    for (const item of batchParsed) {
-      const learned = analyzeImportedPromptLearning(item.prompt_text);
-      await create({
-        title: item.title,
-        provider: item.provider ?? "midjourney",
-        prompt_text: item.prompt_text,
-        avoidance_text: learned.avoidanceText,
-        tags: uniqueTags([...(item.tags ?? []), ...learned.tags]),
-        notes: [item.notes, buildImportLearningNotes(undefined, learned)].filter(Boolean).join("\n") || undefined,
-      });
-      count++;
-      setBatchDone(count);
+    setBatchError("");
+    try {
+      const result = await runManualBatchImport(batchParsed);
+      setBatchDone(result.imported);
+      toast.success(`Imported ${result.imported} of ${result.total} prompts.`);
+      navigate("/library");
+    } catch (error) {
+      setBatchDone(0);
+      setBatchError(`Batch import failed; no prompts were committed. ${String(error)}`);
+    } finally {
+      setBatchSaving(false);
     }
-    setBatchSaving(false);
-    navigate("/library");
   };
 
   const paramCount = Object.keys(detected).filter((k) => detected[k as keyof DetectedParams]).length;
@@ -799,7 +800,7 @@ export function ManualImport() {
               <FieldSelect label="PROVIDER" value={provider} onChange={(v) => setProvider(v as Provider)} options={PROVIDERS} />
               <div className="flex flex-col gap-1.5">
                 <label className="system-label">SOURCE</label>
-                <DualSourceInput sourceUrl={source} onSourceUrl={setSource} thumbnailData={thumbnailData} onThumbnailData={setThumbnailData} />
+                <DualSourceInput sourceUrl={source} onSourceUrl={setSource} thumbnailData={thumbnailData} onThumbnailData={setThumbnailData} onError={setError} />
                 {mjSource && !thumbnailData && (
                   <div className="flex items-start gap-3 p-2 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
                     <img

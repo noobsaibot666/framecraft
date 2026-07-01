@@ -2,6 +2,7 @@ import type { Reference, ReferenceKind, ReferenceRole, ReferenceFilters } from "
 import { getFramecraftDb } from "./dbConnection";
 import { removeManagedPaths } from "./fileStore";
 import { databaseError } from "./dbErrors";
+import { invalidateRecommendationCache } from "./recommendations";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -41,6 +42,21 @@ function rowToReference(row: Record<string, unknown>): Reference {
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
+}
+
+export const REFERENCE_SUMMARY_COLUMNS = [
+  "id", "title", "kind", "file_data", "thumbnail_data", "provider", "category",
+  "tags", "rating", "best_use", "risk_notes", "created_at", "updated_at",
+].join(", ");
+
+function referenceFilterSql(filters?: ReferenceFilters): { where: string; values: unknown[] } {
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  if (filters?.kind) { values.push(filters.kind); conditions.push(`kind = $${values.length}`); }
+  if (filters?.category) { values.push(filters.category); conditions.push(`category = $${values.length}`); }
+  if (filters?.provider) { values.push(filters.provider); conditions.push(`provider = $${values.length}`); }
+  if (filters?.minRating != null) { values.push(filters.minRating); conditions.push(`rating >= $${values.length}`); }
+  return { where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "", values };
 }
 
 // ─── In-memory dev store ──────────────────────────────────────
@@ -97,6 +113,7 @@ export async function createReference(data: CreateReferenceInput): Promise<strin
           ts,
         ]
       );
+      invalidateRecommendationCache();
       return id;
     } catch (err) {
       throw new Error(String(err));
@@ -167,6 +184,16 @@ export async function getReferences(filters?: ReferenceFilters): Promise<Referen
   return list;
 }
 
+export async function getReferenceSummaries(filters?: ReferenceFilters): Promise<Reference[]> {
+  if (!isTauri) return getReferences(filters);
+  const db = await getDb();
+  const { where, values } = referenceFilterSql(filters);
+  const rows = await db.select(
+    `SELECT ${REFERENCE_SUMMARY_COLUMNS} FROM "references" ${where} ORDER BY created_at DESC`, values
+  ) as Record<string, unknown>[];
+  return rows.map(rowToReference);
+}
+
 export async function getReferenceById(id: string): Promise<Reference | null> {
   if (isTauri) {
     try {
@@ -221,6 +248,24 @@ export async function searchReferences(query: string, filters?: ReferenceFilters
   );
 }
 
+export async function searchReferenceSummaries(query: string, filters?: ReferenceFilters): Promise<Reference[]> {
+  const q = query.toLowerCase().trim();
+  if (!q) return getReferenceSummaries(filters);
+  if (!isTauri) return searchReferences(query, filters);
+  const db = await getDb();
+  const filtered = referenceFilterSql(filters);
+  const filterClause = filtered.where ? ` AND ${filtered.where.slice("WHERE ".length)}` : "";
+  const values = [`%${q}%`, ...filtered.values];
+  const shiftedClause = filterClause.replace(/\$(\d+)/g, (_, index: string) => `$${Number(index) + 1}`);
+  const rows = await db.select(
+    `SELECT ${REFERENCE_SUMMARY_COLUMNS} FROM "references"
+     WHERE (lower(title) LIKE $1 OR lower(description) LIKE $1 OR lower(best_use) LIKE $1 OR lower(risk_notes) LIKE $1 OR lower(notes) LIKE $1 OR lower(tags) LIKE $1)${shiftedClause}
+     ORDER BY created_at DESC`,
+    values
+  ) as Record<string, unknown>[];
+  return rows.map(rowToReference);
+}
+
 export async function updateReference(id: string, data: Partial<CreateReferenceInput>): Promise<void> {
   const ts = now();
 
@@ -247,6 +292,7 @@ export async function updateReference(id: string, data: Partial<CreateReferenceI
       add("updated_at", ts);
 
       await db.execute(`UPDATE "references" SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
+      invalidateRecommendationCache();
       return;
     } catch (err) {
       throw new Error(String(err));
@@ -269,6 +315,7 @@ export async function deleteReference(id: string): Promise<void> {
     const mediaPaths = rows[0] ? [rows[0].file_data, rows[0].thumbnail_data] : [];
     await db.execute(`DELETE FROM "references" WHERE id = $1`, [id]);
     await removeManagedPaths(mediaPaths);
+    invalidateRecommendationCache();
     return;
   }
   const idx = _devStore.findIndex((r) => r.id === id);
@@ -289,6 +336,7 @@ export async function linkReferenceToPrompt(
       `INSERT OR REPLACE INTO prompt_references (prompt_id, reference_id, role) VALUES ($1, $2, $3)`,
       [promptId, referenceId, role]
     );
+    invalidateRecommendationCache();
   } catch (err) {
     throw new Error(String(err));
   }
@@ -305,6 +353,7 @@ export async function unlinkReferenceFromPrompt(
       "DELETE FROM prompt_references WHERE prompt_id = $1 AND reference_id = $2",
       [promptId, referenceId]
     );
+    invalidateRecommendationCache();
   } catch (err) {
     throw new Error(String(err));
   }
@@ -357,6 +406,7 @@ export async function linkReferenceToResult(
       `INSERT OR REPLACE INTO result_references (result_id, reference_id, role) VALUES ($1, $2, $3)`,
       [resultId, referenceId, role]
     );
+    invalidateRecommendationCache();
   } catch (err) {
     throw new Error(String(err));
   }

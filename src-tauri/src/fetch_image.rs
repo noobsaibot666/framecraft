@@ -9,14 +9,15 @@ use std::io::Cursor;
 pub async fn fetch_image_as_data_url(url: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
     let client = reqwest::blocking::Client::builder()
-        .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
+        .http1_only() // Force HTTP/1.1 to avoid HTTP/2 bot fingerprinting
         .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
 
     let response = client
         .get(&url)
-        .header("Referer", "https://www.midjourney.com/")
+        .header("Referer", "https://discord.com/") // Changed referer to discord
         .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
         .header("Accept-Language", "en-US,en;q=0.9")
         .send()
@@ -26,7 +27,13 @@ pub async fn fetch_image_as_data_url(url: String) -> Result<String, String> {
             return Err(format!("Server returned status {}", response.status()));
         }
 
-    // We decode and compress to jpeg anyway, so we don't strictly need to parse the mime type here.
+        if let Some(content_length) = response.headers().get(reqwest::header::CONTENT_LENGTH) {
+            if let Ok(length) = content_length.to_str().unwrap_or("0").parse::<u64>() {
+                if length > 25 * 1024 * 1024 { // 25MB limit
+                    return Err(format!("Image is too large ({} bytes). Maximum allowed is 25MB.", length));
+                }
+            }
+        }
 
         let bytes = response
             .bytes()

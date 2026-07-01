@@ -56,7 +56,8 @@ async function runMigration(db: DbHandle): Promise<void> {
          WHERE thumbnail_data IS NULL
            AND source_url IS NOT NULL
            AND source_url != ''
-         ORDER BY created_at DESC`
+         ORDER BY created_at DESC
+         LIMIT 50`
     );
 
     if (rows.length === 0) return;

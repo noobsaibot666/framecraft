@@ -11,16 +11,38 @@ export async function fetchImageAsDataUrl(url: string): Promise<string> {
   try {
     // Attempt to fetch natively via browser. This bypasses Cloudflare bot protection 
     // because it uses the real WebKit browser engine with correct TLS fingerprint.
-    const res = await fetch(url, { mode: "cors" });
+    const res = await fetch(url, { 
+      mode: "cors", 
+      signal: AbortSignal.timeout(10000) 
+    });
+    
     if (res.ok) {
       const buffer = await res.arrayBuffer();
       // Pass the raw bytes to Rust for background CPU processing (resizing & compression)
       // Tauri v2 natively optimizes passing Uint8Array to Vec<u8> IPC
       const uint8Array = new Uint8Array(buffer);
-      return await invoke<string>("compress_image_from_bytes", { bytes: uint8Array });
+      
+      try {
+        return await invoke<string>("compress_image_from_bytes", { bytes: uint8Array });
+      } catch (parseErr) {
+        // If the Rust CPU processing fails (e.g. invalid image format, corrupt bytes),
+        // DO NOT fallback to fetch_image_as_data_url because it will just download 
+        // the same broken bytes again and fail again.
+        console.warn("Image decode/compression failed", parseErr);
+        throw parseErr; 
+      }
+    } else {
+      // If server returned 404/500, no point in falling back to reqwest.
+      throw new Error(`Server returned status ${res.status}`);
     }
-  } catch (err) {
-    console.warn("Browser fetch failed, falling back to Rust reqwest", err);
+  } catch (err: unknown) {
+    // We only fallback to Rust reqwest on Network/CORS/Timeout errors.
+    // DOMException with name 'TimeoutError' or 'AbortError' are network-level.
+    // TypeError is usually CORS or DNS failure.
+    if (err instanceof Error && err.message.includes("decode/compression failed")) {
+      throw err;
+    }
+    console.warn("Browser fetch failed (CORS/Network), falling back to Rust reqwest", err);
   }
 
   // Fallback to pure Rust reqwest if browser fetch fails (e.g. CORS block that reqwest wouldn't care about)

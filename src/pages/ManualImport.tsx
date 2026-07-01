@@ -481,6 +481,8 @@ export function ManualImport() {
         addPromptToProject(linkedProjectId, id).catch(() => {});
       }
       navigate(`/library/${id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to import prompt");
     } finally {
       setSaving(false);
     }

@@ -1245,6 +1245,8 @@ export function CraftPrompt() {
           navigate(`/library/${newId}`);
         }
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save prompt");
     } finally {
       setSaving(false);
     }
@@ -1265,6 +1267,8 @@ export function CraftPrompt() {
       } else {
         navigate(`/library/${newId}`);
       }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save new version");
     } finally {
       setSavingNewVersion(false);
     }

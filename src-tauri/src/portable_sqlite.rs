@@ -401,6 +401,37 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn concurrent_opens_do_not_race_on_probe_file() {
+        let root = test_root("concurrent-probe");
+        let db_path = root.join("framecraft.db");
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE prompts (id INTEGER PRIMARY KEY, title TEXT NOT NULL);",
+        )
+        .unwrap();
+        drop(conn);
+
+        let path_str = db_path.to_str().unwrap().to_string();
+        let mut handles = Vec::new();
+        for i in 0..16 {
+            let p = path_str.clone();
+            handles.push(std::thread::spawn(move || {
+                let result = open_portable_database(&p);
+                (i, result.map(|_| ()))
+            }));
+        }
+        let mut errors = Vec::new();
+        for h in handles {
+            let (i, r) = h.join().unwrap();
+            if let Err(e) = r {
+                errors.push(format!("thread {i}: {e}"));
+            }
+        }
+        let _ = fs::remove_dir_all(root);
+        assert!(errors.is_empty(), "concurrent opens failed: {:#?}", errors);
+    }
+
     fn test_root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "framecraft-portable-sqlite-{label}-{}",

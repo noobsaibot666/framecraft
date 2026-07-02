@@ -35,8 +35,6 @@ export function CampaignLibrary() {
       setNewClient("");
       setShowCreate(false);
       toast(`"${c.title}" created`, "success");
-      // Optimistically add to list so it appears if user navigates back
-      setCampaigns((prev) => [c, ...prev]);
       navigate(`/campaigns/${c.id}`);
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err) || "Failed to create campaign", "error");

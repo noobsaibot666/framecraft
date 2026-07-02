@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Briefcase, Plus, CheckCircle2, Clock, Archive, AlertCircle, RefreshCw } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { getCampaign, getProjectsForCampaign, updateCampaign } from "@/lib/campaigns";
 import { createProject } from "@/lib/projects";
 import { useToastStore } from "@/stores/useToastStore";
+import { createLatestRequestGuard } from "@/lib/latestRequest";
 import type { Campaign, Project } from "@/types";
 
 const STATUS_LABEL: Record<Project["status"], string> = {
@@ -41,16 +42,27 @@ export function CampaignDetail() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState("");
   const [newProjectBrief, setNewProjectBrief] = useState("");
+  const loadGuard = useRef(createLatestRequestGuard());
+  const loadedCampaignId = useRef<string | null>(null);
 
   const load = useCallback(async (cid: string) => {
-    // Only show loading spinner on first load — don't blank existing data on refetch
-    setLoadState((prev) => prev === "ready" ? "ready" : "loading");
+    // Only show loading spinner when switching to a different campaign or on first load —
+    // don't blank existing data on a same-campaign refetch (e.g. after edit/create).
+    const isSameCampaign = loadedCampaignId.current === cid;
+    setLoadState((prev) => (isSameCampaign && prev === "ready") ? "ready" : "loading");
+    if (!isSameCampaign) {
+      setCampaign(null);
+      setProjects([]);
+    }
+    const token = loadGuard.current.begin();
     try {
       const [c, ps] = await Promise.all([getCampaign(cid), getProjectsForCampaign(cid)]);
+      if (!loadGuard.current.isCurrent(token)) return;
       if (!c) {
         setLoadState("not-found");
         return;
       }
+      loadedCampaignId.current = cid;
       setCampaign(c);
       setProjects(ps);
       setEditTitle(c.title);
@@ -58,13 +70,17 @@ export function CampaignDetail() {
       setEditBrief(c.brief ?? "");
       setLoadState("ready");
     } catch (err) {
+      if (!loadGuard.current.isCurrent(token)) return;
       console.error("CampaignDetail load failed:", err);
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setLoadState("error");
     }
   }, []);
 
-  useEffect(() => { if (id) load(id); }, [id, load]);
+  useEffect(() => {
+    if (id) load(id);
+    return () => { loadGuard.current.invalidate(); };
+  }, [id, load]);
 
   async function handleSaveEdit() {
     if (!id || !campaign) return;

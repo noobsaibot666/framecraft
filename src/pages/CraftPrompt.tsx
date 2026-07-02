@@ -782,6 +782,7 @@ export function CraftPrompt() {
   const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [savingNewVersion, setSavingNewVersion] = useState(false);
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
@@ -817,9 +818,11 @@ export function CraftPrompt() {
   const projectLoadGuard = useRef(createLatestRequestGuard());
   const impactLoadGuard = useRef(createLatestRequestGuard());
   const analysisGuard = useRef(createLatestRequestGuard());
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) { hydratedRef.current = true; return; }
+    hydratedRef.current = false;
     const token = promptLoadGuard.current.begin();
     getById(id).then((p) => {
       if (!promptLoadGuard.current.isCurrent(token) || !p) return;
@@ -869,6 +872,7 @@ export function CraftPrompt() {
             mode?: "builder" | "manual";
             tokens?: { id: string; text: string; quality_score: number }[];
             overrides?: Record<string, string>;
+            subject?: string; environment?: string; mood?: string; realism?: string; variation?: string;
           };
           if (bs.mode) setMode(bs.mode);
           if (bs.tokens?.length) {
@@ -880,10 +884,19 @@ export function CraftPrompt() {
           if (bs.overrides && Object.keys(bs.overrides).length) {
             setTokenOverrides(bs.overrides);
           }
+          setFields((f) => ({
+            ...f,
+            subject: bs.subject ?? "",
+            environment: bs.environment ?? "",
+            mood: bs.mood ?? "",
+            realism: bs.realism ?? "",
+            variation: bs.variation ?? "",
+          }));
         } catch { /* ignore corrupt builder state */ }
       } else {
         setMode("manual");
       }
+      hydratedRef.current = true;
     });
     return () => promptLoadGuard.current.invalidate();
   }, [id, getById]);
@@ -1188,6 +1201,11 @@ export function CraftPrompt() {
       mode,
       tokens: tokenSequence.map((t) => ({ id: t.id, text: tokenOverrides[t.id] ?? t.text, quality_score: t.quality_score })),
       overrides: tokenOverrides,
+      subject: fields.subject,
+      environment: fields.environment,
+      mood: fields.mood,
+      realism: fields.realism,
+      variation: fields.variation,
     }),
   });
 
@@ -1236,10 +1254,19 @@ export function CraftPrompt() {
       if (isEdit && id) {
         await update(id, buildData(asRecipe));
         toast.success("Prompt updated");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 1800);
       } else {
         const newId = await create(buildData(asRecipe));
+        toast.success(asRecipe ? "Recipe saved" : "Prompt saved");
         if (projectId) {
-          await addPromptToProject(projectId, newId);
+          try {
+            await addPromptToProject(projectId, newId);
+          } catch (linkErr) {
+            toast.error(
+              `Prompt saved, but could not attach it to the project: ${linkErr instanceof Error ? linkErr.message : String(linkErr)}`
+            );
+          }
           navigate(`/projects/${projectId}`);
         } else {
           navigate(`/library/${newId}`);
@@ -1261,8 +1288,15 @@ export function CraftPrompt() {
         parent_id: id,
         version: originalVersion + 1,
       });
+      toast.success("New version saved");
       if (projectId) {
-        await addPromptToProject(projectId, newId);
+        try {
+          await addPromptToProject(projectId, newId);
+        } catch (linkErr) {
+          toast.error(
+            `Version saved, but could not attach it to the project: ${linkErr instanceof Error ? linkErr.message : String(linkErr)}`
+          );
+        }
         navigate(`/projects/${projectId}`);
       } else {
         navigate(`/library/${newId}`);
@@ -1273,6 +1307,28 @@ export function CraftPrompt() {
       setSavingNewVersion(false);
     }
   };
+
+  // Silent autosave for existing prompts — mirrors ProjectWorkspace's debounced pattern.
+  useEffect(() => {
+    if (!isEdit || !id || !hydratedRef.current || !fields.title.trim() || !assembled.trim()) return;
+    const timer = window.setTimeout(() => {
+      setSaving(true);
+      update(id, buildData(false))
+        .then(() => {
+          setSaved(true);
+          window.setTimeout(() => setSaved(false), 1200);
+        })
+        .catch((err) => {
+          toast.error(err instanceof Error ? err.message : String(err) || "Autosave failed");
+        })
+        .finally(() => setSaving(false));
+    }, 800);
+    return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    id, isEdit, fields, mjParams, dalleParams, sdParams, mode,
+    tokenSequence, tokenOverrides, assembled,
+  ]);
 
   const handleCopy = async () => {
     if (!fullCopyText) return;
@@ -1338,7 +1394,7 @@ export function CraftPrompt() {
           {isEdit && (
             <Button variant="ghost" size="sm" onClick={() => handleSave(false)} disabled={saving || savingNewVersion}>
               <Save size={10} />
-              {saving ? "Saving…" : "Update"}
+              {saving ? "Saving…" : saved ? "Saved" : "Update"}
             </Button>
           )}
           <Button
@@ -2207,7 +2263,7 @@ export function CraftPrompt() {
                   disabled={saving || savingNewVersion}
                   className="w-full justify-center"
                 >
-                  {saving ? "Saving…" : "Overwrite Current"}
+                  {saving ? "Saving…" : saved ? "Saved" : "Overwrite Current"}
                 </Button>
                 <p className="font-mono text-[8px] text-dim/40 text-center leading-relaxed">
                   New Version saves a copy linked to v{originalVersion}

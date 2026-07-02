@@ -25,6 +25,11 @@ describe("page hook dependencies", () => {
     const source = readSource("src/pages/CampaignDetail.tsx");
 
     expect(source).toContain("const load = useCallback(async (cid: string) => {");
-    expect(source).toContain("useEffect(() => { if (id) load(id); }, [id, load]);");
+    expect(source).toContain(
+      "useEffect(() => {\n" +
+      "    if (id) load(id);\n" +
+      "    return () => { loadGuard.current.invalidate(); };\n" +
+      "  }, [id, load]);"
+    );
   });
 });

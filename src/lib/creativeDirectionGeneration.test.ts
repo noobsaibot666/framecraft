@@ -37,6 +37,15 @@ describe("parseCreativeDirections", () => {
       directions: [validDirection, validDirection, { ...validDirection, tone: "" }],
     }))).toThrow("tone");
   });
+
+  it("accepts a custom expected count for improvement runs", () => {
+    const two = parseCreativeDirections(
+      JSON.stringify({ directions: [validDirection, { ...validDirection, title: "Second" }] }),
+      2
+    );
+    expect(two).toHaveLength(2);
+    expect(() => parseCreativeDirections(JSON.stringify({ directions: [validDirection] }), 2)).toThrow("two");
+  });
 });
 
 describe("buildDirectionProjectFields", () => {

@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,9 @@ import { getPreferences } from "@/lib/userPreferences";
 import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
+import { FormulaBar } from "@/components/ui/FormulaBar";
+import { formatFormulaForAI, getFormulaForProvider } from "@/lib/promptFormula";
+import { CONSISTENCY_FACTOR_PRESETS, buildConsistencySuffix, suggestConsistencyFactors } from "@/lib/consistencyFactors";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
 import { getTokenById } from "@/lib/tokenDetail";
 import { AIImproveButton } from "@/components/ui/AIImproveButton";
@@ -362,7 +365,7 @@ const SDParamsPanel = memo(function SDParamsPanel({ p, set }: { p: SDParams; set
 // ─── Prompt assembly ──────────────────────────────────────────
 
 function assembleMJ(f: Fields, mj: MJParams): string {
-  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   let out = parts.join(", ");
   if (f.aspect_ratio)   out += ` --ar ${f.aspect_ratio}`;
@@ -391,7 +394,7 @@ function assembleMJ(f: Fields, mj: MJParams): string {
 }
 
 function assembleDalle(f: Fields, dalle: DalleParams): string {
-  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   let out = parts.join(", ");
   if (dalle.size) out += ` [size: ${dalle.size}]`;
@@ -401,13 +404,13 @@ function assembleDalle(f: Fields, dalle: DalleParams): string {
 }
 
 function assembleSD(f: Fields, _sd: SDParams): string {
-  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
   return parts.join(", ");
 }
 
 function assembleGeneric(f: Fields): string {
-  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism];
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism];
   if (isVideoProvider(f.provider)) parts.push(f.motion, f.duration ? `${f.duration} duration` : "");
   return parts.map((s) => s.trim()).filter(Boolean).join(", ");
 }
@@ -427,7 +430,7 @@ function buildNanaBananaJson(f: Fields, assembled: string, aspectRatio: string):
     },
     task: "generate_image",
     subject: {
-      main: f.subject || assembled || "",
+      main: [f.subject, f.character].filter(Boolean).join(", ") || assembled || "",
       attributes: {
         physical: f.realism || f.subject || assembled || "",
         pose: "natural state",
@@ -620,7 +623,8 @@ interface Fields {
   title: string; description: string; provider: Provider;
   category: string; use_case: string; aspect_ratio: string;
   prompt_text: string; avoidance_text: string;
-  subject: string; environment: string; camera: string; lens: string;
+  subject: string; character: string; environment: string; composition: string;
+  camera: string; lens: string;
   lighting: string; mood: string; realism: string;
   rating: number; ai_look_risk: number;
   tags: string[]; notes: string;
@@ -633,7 +637,8 @@ const EMPTY: Fields = {
   title: "", description: "", provider: "midjourney",
   category: "", use_case: "", aspect_ratio: "",
   prompt_text: "", avoidance_text: "",
-  subject: "", environment: "", camera: "", lens: "",
+  subject: "", character: "", environment: "", composition: "",
+  camera: "", lens: "",
   lighting: "", mood: "", realism: "",
   rating: 0, ai_look_risk: 0,
   tags: [], notes: "",
@@ -641,6 +646,31 @@ const EMPTY: Fields = {
   variation: "",
   motion: "", duration: "",
 };
+
+// Token category → builder field routing (V2 §7). Categories without a
+// matching field (material, color, parameters) stay sequence-only.
+const CATEGORY_FIELD_MAP: Partial<Record<string, keyof Fields>> = {
+  subject: "subject",
+  action: "subject",
+  environment: "environment",
+  composition: "composition",
+  camera: "camera",
+  lens: "lens",
+  lighting: "lighting",
+  mood: "mood",
+  brand_tone: "mood",
+  realism: "realism",
+  avoidance: "avoidance_text",
+  motion: "motion",
+};
+
+/** Remove one clause (case-insensitive exact match) from a comma-separated field value. */
+function removeClauseFromField(current: string, clause: string): string {
+  const parts = current.split(",").map((s) => s.trim()).filter(Boolean);
+  const index = parts.findIndex((p) => p.toLowerCase() === clause.trim().toLowerCase());
+  if (index >= 0) parts.splice(index, 1);
+  return parts.join(", ");
+}
 
 const EMPTY_MJ: MJParams = {
   aspect_ratio: "", model_version: "", quality: "",
@@ -816,6 +846,18 @@ export function CraftPrompt() {
   const [includeAvoidance, setIncludeAvoidance] = useState(false);
   const [tokenSequence, setTokenSequence] = useState<Token[]>([]);
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
+  // Tokens routed into a matching builder field (V2 §7) — excluded from the
+  // sequence extras join so their text isn't duplicated in the output.
+  const [fieldTokenIds, setFieldTokenIds] = useState<Record<string, keyof Fields>>({});
+  // Consistency factors (V2 §2) — elements held stable across variations.
+  const [consistencyFactors, setConsistencyFactors] = useState<string[]>([]);
+  const [factorInput, setFactorInput] = useState("");
+  // Provider success formula (V2 §11) — per-prompt copy, editable + reorderable.
+  const [formulaSteps, setFormulaSteps] = useState<string[]>(() => {
+    const prefs = getPreferences();
+    return getFormulaForProvider((prefs.defaultProvider as Provider) || EMPTY.provider);
+  });
+  const [formulaCustomized, setFormulaCustomized] = useState(false);
   const [usedAvoidanceIds, setUsedAvoidanceIds] = useState<Set<string>>(new Set());
   const [consistencyMatches, setConsistencyMatches] = useState<ConsistencyMatch[]>([]);
   const [providerMismatch, setProviderMismatch] = useState<ProviderMismatch | null>(null);
@@ -895,9 +937,13 @@ export function CraftPrompt() {
             mode?: "builder" | "manual";
             tokens?: { id: string; text: string; quality_score: number }[];
             overrides?: Record<string, string>;
-            subject?: string; environment?: string; mood?: string; realism?: string; variation?: string;
+            subject?: string; character?: string; environment?: string; composition?: string;
+            mood?: string; realism?: string; variation?: string;
             motion?: string; duration?: string;
             usedAvoidanceIds?: string[];
+            fieldTokenIds?: Record<string, keyof Fields>;
+            consistencyFactors?: string[];
+            formula?: string[];
           };
           if (bs.mode) setMode(bs.mode);
           if (bs.tokens?.length) {
@@ -912,10 +958,24 @@ export function CraftPrompt() {
           if (bs.usedAvoidanceIds?.length) {
             setUsedAvoidanceIds(new Set(bs.usedAvoidanceIds));
           }
+          if (bs.fieldTokenIds && Object.keys(bs.fieldTokenIds).length) {
+            setFieldTokenIds(bs.fieldTokenIds);
+          }
+          if (bs.consistencyFactors?.length) {
+            setConsistencyFactors(bs.consistencyFactors);
+          }
+          if (bs.formula?.length) {
+            setFormulaSteps(bs.formula);
+            setFormulaCustomized(true);
+          } else {
+            setFormulaSteps(getFormulaForProvider(p.provider));
+          }
           setFields((f) => ({
             ...f,
             subject: bs.subject ?? "",
+            character: bs.character ?? "",
             environment: bs.environment ?? "",
+            composition: bs.composition ?? "",
             mood: bs.mood ?? "",
             realism: bs.realism ?? "",
             variation: bs.variation ?? "",
@@ -925,6 +985,7 @@ export function CraftPrompt() {
         } catch { /* ignore corrupt builder state */ }
       } else {
         setMode("manual");
+        setFormulaSteps(getFormulaForProvider(p.provider));
       }
       hydratedRef.current = true;
     });
@@ -1040,11 +1101,40 @@ export function CraftPrompt() {
   const handleOpenSrefPicker = useCallback(() => setSrefPickerOpen(true), []);
   const handleClearSref = useCallback(() => setSelectedSref(null), []);
 
-  const handleTokenToggle = (token: Token) => {
-    setTokenSequence((prev) => {
-      const exists = prev.some((t) => t.id === token.id);
-      return exists ? prev.filter((t) => t.id !== token.id) : [...prev, token];
-    });
+  // Formula follows the selected provider until the user customizes it (V2 §11).
+  useEffect(() => {
+    if (!formulaCustomized) setFormulaSteps(getFormulaForProvider(fields.provider));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fields.provider]);
+
+  /** Undo a field-routed token: strip its text from the field it filled. */
+  const unrouteToken = (token: Token) => {
+    const fieldKey = fieldTokenIds[token.id];
+    if (!fieldKey) return;
+    const text = tokenOverrides[token.id] ?? token.text;
+    setFields((f) => ({ ...f, [fieldKey]: removeClauseFromField(String(f[fieldKey] ?? ""), text) }));
+    setFieldTokenIds((prev) => { const next = { ...prev }; delete next[token.id]; return next; });
+  };
+
+  const handleTokenToggle = (token: Token, categoryName?: string) => {
+    const exists = tokenSequence.some((t) => t.id === token.id);
+    if (exists) {
+      unrouteToken(token);
+      setTokenSequence((prev) => prev.filter((t) => t.id !== token.id));
+    } else {
+      // Route the token into its matching prompt field (V2 §7); it also joins
+      // the sequence with a distinct accent, but is excluded from the extras
+      // join so its text appears only once in the output.
+      const fieldKey = categoryName ? CATEGORY_FIELD_MAP[categoryName] : undefined;
+      if (fieldKey && mode === "builder") {
+        setFields((f) => {
+          const current = String(f[fieldKey] ?? "").trim();
+          return { ...f, [fieldKey]: current ? `${current}, ${token.text}` : token.text };
+        });
+        setFieldTokenIds((prev) => ({ ...prev, [token.id]: fieldKey }));
+      }
+      setTokenSequence((prev) => [...prev, token]);
+    }
     setOutputOverride(null);
   };
 
@@ -1054,6 +1144,8 @@ export function CraftPrompt() {
   };
 
   const handleTokenRemove = (tokenId: string) => {
+    const token = tokenSequence.find((t) => t.id === tokenId);
+    if (token) unrouteToken(token);
     setTokenSequence((prev) => prev.filter((t) => t.id !== tokenId));
     setTokenOverrides((prev) => { const next = { ...prev }; delete next[tokenId]; return next; });
     setOutputOverride(null);
@@ -1069,9 +1161,16 @@ export function CraftPrompt() {
     [tokenSequence, tokenOverrides]
   );
 
+  // Field-routed tokens already live inside their builder field — joining them
+  // again as sequence extras would duplicate their text in the output.
+  const extraTokenTexts = useMemo(
+    () => tokenSequence.filter((t) => !fieldTokenIds[t.id]).map((t) => tokenOverrides[t.id] ?? t.text),
+    [tokenSequence, tokenOverrides, fieldTokenIds]
+  );
+
   const builtAssembled = (() => {
     if (mode === "manual") return fields.prompt_text;
-    const extras = tokenTexts.length ? `, ${tokenTexts.join(", ")}` : "";
+    const extras = extraTokenTexts.length ? `, ${extraTokenTexts.join(", ")}` : "";
     switch (fields.provider) {
       case "midjourney": return assembleMJ(fields, mjParams) + extras;
       case "dalle": return assembleDalle(fields, dalleParams) + extras;
@@ -1190,7 +1289,11 @@ export function CraftPrompt() {
       setAdviceLoading(true);
       setAdviceDismissed(false);
       try {
-        const result = await analyzePromptDraft({ promptText: deferredAssembled });
+        const result = await analyzePromptDraft({
+          promptText: deferredAssembled,
+          formulaContext: formatFormulaForAI(formulaSteps, fields.provider),
+          consistencyFactors: consistencyFactors.length ? consistencyFactors : undefined,
+        });
         if (analysisGuard.current.isCurrent(request)) setAdvice(result);
       } catch {
         if (analysisGuard.current.isCurrent(request)) setAdvice(EMPTY_ADVICE);
@@ -1234,7 +1337,9 @@ export function CraftPrompt() {
         provenTokens: tokenSequence.filter((t) => t.quality_score > 0.3).map((t) => t.text).slice(0, 5),
         fields: mode === "builder" ? {
           subject: fields.subject || undefined,
+          character: fields.character || undefined,
           environment: fields.environment || undefined,
+          composition: fields.composition || undefined,
           camera: fields.camera || undefined,
           lens: fields.lens || undefined,
           lighting: fields.lighting || undefined,
@@ -1242,6 +1347,8 @@ export function CraftPrompt() {
           realism: fields.realism || undefined,
         } : undefined,
         userDirection: focusDirection ?? (analyzeDirection || undefined),
+        formulaContext: formatFormulaForAI(formulaSteps, fields.provider),
+        consistencyFactors: consistencyFactors.length ? consistencyFactors : undefined,
       });
       if (!analysisGuard.current.isCurrent(request)) return;
       setAdvice(result);
@@ -1263,9 +1370,12 @@ export function CraftPrompt() {
   };
 
   const varSuffix = fields.variation.trim() ? `, ${fields.variation.trim()}` : "";
+  // Consistency factors ride along on copy so variations hold them stable (V2 §2).
+  const consistencySuffix = buildConsistencySuffix(consistencyFactors);
+  const consistencyBlock = consistencySuffix ? `\n${consistencySuffix}` : "";
   const fullCopyText = includeAvoidance && fields.avoidance_text
-    ? `${assembled}${varSuffix}\n\n${fields.avoidance_text}`
-    : `${assembled}${varSuffix}`;
+    ? `${assembled}${varSuffix}${consistencyBlock}\n\n${fields.avoidance_text}`
+    : `${assembled}${varSuffix}${consistencyBlock}`;
 
   const charCount = assembled.length;
 
@@ -1341,13 +1451,18 @@ export function CraftPrompt() {
       tokens: tokenSequence.map((t) => ({ id: t.id, text: tokenOverrides[t.id] ?? t.text, quality_score: t.quality_score })),
       overrides: tokenOverrides,
       subject: fields.subject,
+      character: fields.character,
       environment: fields.environment,
+      composition: fields.composition,
       mood: fields.mood,
       realism: fields.realism,
       variation: fields.variation,
       motion: fields.motion,
       duration: fields.duration,
       usedAvoidanceIds: Array.from(usedAvoidanceIds),
+      fieldTokenIds,
+      consistencyFactors,
+      formula: formulaCustomized ? formulaSteps : undefined,
     }),
   });
 
@@ -1387,6 +1502,11 @@ export function CraftPrompt() {
     setFormatChanges([]);
     setTokenSequence([]);
     setTokenOverrides({});
+    setFieldTokenIds({});
+    setConsistencyFactors([]);
+    setFactorInput("");
+    setFormulaCustomized(false);
+    setFormulaSteps(getFormulaForProvider((getPreferences().defaultProvider as Provider) || EMPTY.provider));
   }, []);
 
   const handleSave = async (asRecipe = false) => {
@@ -1470,6 +1590,7 @@ export function CraftPrompt() {
   }, [
     id, isEdit, fields, mjParams, dalleParams, sdParams, mode,
     tokenSequence, tokenOverrides, assembled,
+    fieldTokenIds, consistencyFactors, formulaSteps,
   ]);
 
   const handleCopy = async () => {
@@ -1500,8 +1621,9 @@ export function CraftPrompt() {
   );
 
   const builderFields: { key: keyof Fields; label: string; placeholder: string }[] = [
-    { key: "subject", label: "SUBJECT / ACTION", placeholder: "woman running through field" },
+    { key: "character", label: "CHARACTER", placeholder: "identity, role, appearance, continuity details" },
     { key: "environment", label: "ENVIRONMENT", placeholder: "golden hour forest" },
+    { key: "composition", label: "COMPOSITION", placeholder: "rule of thirds, negative space" },
     { key: "camera", label: "CAMERA", placeholder: "low angle tracking shot" },
     { key: "lens", label: "LENS", placeholder: "14mm ultra-wide" },
     { key: "lighting", label: "LIGHTING", placeholder: "natural morning sunlight" },
@@ -1511,15 +1633,12 @@ export function CraftPrompt() {
   return (
     <>
     <PageContainer
-      title={isEdit ? "Edit Prompt" : "Prompt"}
+      title={isEdit ? "Edit Prompt" : "Prompt Craft"}
       subtitle={projectContext ? `PRE-CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
             <ArrowLeft size={11} /> {projectId ? "Project" : isEdit ? "Cancel" : "Library"}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={handleReset} title="Reset all fields">
-            <RotateCcw size={11} />
           </Button>
           <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled}>
             {copied ? <Check size={10} /> : <Copy size={10} />}
@@ -1534,7 +1653,8 @@ export function CraftPrompt() {
             </Button>
           )}
           {isEdit && (
-            <Button variant="ghost" size="sm" onClick={() => handleSave(false)} disabled={saving || savingNewVersion}>
+            // min-w keeps the label swap (Update/Saving…/Saved) from shifting the row during autosave
+            <Button variant="ghost" size="sm" onClick={() => handleSave(false)} disabled={saving || savingNewVersion} className="min-w-20 justify-center">
               <Save size={10} />
               {saving ? "Saving…" : saved ? "Saved" : "Update"}
             </Button>
@@ -1544,12 +1664,17 @@ export function CraftPrompt() {
             size="md"
             onClick={isEdit ? handleSaveNewVersion : () => handleSave(false)}
             disabled={saving || savingNewVersion}
+            className="min-w-36 justify-center"
           >
             <Save size={11} />
             {isEdit
               ? savingNewVersion ? "Saving…" : `New Version v${originalVersion + 1}`
               : saving ? "Saving…" : "Save to Library"
             }
+          </Button>
+          {/* Reset stays last in the action sequence (V2 §9) */}
+          <Button variant="ghost" size="sm" onClick={handleReset} title="Reset all fields">
+            <RotateCcw size={11} />
           </Button>
         </div>
       }
@@ -1673,6 +1798,15 @@ export function CraftPrompt() {
                 onChange={(e) => setF("use_case", e.target.value)}
                 placeholder="Use case: hero banner, product page, social…"
               />
+              {/* Provider success formula (V2 §11) */}
+              <div className="p-3 rounded-sm" style={{ border: "1px solid rgba(72,229,232,0.18)", background: "rgba(72,229,232,0.025)" }}>
+                <FormulaBar
+                  steps={formulaSteps}
+                  provider={fields.provider}
+                  onChange={(steps) => { setFormulaSteps(steps); setFormulaCustomized(true); }}
+                  onResetToDefault={() => { setFormulaSteps(getFormulaForProvider(fields.provider)); setFormulaCustomized(false); }}
+                />
+              </div>
             </div>
           </div>
 
@@ -1701,6 +1835,17 @@ export function CraftPrompt() {
 
             {mode === "builder" ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Subject / Action — full width, taller, one line (V2 §9) */}
+                <div className="col-span-full flex flex-col gap-1.5">
+                  <label className="system-label text-[12px] text-muted">SUBJECT / ACTION</label>
+                  <input
+                    value={fields.subject}
+                    onChange={(e) => setF("subject", e.target.value)}
+                    placeholder="woman running through field"
+                    className="w-full h-13 px-3 font-mono text-[14px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                    style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                  />
+                </div>
                 {builderFields.map(({ key, label, placeholder }) => (
                   <div key={key} className="flex flex-col gap-1.5">
                     <label className="system-label text-[12px] text-muted">{label}</label>
@@ -1806,7 +1951,7 @@ export function CraftPrompt() {
             <div>
               <SectionHeader label="TOKEN LIBRARY" />
               <div
-                className="flex flex-col gap-5 p-5 rounded-card"
+                className="flex flex-col gap-7 p-5 rounded-card"
                 style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
               >
                 {/* Sequence builder */}
@@ -1816,7 +1961,10 @@ export function CraftPrompt() {
                     {tokenSequence.length > 0 && (
                       <button
                         type="button"
-                        onClick={() => { setTokenSequence([]); setTokenOverrides({}); setOutputOverride(null); }}
+                        onClick={() => {
+                          tokenSequence.forEach(unrouteToken);
+                          setTokenSequence([]); setTokenOverrides({}); setOutputOverride(null);
+                        }}
                         className="font-mono text-[10px] text-muted hover:text-red transition-precise"
                       >
                         Clear all
@@ -1830,6 +1978,7 @@ export function CraftPrompt() {
                     onRemove={handleTokenRemove}
                     onEditCommit={handleTokenEditCommit}
                     conflictingIds={conflictingTokenIds}
+                    fieldRoutedIds={new Set(Object.keys(fieldTokenIds))}
                   />
                 </div>
 
@@ -1953,6 +2102,86 @@ export function CraftPrompt() {
                 placeholder="Avoidance corrections appear here. Edit freely — this is appended to your prompt on copy."
                 rows={3}
                 mono
+              />
+            </div>
+          </div>
+
+          {/* Consistency Factor (V2 §2) — elements held stable across variations */}
+          <div>
+            <SectionHeader label="CONSISTENCY FACTOR" />
+            <div className="flex flex-col gap-3">
+              <p className="font-mono text-[10px] leading-relaxed text-readable">
+                Elements that must stay stable across prompt variations — appended on copy and enforced by the AI assistant.
+              </p>
+              {/* Active factors */}
+              <div className="flex flex-wrap gap-1.5 min-h-8 items-center">
+                {consistencyFactors.length === 0 && (
+                  <span className="font-mono text-[10px] text-dim">No consistency factors yet — add one below or pick a suggestion.</span>
+                )}
+                {consistencyFactors.map((factor) => (
+                  <span key={factor}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded-sm font-mono text-[10px] text-cyan"
+                    style={{ border: "1px solid rgba(72,229,232,0.4)", background: "rgba(72,229,232,0.07)" }}>
+                    {factor}
+                    <button type="button"
+                      onClick={() => setConsistencyFactors((prev) => prev.filter((f) => f !== factor))}
+                      className="text-cyan/50 hover:text-red transition-precise leading-none">×</button>
+                  </span>
+                ))}
+              </div>
+              {/* Suggestions + presets */}
+              {(() => {
+                const suggestions = suggestConsistencyFactors({
+                  promptText: deferredAssembled,
+                  projectDirection: projectContext?.visual_direction,
+                  provider: fields.provider,
+                  existing: consistencyFactors,
+                });
+                const remainingPresets = CONSISTENCY_FACTOR_PRESETS.filter(
+                  (preset) => !consistencyFactors.includes(preset) && !suggestions.includes(preset)
+                );
+                return (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {suggestions.length > 0 && (
+                      <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 mr-1">Suggested</span>
+                    )}
+                    {suggestions.map((factor) => (
+                      <button key={factor} type="button"
+                        onClick={() => setConsistencyFactors((prev) => [...prev, factor])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-sm font-mono text-[9px] text-cyan/80 hover:text-cyan transition-precise"
+                        style={{ border: "1px solid rgba(72,229,232,0.25)" }}>
+                        <Plus size={8} /> {factor}
+                      </button>
+                    ))}
+                    {remainingPresets.map((preset) => (
+                      <button key={preset} type="button"
+                        onClick={() => setConsistencyFactors((prev) => [...prev, preset])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-sm font-mono text-[9px] text-dim hover:text-soft-white transition-precise"
+                        style={{ border: "var(--border-dim)" }}>
+                        <Plus size={8} /> {preset}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Custom factor input */}
+              <input
+                type="text"
+                value={factorInput}
+                onChange={(e) => setFactorInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = factorInput.trim();
+                    if (trimmed && !consistencyFactors.includes(trimmed)) {
+                      setConsistencyFactors((prev) => [...prev, trimmed]);
+                    }
+                    setFactorInput("");
+                  }
+                }}
+                placeholder="Custom factor + Enter… (e.g. clothing: red silk jacket)"
+                className="w-full h-9 px-3 font-mono text-[12px] text-soft-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
+                style={{ border: "var(--border-default)" }}
               />
             </div>
           </div>
@@ -2293,17 +2522,6 @@ export function CraftPrompt() {
                 />
                 <span className="system-label text-[8px]">INCLUDE AVOIDANCE ON COPY</span>
               </label>
-            )}
-
-            {fields.variation && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-sm"
-                style={{ border: "1px solid rgba(0,229,255,0.2)", background: "rgba(0,229,255,0.05)" }}>
-                <GitBranch size={10} className="text-cyan/60 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/60">Variation delta</span>
-                  <p className="font-mono text-[10px] text-soft-white/80 leading-snug mt-0.5 wrap-break-word">{fields.variation}</p>
-                </div>
-              </div>
             )}
 
             <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">

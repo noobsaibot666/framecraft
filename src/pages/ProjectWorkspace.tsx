@@ -1069,28 +1069,22 @@ export function ProjectWorkspace() {
             }
           >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {/* Row 1: Visual direction + primary needs field */}
-              <div className={cn("flex flex-col gap-1.5", !hasImageProvider && !hasVideoProvider && "lg:col-span-2")}>
+              {/* Row 1: Visual direction — always alone on top, full width (V2 §6) */}
+              <div className="flex flex-col gap-1.5 lg:col-span-2">
                 <FieldLabel ai>VISUAL DIRECTION</FieldLabel>
                 <FieldTextarea value={visualDirection} onChange={setVisualDirection} placeholder="Look, style, realism level..." rows={4} />
               </div>
+              {/* Row 2: Image Needs | Video Needs side by side, each gated by provider type */}
               {hasImageProvider && (
-                <div className="flex flex-col gap-1.5">
+                <div className={cn("flex flex-col gap-1.5", !hasVideoProvider && "lg:col-span-2")}>
                   <FieldLabel ai>IMAGE NEEDS</FieldLabel>
                   <FieldTextarea value={imageNeeds} onChange={setImageNeeds} placeholder="Hero, product, background, variations..." rows={4} />
                 </div>
               )}
-              {!hasImageProvider && hasVideoProvider && (
-                <div className="flex flex-col gap-1.5">
+              {hasVideoProvider && (
+                <div className={cn("flex flex-col gap-1.5", !hasImageProvider && "lg:col-span-2")}>
                   <FieldLabel ai>VIDEO NEEDS</FieldLabel>
                   <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={4} />
-                </div>
-              )}
-              {/* Row 2: Video needs (only if both providers active — full width) */}
-              {hasImageProvider && hasVideoProvider && (
-                <div className="flex flex-col gap-1.5 lg:col-span-2">
-                  <FieldLabel ai>VIDEO NEEDS</FieldLabel>
-                  <FieldTextarea value={videoNeeds} onChange={setVideoNeeds} placeholder="Motion tests, frames, transitions..." rows={3} />
                 </div>
               )}
               {/* Row last: Creative goals + constraints — always equal */}

@@ -17,6 +17,7 @@ import {
   buildImportLearningNotes,
   type ImportLearningSignal,
 } from "@/lib/importLearning";
+import { learnFormulaFromImport } from "@/lib/promptFormula";
 import { cn } from "@/lib/utils";
 import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
 
@@ -540,6 +541,8 @@ export function ManualImport() {
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});
       }
+      // Imported prompts refine the provider's success formula (V2 §11)
+      learnFormulaFromImport(isNbMode ? raw : (clean || raw), provider);
       navigate(`/library/${id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));

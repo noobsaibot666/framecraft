@@ -3,7 +3,7 @@ import { pickAvailableModel } from "./aiConfig";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export type AdviceFieldKey = "subject" | "environment" | "camera" | "lens" | "lighting" | "mood" | "realism" | "avoidance_text";
+export type AdviceFieldKey = "subject" | "character" | "environment" | "composition" | "camera" | "lens" | "lighting" | "mood" | "realism" | "avoidance_text";
 
 export interface FieldImprovement {
   field: AdviceFieldKey;
@@ -19,9 +19,9 @@ export interface PromptAdvice {
 
 export const EMPTY_ADVICE: PromptAdvice = { suggestions: [], risks: [], improvements: [] };
 
-const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "environment", "camera", "lens", "lighting", "mood", "realism", "avoidance_text"];
+const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "character", "environment", "composition", "camera", "lens", "lighting", "mood", "realism", "avoidance_text"];
 
-function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
+function buildSystemPrompt(brief?: string, provenTokens?: string[], formulaContext?: string, consistencyFactors?: string[]): string {
   const parts: string[] = [
     "You are an expert AI image prompt engineer for advertising-grade production.",
     "Analyze the draft prompt (and current field values when provided) specifically for these failure modes — only report ones you actually find, do not force every category:",
@@ -40,7 +40,7 @@ function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
   "suggestions": ["concrete actionable improvement (max 2 items, each starts with a verb)"],
   "risks": ["specific risk found from the failure-mode list above, or other AI-look/generic-phrasing risk (max 2 items)"],
   "improvements": [
-    { "field": "subject|environment|camera|lens|lighting|mood|realism|avoidance_text", "label": "Subject|Environment|Camera|Lens|Lighting|Mood|Realism|Avoidance", "value": "ready-to-use replacement text for that field only" }
+    { "field": "subject|character|environment|composition|camera|lens|lighting|mood|realism|avoidance_text", "label": "Subject|Character|Environment|Composition|Camera|Lens|Lighting|Mood|Realism|Avoidance", "value": "ready-to-use replacement text for that field only" }
   ]
 }`,
     "",
@@ -53,6 +53,12 @@ function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
   }
   if (provenTokens && provenTokens.length > 0) {
     parts.push(`\nProven high-quality tokens from this library: ${provenTokens.join(", ")}`);
+  }
+  if (formulaContext) {
+    parts.push(`\n${formulaContext}`);
+  }
+  if (consistencyFactors && consistencyFactors.length > 0) {
+    parts.push(`\nConsistency factors the user requires to stay stable across variations — never suggest changes that would alter them: ${consistencyFactors.join(", ")}`);
   }
 
   return parts.join("\n");
@@ -188,13 +194,17 @@ export async function analyzePromptDraft(opts: {
   provenTokens?: string[];
   fields?: Partial<Record<AdviceFieldKey, string>>;
   userDirection?: string;
+  /** Provider success formula context line — see promptFormula.formatFormulaForAI. */
+  formulaContext?: string;
+  /** User-defined consistency factors that must remain stable. */
+  consistencyFactors?: string[];
 }): Promise<PromptAdvice> {
   if (!isTauri) return EMPTY_ADVICE;
 
   const model = pickAvailableModel();
   if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
 
-  const systemPrompt = buildSystemPrompt(opts.brief, opts.provenTokens);
+  const systemPrompt = buildSystemPrompt(opts.brief, opts.provenTokens, opts.formulaContext, opts.consistencyFactors);
 
   const fieldLines = opts.fields
     ? Object.entries(opts.fields)

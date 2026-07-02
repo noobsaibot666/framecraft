@@ -34,10 +34,12 @@ function extractJson(raw: string): unknown {
   }
 }
 
-export function parseCreativeDirections(raw: string): GeneratedCreativeDirection[] {
+const COUNT_WORDS: Record<number, string> = { 1: "one direction", 2: "two directions", 3: "three directions" };
+
+export function parseCreativeDirections(raw: string, expectedCount = 3): GeneratedCreativeDirection[] {
   const parsed = extractJson(raw) as { directions?: unknown };
-  if (!Array.isArray(parsed?.directions) || parsed.directions.length !== 3) {
-    throw new Error("Creative Director must return exactly three directions.");
+  if (!Array.isArray(parsed?.directions) || parsed.directions.length !== expectedCount) {
+    throw new Error(`Creative Director must return exactly ${COUNT_WORDS[expectedCount] ?? `${expectedCount} directions`}.`);
   }
 
   return parsed.directions.map((candidate, index) => {
@@ -74,31 +76,7 @@ export function buildDirectionProjectFields(
   };
 }
 
-function buildGenerationPrompt(project: Project, comparisonOutcomes: string[], userContext?: string): string {
-  const context = [
-    `Project: ${project.title}`,
-    project.client ? `Client: ${project.client}` : "",
-    project.campaign ? `Campaign: ${project.campaign}` : "",
-    project.project_type ? `Project type: ${project.project_type}` : "",
-    project.brief_text ? `Brief: ${project.brief_text}` : "",
-    project.production_goal ? `Production goal: ${project.production_goal}` : "",
-    project.visual_direction ? `Current visual direction: ${project.visual_direction}` : "",
-    project.creative_goals ? `Creative goals: ${project.creative_goals}` : "",
-    project.constraints ? `Constraints: ${project.constraints}` : "",
-    project.provider_targets?.length ? `Providers: ${project.provider_targets.join(", ")}` : "",
-    project.aspect_ratios?.length ? `Aspect ratios: ${project.aspect_ratios.join(", ")}` : "",
-    comparisonOutcomes.length ? `Prior comparison decisions:\n${comparisonOutcomes.map((item) => `- ${item}`).join("\n")}` : "",
-    userContext?.trim() ? `Additional direction from user: ${userContext.trim()}` : "",
-  ].filter(Boolean).join("\n");
-
-  return `You are a senior creative director for advertising and branded visual production.
-
-Develop exactly three materially different creative directions for this project. Keep every direction strategically connected to the brief, brand, product message, production constraints, and known comparison decisions. Avoid cosmetic variations of one idea.
-
-${context}
-
-Return ONLY valid JSON in this exact structure:
-{
+const DIRECTION_JSON_SHAPE = `{
   "directions": [
     {
       "title": "short direction name",
@@ -112,18 +90,78 @@ Return ONLY valid JSON in this exact structure:
     }
   ]
 }`;
+
+function buildProjectContext(
+  project: Project,
+  comparisonOutcomes: string[],
+  userContext?: string,
+  visualReferenceContext?: string
+): string {
+  return [
+    `Project: ${project.title}`,
+    project.client ? `Client: ${project.client}` : "",
+    project.campaign ? `Campaign: ${project.campaign}` : "",
+    project.project_type ? `Project type: ${project.project_type}` : "",
+    project.brief_text ? `Brief: ${project.brief_text}` : "",
+    project.production_goal ? `Production goal: ${project.production_goal}` : "",
+    project.visual_direction ? `Current visual direction: ${project.visual_direction}` : "",
+    project.creative_goals ? `Creative goals: ${project.creative_goals}` : "",
+    project.constraints ? `Constraints: ${project.constraints}` : "",
+    project.provider_targets?.length ? `Providers: ${project.provider_targets.join(", ")}` : "",
+    project.aspect_ratios?.length ? `Aspect ratios: ${project.aspect_ratios.join(", ")}` : "",
+    comparisonOutcomes.length ? `Prior comparison decisions:\n${comparisonOutcomes.map((item) => `- ${item}`).join("\n")}` : "",
+    visualReferenceContext?.trim() ? visualReferenceContext.trim() : "",
+    userContext?.trim() ? `Additional direction from user: ${userContext.trim()}` : "",
+  ].filter(Boolean).join("\n");
 }
 
-export async function generateCreativeDirections(
+function buildGenerationPrompt(
   project: Project,
-  model: AIModel,
-  comparisonOutcomes: string[] = [],
-  userContext?: string
-): Promise<GeneratedCreativeDirection[]> {
+  comparisonOutcomes: string[],
+  userContext?: string,
+  visualReferenceContext?: string
+): string {
+  const context = buildProjectContext(project, comparisonOutcomes, userContext, visualReferenceContext);
+
+  return `You are a senior creative director for advertising and branded visual production.
+
+Develop exactly three materially different creative directions for this project. Keep every direction strategically connected to the brief, brand, product message, production constraints, and known comparison decisions. Avoid cosmetic variations of one idea.
+
+${context}
+
+Return ONLY valid JSON in this exact structure:
+${DIRECTION_JSON_SHAPE}`;
+}
+
+function buildImprovementPrompt(
+  project: Project,
+  existing: GeneratedCreativeDirection[],
+  userContext?: string,
+  visualReferenceContext?: string
+): string {
+  const context = buildProjectContext(project, [], undefined, visualReferenceContext);
+  const focus = userContext?.trim()
+    ? `The user asks you to improve them with this focus: ${userContext.trim()}`
+    : "Sharpen each direction: stronger campaign idea, more specific visual world, clearer product message.";
+
+  return `You are a senior creative director for advertising and branded visual production.
+
+Here are the current creative directions for this project:
+${JSON.stringify({ directions: existing }, null, 2)}
+
+${focus}
+
+Improve each direction in place — keep its core identity and title spirit, but make every field materially better and more production-ready. Do not merge directions or change their count.
+
+${context}
+
+Return ONLY valid JSON with exactly ${existing.length} direction${existing.length === 1 ? "" : "s"}, in the same order, in this exact structure:
+${DIRECTION_JSON_SHAPE}`;
+}
+
+async function callDirectionModel(model: AIModel, prompt: string): Promise<string> {
   const apiKey = getApiKey(model.provider);
   requireValidApiKey(model.provider, apiKey);
-  const prompt = buildGenerationPrompt(project, comparisonOutcomes, userContext);
-  let raw = "";
 
   if (model.provider === "anthropic") {
     const response = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
@@ -144,23 +182,47 @@ export async function generateCreativeDirections(
         }),
       }
     );
-    raw = response.content.find((item) => item.type === "text")?.text ?? "";
-  } else {
-    const response = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
-      model.provider,
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          model: model.id,
-          max_tokens: 3072,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      }
-    );
-    raw = response.choices[0]?.message?.content ?? "";
+    return response.content.find((item) => item.type === "text")?.text ?? "";
   }
 
+  const response = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
+    model.provider,
+    "https://api.openai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: 3072,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    }
+  );
+  return response.choices[0]?.message?.content ?? "";
+}
+
+export async function generateCreativeDirections(
+  project: Project,
+  model: AIModel,
+  comparisonOutcomes: string[] = [],
+  userContext?: string,
+  visualReferenceContext?: string
+): Promise<GeneratedCreativeDirection[]> {
+  const prompt = buildGenerationPrompt(project, comparisonOutcomes, userContext, visualReferenceContext);
+  const raw = await callDirectionModel(model, prompt);
   return parseCreativeDirections(raw);
+}
+
+/** Improve the existing directions in place (same count, same order) using the user's focus input. */
+export async function improveCreativeDirections(
+  project: Project,
+  model: AIModel,
+  existing: GeneratedCreativeDirection[],
+  userContext?: string,
+  visualReferenceContext?: string
+): Promise<GeneratedCreativeDirection[]> {
+  if (!existing.length) throw new Error("There are no directions to improve yet.");
+  const prompt = buildImprovementPrompt(project, existing, userContext, visualReferenceContext);
+  const raw = await callDirectionModel(model, prompt);
+  return parseCreativeDirections(raw, existing.length);
 }

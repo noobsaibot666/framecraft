@@ -178,6 +178,12 @@ pub fn run() {
             sql: include_str!("../migrations/028_inconsistency_events.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 29,
+            description: "color_grade_category",
+            sql: include_str!("../migrations/029_color_grade_category.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

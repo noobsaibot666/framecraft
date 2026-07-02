@@ -3173,7 +3173,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 28] {
+fn migration_sql() -> [&'static str; 29] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3203,6 +3203,7 @@ fn migration_sql() -> [&'static str; 28] {
         include_str!("../migrations/026_prompt_thumbnail_override.sql"),
         include_str!("../migrations/027_prompt_variant_label.sql"),
         include_str!("../migrations/028_inconsistency_events.sql"),
+        include_str!("../migrations/029_color_grade_category.sql"),
     ]
 }
 

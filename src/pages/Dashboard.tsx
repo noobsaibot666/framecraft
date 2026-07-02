@@ -161,7 +161,7 @@ function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: (
       n: "01",
       icon: <Wand2 size={16} className="text-cyan" />,
       title: "Craft a prompt",
-      desc: "Use the Craft page to build, assemble, and version your first AI image prompt.",
+      desc: "Use the Prompt page to build, assemble, and version your first AI image prompt.",
       cta: "Start Crafting",
       onClick: onCraft,
     },

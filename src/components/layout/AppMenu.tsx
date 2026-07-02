@@ -87,7 +87,7 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <NativeModal title="Preferences" eyebrow="Craft defaults" onClose={onClose}>
+    <NativeModal title="Preferences" eyebrow="Prompt defaults" onClose={onClose}>
       <div className="flex flex-col gap-5">
         <div className="flex items-start gap-3">
           <MonitorCog size={16} className="mt-0.5 shrink-0 text-cyan" />

@@ -15,7 +15,7 @@ function now(): string {
   return new Date().toISOString();
 }
 
-export type ConsistencyEventAction = "warned" | "corrected" | "dismissed";
+export type ConsistencyEventAction = "warned" | "corrected" | "dismissed" | "used";
 
 export interface ConsistencyEventInput {
   rule_id: string;

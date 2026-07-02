@@ -221,7 +221,7 @@ export function TokenDetail() {
           </div>
           {prompts.length === 0 ? (
             <span className="font-mono text-[12px] text-muted">
-              No prompts have used this token yet. Add it in Craft to start building its history.
+              No prompts have used this token yet. Add it in Prompt Craft to start building its history.
             </span>
           ) : (
             <div className="flex flex-col gap-1.5">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Plus, X, Trash2 } from "lucide-react";
 import { getAvoidancePatterns, getFailedResultArtifacts, createAvoidancePattern, deleteAvoidancePattern } from "@/lib/db";
 import { detectRisks, calculateRiskScore } from "@/lib/avoidanceEngine";
+import { recordConsistencyEvent } from "@/lib/inconsistencyIntelligence";
 import { cn } from "@/lib/utils";
 import type { AvoidancePattern, DetectedRisk } from "@/types";
 
@@ -15,11 +16,19 @@ interface AvoidancePanelProps {
   onMarkUsed?: (patternId: string) => void;
 }
 
+// Severity accents (V2 §10): red = critical/high, amber = medium, neutral = low.
 const SEVERITY_DOT: Record<string, string> = {
   critical: "bg-red",
-  high: "bg-red/60",
-  medium: "bg-white/40",
-  low: "bg-white/20",
+  high: "bg-red/70",
+  medium: "bg-amber",
+  low: "bg-white/30",
+};
+
+const SEVERITY_TEXT: Record<string, string> = {
+  critical: "text-red",
+  high: "text-red/80",
+  medium: "text-amber",
+  low: "text-readable",
 };
 
 const SEVERITY_LABEL: Record<string, string> = {
@@ -28,6 +37,8 @@ const SEVERITY_LABEL: Record<string, string> = {
   medium: "MEDIUM",
   low: "LOW",
 };
+
+const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 function RiskItem({
   risk,
@@ -57,7 +68,7 @@ function RiskItem({
         <span
           className={cn("w-1.5 h-1.5 rounded-full shrink-0", SEVERITY_DOT[pattern.severity] ?? "bg-white/20")}
         />
-        <span className="font-mono text-[10px] text-readable tracking-widest uppercase shrink-0">
+        <span className={cn("font-mono text-[10px] tracking-widest uppercase shrink-0", SEVERITY_TEXT[pattern.severity] ?? "text-readable")}>
           {SEVERITY_LABEL[pattern.severity]}
         </span>
         <span className="flex-1 font-mono text-[12px] text-soft-white truncate">{pattern.label}</span>
@@ -249,13 +260,28 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
   const activeRisks = risks.filter((r) => !dismissed.has(r.pattern.id));
   const criticalCount = activeRisks.filter((r) => r.pattern.severity === "critical").length;
   const highCount = activeRisks.filter((r) => r.pattern.severity === "high").length;
+  const sortedRisks = [...risks].sort(
+    (a, b) => (SEVERITY_RANK[a.pattern.severity] ?? 4) - (SEVERITY_RANK[b.pattern.severity] ?? 4)
+  );
+
+  // Used picks feed app intelligence — recorded alongside inconsistency events.
+  const markUsed = (pattern: AvoidancePattern) => {
+    onMarkUsed?.(pattern.id);
+    recordConsistencyEvent({
+      rule_id: `avoidance:${pattern.id}`,
+      rule_label: pattern.label,
+      suggestion: pattern.correction_prompt ?? undefined,
+      provider,
+      action: "used",
+    }).catch(() => {});
+  };
 
   const handleAddAll = () => {
     const withCorrection = activeRisks.filter((r) => r.pattern.correction_prompt);
     const corrections = withCorrection.map((r) => r.pattern.correction_prompt!).join(", ");
     if (corrections) {
       onAddCorrection(corrections);
-      withCorrection.forEach((r) => onMarkUsed?.(r.pattern.id));
+      withCorrection.forEach((r) => markUsed(r.pattern));
     }
   };
 
@@ -345,15 +371,15 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
       {/* Add rule form */}
       {showAddForm && <AddRuleForm onSave={handleAddRule} onClose={() => setShowAddForm(false)} />}
 
-      {/* Risk list */}
+      {/* Risk list — ordered by severity: critical → high → medium → low */}
       <div className="flex flex-col gap-1">
-        {risks.map((risk) => (
+        {sortedRisks.map((risk) => (
           <div key={risk.pattern.id} className="group/risk relative">
             <RiskItem
               risk={risk}
               dismissed={dismissed.has(risk.pattern.id)}
               used={usedPatternIds?.has(risk.pattern.id) ?? false}
-              onAddCorrection={(text) => { onAddCorrection(text); onMarkUsed?.(risk.pattern.id); }}
+              onAddCorrection={(text) => { onAddCorrection(text); markUsed(risk.pattern); }}
               onDismiss={() => handleDismiss(risk.pattern.id)}
             />
             {!risk.pattern.is_builtin && !dismissed.has(risk.pattern.id) && (

@@ -38,7 +38,7 @@ const NAV_GROUPS = [
   {
     label: "CREATE",
     items: [
-      { label: "Prompt Craft", to: "/craft", icon: Wand2 },
+      { label: "Prompt", to: "/craft", icon: Wand2 },
       { label: "Recipes", to: "/recipes", icon: BookOpen },
       { label: "Import", to: "/import", icon: Upload },
     ],

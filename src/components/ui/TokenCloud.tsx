@@ -27,7 +27,8 @@ const CATEGORY_HINTS: Record<string, string> = {
 
 interface TokenCloudProps {
   selectedTexts: string[];
-  onToggle: (token: Token) => void;
+  /** categoryName is the internal category name (e.g. "camera") so pickers can route the token into its matching prompt field. */
+  onToggle: (token: Token, categoryName?: string) => void;
   providerFilter?: string;
   suppressedText?: string;
 }
@@ -106,7 +107,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
       await tokenCacheRef.current.mutate(activeCategoryId, (prev) => [token, ...prev]);
       const next = await tokenCacheRef.current.get(activeCategoryId);
       setRawTokens(next);
-      onToggle(token);
+      onToggle(token, activeCategoryName);
       setNewTokenText("");
       setAddingNew(false);
     } finally {
@@ -180,30 +181,20 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
         )}
       </div>
 
-      {/* Search + favorites toggle + add custom */}
+      {/* Star + add custom on the left, compact search on the right — one aligned line (V2 §8) */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-readable pointer-events-none" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter tokens…"
-            className="w-full h-9 pl-7 pr-2.5 font-mono text-[12px] text-soft-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none transition-precise"
-            style={{ border: "var(--border-default)" }}
-          />
-        </div>
         {/* Favorites filter */}
         <button
           type="button"
           onClick={() => setFavoritesOnly((v) => !v)}
           className={cn(
             "h-9 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise flex items-center gap-1.5",
-            favoritesOnly ? "text-white" : "text-readable hover:text-cyan"
+            favoritesOnly ? "text-amber" : "text-readable hover:text-cyan"
           )}
-          style={{ border: favoritesOnly ? "var(--border-strong)" : "var(--border-dim)" }}
+          style={{ border: favoritesOnly ? "1px solid rgba(246,173,85,0.45)" : "var(--border-dim)" }}
           title="Show favorites only"
         >
-          <Star size={10} className={cn(favoritesOnly && "fill-white/50")} />
+          <Star size={10} className={cn(favoritesOnly && "fill-amber/40 text-amber")} />
           {favoriteCount > 0 && !favoritesOnly && <span>{favoriteCount}</span>}
         </button>
         <button
@@ -219,6 +210,16 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
           <Plus size={10} />
           New
         </button>
+        <div className="relative ml-auto w-44">
+          <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-readable pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter…"
+            className="w-full h-8 pl-7 pr-2.5 font-mono text-[11px] text-soft-white placeholder:text-readable/60 bg-transparent rounded-sm focus:outline-none transition-precise"
+            style={{ border: "var(--border-default)" }}
+          />
+        </div>
       </div>
 
       {/* Custom token input */}
@@ -267,7 +268,7 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
           </span>
         </div>
       ) : (
-        <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto">
+        <div className="flex flex-wrap gap-1.5 max-h-96 overflow-y-auto">
           {visibleTokens.map((token) => {
             const active = selectedSet.has(token.text);
             const isHighQuality = token.quality_score > 0.3;
@@ -282,9 +283,9 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
               <div key={token.id} className="relative group/pill">
                 <button
                   type="button"
-                  onClick={() => onToggle(token)}
+                  onClick={() => onToggle(token, activeCategoryName)}
                   className={cn(
-                    "inline-flex items-center font-mono text-[10px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
+                    "inline-flex items-center font-mono text-[11px] tracking-wide px-2 py-1 rounded-sm transition-precise pr-5",
                     active ? "text-white" : isSuppressed ? "text-muted/45 hover:text-muted/70" : "text-readable hover:text-cyan"
                   )}
                   style={{
@@ -322,12 +323,12 @@ export function TokenCloud({ selectedTexts, onToggle, providerFilter, suppressed
                   className={cn(
                     "absolute right-1 top-1/2 -translate-y-1/2 transition-precise",
                     token.is_favorite
-                      ? "opacity-100 text-white/60"
-                      : "opacity-0 group-hover/pill:opacity-100 text-readable hover:text-cyan"
+                      ? "opacity-100 text-amber"
+                      : "opacity-0 group-hover/pill:opacity-100 text-readable hover:text-amber"
                   )}
                   title={token.is_favorite ? "Remove from favorites" : "Add to favorites"}
                 >
-                  <Star size={7} className={cn(token.is_favorite && "fill-white/50")} />
+                  <Star size={7} className={cn(token.is_favorite && "fill-amber/50")} />
                 </button>
               </div>
             );

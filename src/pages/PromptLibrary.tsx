@@ -798,7 +798,7 @@ export function PromptLibrary() {
               ) : (
                 <>
                   <Button variant="primary" size="sm" onClick={() => navigate("/craft")}>
-                    Craft Prompt
+                    Prompt Craft
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate("/import")}>
                     Import

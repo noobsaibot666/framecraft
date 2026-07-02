@@ -18,11 +18,11 @@ describe("validatePromptForAnalysis", () => {
     expect(v.valid).toBe(false);
   });
 
-  it("requires API key to be configured (key not set in test env)", () => {
+  it("requires an API key to be configured (no localStorage in test env)", () => {
     const v = validatePromptForAnalysis("a".repeat(25));
-    // In test env localStorage is empty → no API key → invalid
+    // In test env there's no localStorage → no model available → invalid
     expect(v.valid).toBe(false);
-    expect(v.message).toContain("Anthropic");
+    expect(v.message).toContain("OpenAI or Anthropic");
   });
 });
 

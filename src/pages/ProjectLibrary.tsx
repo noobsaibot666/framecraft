@@ -120,9 +120,9 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
               )}
             </div>
           </div>
-          {(project.client || project.campaign) && (
+          {(project.campaign_client || project.client || project.campaign) && (
             <p className="font-mono text-[12px] text-readable mt-1 truncate">
-              {[project.client, project.campaign].filter(Boolean).join(" · ")}
+              {[project.campaign_client ?? project.client, project.campaign].filter(Boolean).join(" · ")}
             </p>
           )}
         </div>

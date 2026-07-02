@@ -226,6 +226,7 @@ export interface Project {
   id: string;
   title: string;
   client?: string;
+  campaign_client?: string;
   campaign?: string;
   campaign_id?: string;
   status: ProjectStatus;

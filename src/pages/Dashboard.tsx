@@ -283,7 +283,7 @@ export function Dashboard() {
           </Button>
           <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
             <Plus size={12} />
-            Craft Prompt
+            Prompt Craft
           </Button>
         </div>
       }
@@ -521,7 +521,7 @@ export function Dashboard() {
                       icon={<Clock size={20} className="text-dim" />}
                       label="No prompts yet"
                       action="Craft your first prompt to get started."
-                      cta="Craft Prompt"
+                      cta="Prompt Craft"
                       onCta={() => navigate("/craft")}
                     />
                   )}

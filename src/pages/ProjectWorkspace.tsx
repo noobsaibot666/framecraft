@@ -886,7 +886,7 @@ export function ProjectWorkspace() {
   return (
     <PageContainer
       title={title || "Project"}
-      subtitle={[client, campaign].filter(Boolean).join(" · ") || "PROJECT WORKSPACE"}
+      subtitle={[allCampaigns.find((c) => c.id === campaignId)?.client ?? client, campaign].filter(Boolean).join(" · ") || "PROJECT WORKSPACE"}
       action={
         <div className="flex items-center gap-2">
           {/* Status pill — same h-10 as Button size="md" */}
@@ -896,7 +896,7 @@ export function ProjectWorkspace() {
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as ProjectStatus)}
-              className="appearance-none font-mono text-[13px] tracking-widest uppercase text-white bg-transparent border-none focus:outline-none cursor-pointer"
+              className="appearance-none font-mono text-[13px] tracking-widest uppercase text-white bg-transparent border-none focus:outline-none focus-visible:outline-none cursor-pointer"
             >
               {STATUS_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value} className="bg-panel text-white">{o.label}</option>
@@ -958,7 +958,7 @@ export function ProjectWorkspace() {
                 </span>
               ))}
               {!providerTargets.length && !aspectRatios.length && (
-                <span className="font-mono text-[12px] text-readable">Add provider and ratio targets in Setup.</span>
+                <span className="font-mono text-[12px] text-readable">Add provider targets in Setup. Aspect ratio is set per prompt in Prompt Craft.</span>
               )}
             </div>
             {(intendedOutput || creativeGoals) && (
@@ -1162,9 +1162,9 @@ export function ProjectWorkspace() {
             </div>
           </Panel>
 
-          {/* Prompts panel */}
+          {/* Prompts & Results panel */}
           <Panel
-            title="PROMPTS"
+            title="PROMPTS & RESULTS"
             count={linkedPrompts.length + (linkedResults.length > 0 ? linkedResults.length : 0)}
             action={
               <div className="flex items-center gap-1.5">

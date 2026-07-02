@@ -27,6 +27,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     id: row.id as string,
     title: row.title as string,
     client: row.client as string | undefined,
+    campaign_client: row.campaign_client as string | undefined,
     campaign: row.campaign as string | undefined,
     campaign_id: row.campaign_id as string | undefined,
     status: (row.status as ProjectStatus) ?? "draft",
@@ -138,11 +139,13 @@ export async function getProjects(filters?: ProjectFilters): Promise<Project[]> 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const rows = (await db.select(
-      `SELECT p.*,
+      `SELECT p.*, c.client AS campaign_client,
          (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) as prompt_count,
          (SELECT COUNT(*) FROM project_results pr WHERE pr.project_id = p.id) as result_count,
          (SELECT COUNT(*) FROM project_references pref WHERE pref.project_id = p.id) as reference_count
-       FROM projects p ${where}
+       FROM projects p
+       LEFT JOIN campaigns c ON c.id = p.campaign_id
+       ${where}
        ORDER BY p.updated_at DESC`,
       values
     )) as Record<string, unknown>[];
@@ -159,14 +162,16 @@ export async function getProjectById(id: string): Promise<Project | null> {
   if (isTauri) {
     const db = await getDb();
     const rows = (await db.select(
-      `SELECT p.*,
+      `SELECT p.*, c.client AS campaign_client,
          (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) as prompt_count,
          (SELECT COUNT(*) FROM project_results pr WHERE pr.project_id = p.id) as result_count,
          (SELECT COUNT(*) FROM project_references pref WHERE pref.project_id = p.id) as reference_count,
          (SELECT COUNT(*) FROM project_prompts pp2
             JOIN prompts pr2 ON pp2.prompt_id = pr2.id
             WHERE pp2.project_id = p.id AND pr2.is_winner = 1) as winner_count
-       FROM projects p WHERE p.id = $1`,
+       FROM projects p
+       LEFT JOIN campaigns c ON c.id = p.campaign_id
+       WHERE p.id = $1`,
       [id]
     )) as Record<string, unknown>[];
     return rows[0] ? rowToProject(rows[0]) : null;

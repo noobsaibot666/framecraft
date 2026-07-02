@@ -52,3 +52,20 @@ export function getApiKey(provider: AIProvider): string {
   const key = provider === "anthropic" ? AI_KEY_ANTHROPIC : AI_KEY_OPENAI;
   return (localStorage.getItem(key) ?? "").trim();
 }
+
+/**
+ * Auto-select a model when the caller hasn't chosen one. Prefers the cheapest
+ * connected OpenAI model (per default-model policy), falling back to Anthropic
+ * if only that provider is configured. Returns undefined if neither is set up.
+ */
+export function pickAvailableModel(): AIModel | undefined {
+  if (validateApiKey("openai", getApiKey("openai")).valid) {
+    return AI_MODELS.find((m) => m.provider === "openai" && m.tier === "fast")
+      ?? AI_MODELS.find((m) => m.provider === "openai");
+  }
+  if (validateApiKey("anthropic", getApiKey("anthropic")).valid) {
+    return AI_MODELS.find((m) => m.provider === "anthropic" && m.tier === "fast")
+      ?? AI_MODELS.find((m) => m.provider === "anthropic");
+  }
+  return undefined;
+}

@@ -1,4 +1,4 @@
-import { providerErrorMessage, providerLabel, validateApiKey, type AIProvider } from "./aiConfig";
+import { providerErrorMessage, providerLabel, validateApiKey, getApiKey, type AIModel, type AIProvider } from "./aiConfig";
 
 export const DEFAULT_AI_TIMEOUT_MS = 60_000;
 
@@ -19,6 +19,56 @@ async function readErrorPayload(response: Response): Promise<unknown> {
 export function requireValidApiKey(provider: AIProvider, apiKey: string): void {
   const validation = validateApiKey(provider, apiKey);
   if (!validation.valid) throw new Error(validation.message ?? `Invalid ${providerLabel(provider)} API key.`);
+}
+
+/** Provider-agnostic single-turn chat completion. Returns the raw text response. */
+export async function chatComplete(
+  model: AIModel,
+  opts: { system: string; user: string; maxTokens: number }
+): Promise<string> {
+  const apiKey = getApiKey(model.provider);
+  requireValidApiKey(model.provider, apiKey);
+
+  if (model.provider === "anthropic") {
+    const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
+      "anthropic",
+      "https://api.anthropic.com/v1/messages",
+      {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: model.id,
+          max_tokens: opts.maxTokens,
+          system: opts.system,
+          messages: [{ role: "user", content: opts.user }],
+        }),
+      }
+    );
+    return data.content.find((c) => c.type === "text")?.text ?? "";
+  }
+
+  const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
+    "openai",
+    "https://api.openai.com/v1/chat/completions",
+    {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model: model.id,
+        max_tokens: opts.maxTokens,
+        messages: [
+          { role: "system", content: opts.system },
+          { role: "user", content: opts.user },
+        ],
+      }),
+    }
+  );
+  return data.choices[0]?.message?.content ?? "";
 }
 
 export async function fetchProviderJson<T>(

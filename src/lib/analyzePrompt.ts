@@ -1,5 +1,5 @@
-import { fetchProviderJson, requireValidApiKey } from "./aiClient";
-import { AI_KEY_ANTHROPIC, getApiKey, validateApiKey } from "./aiConfig";
+import { chatComplete } from "./aiClient";
+import { pickAvailableModel } from "./aiConfig";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -18,8 +18,6 @@ export interface PromptAdvice {
 }
 
 export const EMPTY_ADVICE: PromptAdvice = { suggestions: [], risks: [], improvements: [] };
-
-const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 
 const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "environment", "camera", "lens", "lighting", "mood", "realism", "avoidance_text"];
 
@@ -72,10 +70,9 @@ export function validatePromptForAnalysis(promptText: string): { valid: boolean;
   if (!promptText || promptText.trim().length < 20) {
     return { valid: false, message: "Add at least 20 characters to the prompt before analyzing." };
   }
-  const key = typeof localStorage !== "undefined" ? localStorage.getItem(AI_KEY_ANTHROPIC) ?? "" : "";
-  const keyValid = validateApiKey("anthropic", key);
-  if (!keyValid.valid) {
-    return { valid: false, message: "Add an Anthropic API key in Settings to use Prompt Advisor." };
+  const model = typeof localStorage !== "undefined" ? pickAvailableModel() : undefined;
+  if (!model) {
+    return { valid: false, message: "Add an OpenAI or Anthropic API key in Settings to use Prompt Advisor." };
   }
   return { valid: true };
 }
@@ -115,30 +112,14 @@ function parseVariations(raw: string): PromptVariations {
 export async function generatePromptVariations(opts: { promptText: string }): Promise<PromptVariations> {
   if (!isTauri) return EMPTY_VARIATIONS;
 
-  const apiKey = getApiKey("anthropic");
-  requireValidApiKey("anthropic", apiKey);
+  const model = pickAvailableModel();
+  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
 
-  const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
-    "anthropic",
-    "https://api.anthropic.com/v1/messages",
-    {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: HAIKU_MODEL,
-        max_tokens: 1024,
-        system: VARIATIONS_SYSTEM,
-        messages: [{ role: "user", content: `Base prompt:\n${opts.promptText.trim()}` }],
-      }),
-    }
-  );
-
-  const rawText = data.content.find((c) => c.type === "text")?.text ?? "";
+  const rawText = await chatComplete(model, {
+    system: VARIATIONS_SYSTEM,
+    user: `Base prompt:\n${opts.promptText.trim()}`,
+    maxTokens: 1024,
+  });
   return parseVariations(rawText);
 }
 
@@ -163,34 +144,18 @@ export async function generateTagSuggestions(opts: {
 }): Promise<TagSuggestions> {
   if (!isTauri) return { tags: [] };
 
-  const apiKey = getApiKey("anthropic");
-  requireValidApiKey("anthropic", apiKey);
+  const model = pickAvailableModel();
+  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
 
   const context = opts.existingTags?.length
     ? `Existing tags (do not repeat): ${opts.existingTags.join(", ")}\n`
     : "";
 
-  const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
-    "anthropic",
-    "https://api.anthropic.com/v1/messages",
-    {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: HAIKU_MODEL,
-        max_tokens: 256,
-        system: TAG_SUGGEST_SYSTEM,
-        messages: [{ role: "user", content: `${context}Draft prompt:\n${opts.promptText.trim()}` }],
-      }),
-    }
-  );
-
-  const rawText = data.content.find((c) => c.type === "text")?.text ?? "";
+  const rawText = await chatComplete(model, {
+    system: TAG_SUGGEST_SYSTEM,
+    user: `${context}Draft prompt:\n${opts.promptText.trim()}`,
+    maxTokens: 256,
+  });
   try {
     const json = JSON.parse(rawText.trim()) as Partial<TagSuggestions>;
     const existing = new Set(opts.existingTags ?? []);
@@ -215,8 +180,8 @@ export async function analyzePromptDraft(opts: {
 }): Promise<PromptAdvice> {
   if (!isTauri) return EMPTY_ADVICE;
 
-  const apiKey = getApiKey("anthropic");
-  requireValidApiKey("anthropic", apiKey);
+  const model = pickAvailableModel();
+  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
 
   const systemPrompt = buildSystemPrompt(opts.brief, opts.provenTokens);
 
@@ -235,26 +200,6 @@ export async function analyzePromptDraft(opts: {
     ? `Draft prompt:\n${opts.promptText.trim()}\n\nCurrent field values:\n${fieldLines}${directionLine}`
     : `Draft prompt:\n${opts.promptText.trim()}${directionLine}`;
 
-  const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
-    "anthropic",
-    "https://api.anthropic.com/v1/messages",
-    {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: HAIKU_MODEL,
-        max_tokens: 768,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-      }),
-    }
-  );
-
-  const rawText = data.content.find((c) => c.type === "text")?.text ?? "";
+  const rawText = await chatComplete(model, { system: systemPrompt, user: userMessage, maxTokens: 768 });
   return parseAdvice(rawText);
 }

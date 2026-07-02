@@ -1133,8 +1133,8 @@ export function CraftPrompt() {
       const result = await generateTagSuggestions({ promptText: assembled, existingTags: fields.tags });
       setTagSuggestions(result.tags);
       if (!result.tags.length) toast.error("No new tags to suggest — try a longer prompt");
-    } catch {
-      toast.error("Tag suggestion failed — check your Anthropic API key");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Tag suggestion failed — check your API key in Settings");
     } finally {
       setSuggestingTags(false);
     }
@@ -2241,7 +2241,7 @@ export function CraftPrompt() {
                       if (analysisGuard.current.isCurrent(request)) setAdvice(result);
                     } catch (err) {
                       if (analysisGuard.current.isCurrent(request)) {
-                        toast.error(err instanceof Error ? err.message : "Analysis failed — check your Anthropic API key in Settings");
+                        toast.error(err instanceof Error ? err.message : "Analysis failed — check your API key in Settings");
                       }
                     } finally {
                       if (analysisGuard.current.isCurrent(request)) setAdviceLoading(false);

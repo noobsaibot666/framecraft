@@ -514,18 +514,22 @@ export function PromptDetail() {
           <Button variant="ghost" size="sm" onClick={() => navigate(`/craft/${prompt.id}`)}>
             <Edit2 size={11} /> Edit
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
-            <Plus size={11} /> Add Result
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleWinner}
-            className={prompt.is_winner ? "text-amber" : "text-dim"}
-          >
-            <Star size={11} className={prompt.is_winner ? "fill-amber/40" : ""} />
-            {prompt.is_winner ? "Winner" : "Mark Winner"}
-          </Button>
+          {/* Result Actions — grouped so they read as one cluster, not two loose buttons */}
+          <div className="flex items-center gap-0.5 p-0.5 rounded-sm" style={{ border: "var(--border-dim)" }} title="Result Actions">
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/results/${prompt.id}`)}>
+              <Plus size={11} /> Add Result
+            </Button>
+            <div className="w-px self-stretch my-1" style={{ background: "rgba(255,255,255,0.08)" }} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleWinner}
+              className={prompt.is_winner ? "text-amber" : "text-dim"}
+            >
+              <Star size={11} className={prompt.is_winner ? "fill-amber/40" : ""} />
+              {prompt.is_winner ? "Winner" : "Mark Winner"}
+            </Button>
+          </div>
           {/* Export dropdown */}
           <div className="relative">
             <Button variant="ghost" size="sm" onClick={() => setShowExportMenu((v) => !v)}>

@@ -620,8 +620,8 @@ export function PromptLibrary() {
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.4fr)_repeat(6,minmax(128px,1fr))]">
-          <div className="relative">
+        <div className="flex flex-col gap-3">
+          <div className="relative xl:max-w-100">
             <Search
               size={14}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-readable pointer-events-none"
@@ -634,19 +634,23 @@ export function PromptLibrary() {
             />
           </div>
 
-          <NativeSelect value={filters.provider ?? ""} onChange={(v) => setFilters({ provider: (v as Provider) || undefined })} options={PROVIDER_OPTIONS} />
-          <NativeSelect value={filters.category ?? ""} onChange={(v) => setFilters({ category: (v as Category) || undefined })} options={CATEGORY_OPTIONS} />
-          <NativeSelect value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
-          <NativeSelect value={filters.minRating != null ? String(filters.minRating) : ""} onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })} options={RATING_FILTER_OPTIONS} />
-          <NativeSelect value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""} onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })} options={AI_RISK_FILTER_OPTIONS} />
-          <NativeSelect
-            value={statusFilter}
-            onChange={(v) => setFilters({
-              isWinner: v === "winner" || undefined,
-              isFailed: v === "failed" || undefined,
-            })}
-            options={STATUS_FILTER_OPTIONS}
-          />
+          {/* auto-fit wraps filters onto additional rows instead of overflowing
+              the viewport when the available width can't fit all 6 columns */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(128px,1fr))]">
+            <NativeSelect value={filters.provider ?? ""} onChange={(v) => setFilters({ provider: (v as Provider) || undefined })} options={PROVIDER_OPTIONS} />
+            <NativeSelect value={filters.category ?? ""} onChange={(v) => setFilters({ category: (v as Category) || undefined })} options={CATEGORY_OPTIONS} />
+            <NativeSelect value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
+            <NativeSelect value={filters.minRating != null ? String(filters.minRating) : ""} onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })} options={RATING_FILTER_OPTIONS} />
+            <NativeSelect value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""} onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })} options={AI_RISK_FILTER_OPTIONS} />
+            <NativeSelect
+              value={statusFilter}
+              onChange={(v) => setFilters({
+                isWinner: v === "winner" || undefined,
+                isFailed: v === "failed" || undefined,
+              })}
+              options={STATUS_FILTER_OPTIONS}
+            />
+          </div>
         </div>
 
         {/* Clear All Filters */}

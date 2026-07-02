@@ -176,6 +176,12 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    /* Global one-step text size bump. Most components use literal px
+       Tailwind sizes (text-[13px] etc), so a root font-size change has no
+       effect — zoom scales the whole rendered UI (incl. layout) uniformly,
+       unlike transform:scale which doesn't reflow. Supported by all three
+       Tauri webview backends (WebKit on macOS/Linux, WebView2 on Windows). */
+    zoom: 1.06;
   }
 }
 

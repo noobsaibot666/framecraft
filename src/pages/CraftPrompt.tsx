@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { detectConsistencyIssues, detectProviderMismatch, findConflictingTexts, type ConsistencyMatch, type ProviderMismatch } from "@/lib/tokenConsistency";
 import { isVideoProvider } from "@/lib/providerCapabilities";
+import { recordConsistencyEvent, getAllConsistencyRuleCounts } from "@/lib/inconsistencyIntelligence";
 import { useShortcut } from "@/lib/shortcuts";
 import { toast } from "@/lib/toast";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
@@ -819,6 +820,8 @@ export function CraftPrompt() {
   const [consistencyMatches, setConsistencyMatches] = useState<ConsistencyMatch[]>([]);
   const [providerMismatch, setProviderMismatch] = useState<ProviderMismatch | null>(null);
   const [consistencyDismissed, setConsistencyDismissed] = useState(false);
+  const [consistencyRuleCounts, setConsistencyRuleCounts] = useState<Record<string, number>>({});
+  const warnedRuleIdsRef = useRef<Set<string>>(new Set());
   const [provenCombos, setProvenCombos] = useState<ProvenCombo[]>([]);
   const [lowQualityDismissed, setLowQualityDismissed] = useState(false);
   const [srefPickerOpen, setSrefPickerOpen] = useState(false);
@@ -931,6 +934,10 @@ export function CraftPrompt() {
   useEffect(() => {
     const timer = window.setTimeout(() => setInsightsReady(true), 120);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    getAllConsistencyRuleCounts().then(setConsistencyRuleCounts).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -1113,12 +1120,50 @@ export function CraftPrompt() {
   // instructions and image-vs-video provider mismatches (App Intelligence)
   useEffect(() => {
     const timer = setTimeout(() => {
-      setConsistencyMatches(detectConsistencyIssues(deferredAssembled));
-      setProviderMismatch(detectProviderMismatch(deferredAssembled, deferredProvider));
+      const matches = detectConsistencyIssues(deferredAssembled);
+      const mismatch = detectProviderMismatch(deferredAssembled, deferredProvider);
+      setConsistencyMatches(matches);
+      setProviderMismatch(mismatch);
       setConsistencyDismissed(false);
+
+      // Record each newly-appeared conflict once per editing session (not every
+      // debounce tick while it stays active) so recurring conflicts accumulate
+      // real frequency data instead of session noise.
+      for (const m of matches) {
+        if (!warnedRuleIdsRef.current.has(m.rule.id)) {
+          warnedRuleIdsRef.current.add(m.rule.id);
+          recordConsistencyEvent({
+            rule_id: m.rule.id, rule_label: m.rule.label, suggestion: m.rule.suggestion,
+            prompt_id: id, provider: deferredProvider, action: "warned",
+          }).then(() => getAllConsistencyRuleCounts()).then(setConsistencyRuleCounts).catch(() => {});
+        }
+      }
+      if (mismatch && !warnedRuleIdsRef.current.has("provider-mismatch")) {
+        warnedRuleIdsRef.current.add("provider-mismatch");
+        recordConsistencyEvent({
+          rule_id: "provider-mismatch", rule_label: mismatch.label, suggestion: mismatch.suggestion,
+          prompt_id: id, provider: deferredProvider, action: "warned",
+        }).then(() => getAllConsistencyRuleCounts()).then(setConsistencyRuleCounts).catch(() => {});
+      }
     }, 500);
     return () => clearTimeout(timer);
-  }, [deferredAssembled, deferredProvider]);
+  }, [deferredAssembled, deferredProvider, id]);
+
+  const handleDismissConsistencyWarning = () => {
+    setConsistencyDismissed(true);
+    for (const m of consistencyMatches) {
+      recordConsistencyEvent({
+        rule_id: m.rule.id, rule_label: m.rule.label, suggestion: m.rule.suggestion,
+        prompt_id: id, provider: fields.provider, action: "dismissed",
+      }).catch(() => {});
+    }
+    if (providerMismatch) {
+      recordConsistencyEvent({
+        rule_id: "provider-mismatch", rule_label: providerMismatch.label, suggestion: providerMismatch.suggestion,
+        prompt_id: id, provider: fields.provider, action: "dismissed",
+      }).catch(() => {});
+    }
+  };
 
   const conflictingTokenIds = useMemo(() => {
     if (consistencyMatches.length === 0) return new Set<string>();
@@ -1719,6 +1764,41 @@ export function CraftPrompt() {
                 />
               </div>
             )}
+
+            {/* Inconsistency warnings — conflicting instructions + provider mismatch, both modes */}
+            {!consistencyDismissed && (consistencyMatches.length > 0 || providerMismatch) && (
+              <div className="flex flex-col gap-2 px-3 py-2.5 mt-4 rounded-sm"
+                style={{ border: "1px solid rgba(251,191,36,0.3)", background: "rgba(251,191,36,0.04)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-amber/80">
+                    <AlertCircle size={10} /> Inconsistency check
+                  </span>
+                  <button type="button" onClick={handleDismissConsistencyWarning} className="text-amber/60 hover:text-white text-[10px]">×</button>
+                </div>
+                {consistencyMatches.map((m) => (
+                  <div key={m.rule.id} className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[9.5px] text-amber/90 leading-relaxed">{m.rule.label}</span>
+                      {consistencyRuleCounts[m.rule.id] > 1 && (
+                        <span className="font-mono text-[8px] text-amber/50">· seen {consistencyRuleCounts[m.rule.id]}×</span>
+                      )}
+                    </div>
+                    <span className="font-mono text-[9px] text-white/50 leading-relaxed">{m.rule.suggestion}</span>
+                  </div>
+                ))}
+                {providerMismatch && (
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[9.5px] text-amber/90 leading-relaxed">{providerMismatch.label}</span>
+                      {consistencyRuleCounts["provider-mismatch"] > 1 && (
+                        <span className="font-mono text-[8px] text-amber/50">· seen {consistencyRuleCounts["provider-mismatch"]}×</span>
+                      )}
+                    </div>
+                    <span className="font-mono text-[9px] text-white/50 leading-relaxed">{providerMismatch.suggestion}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Token Library — builder mode only */}
@@ -1752,31 +1832,6 @@ export function CraftPrompt() {
                     conflictingIds={conflictingTokenIds}
                   />
                 </div>
-
-                {/* Inconsistency warnings — conflicting instructions + provider mismatch */}
-                {!consistencyDismissed && (consistencyMatches.length > 0 || providerMismatch) && (
-                  <div className="flex flex-col gap-2 px-3 py-2.5 rounded-sm"
-                    style={{ border: "1px solid rgba(251,191,36,0.3)", background: "rgba(251,191,36,0.04)" }}>
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest text-amber/80">
-                        <AlertCircle size={10} /> Inconsistency check
-                      </span>
-                      <button type="button" onClick={() => setConsistencyDismissed(true)} className="text-amber/60 hover:text-white text-[10px]">×</button>
-                    </div>
-                    {consistencyMatches.map((m) => (
-                      <div key={m.rule.id} className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[9.5px] text-amber/90 leading-relaxed">{m.rule.label}</span>
-                        <span className="font-mono text-[9px] text-white/50 leading-relaxed">{m.rule.suggestion}</span>
-                      </div>
-                    ))}
-                    {providerMismatch && (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-[9.5px] text-amber/90 leading-relaxed">{providerMismatch.label}</span>
-                        <span className="font-mono text-[9px] text-white/50 leading-relaxed">{providerMismatch.suggestion}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Proven combinations — shown when selected tokens have a co-occurrence history */}
                 {provenCombos.length > 0 && (

@@ -172,6 +172,12 @@ pub fn run() {
             sql: include_str!("../migrations/027_prompt_variant_label.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 28,
+            description: "inconsistency_events",
+            sql: include_str!("../migrations/028_inconsistency_events.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

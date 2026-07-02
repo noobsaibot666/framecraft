@@ -728,7 +728,7 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 29] = [
+const REQUIRED_RELEASE_TABLES: [&str; 30] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
@@ -740,6 +740,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 29] = [
     "deliverable_references",
     "export_presets",
     "generation_queue",
+    "inconsistency_events",
     "profiles",
     "project_deliverables",
     "project_prompts",
@@ -2980,7 +2981,7 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
         .filter(|table| {
             !matches!(
                 **table,
-                "campaigns" | "creative_directions" | "shot_sequence"
+                "campaigns" | "creative_directions" | "shot_sequence" | "inconsistency_events"
             )
         })
         .all(|table| connection_table_exists(&conn, table)))
@@ -3116,6 +3117,21 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
     )?;
 
     tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS inconsistency_events (
+           id         TEXT PRIMARY KEY NOT NULL,
+           rule_id    TEXT NOT NULL,
+           rule_label TEXT NOT NULL,
+           suggestion TEXT,
+           prompt_id  TEXT REFERENCES prompts(id) ON DELETE SET NULL,
+           provider   TEXT,
+           action     TEXT NOT NULL DEFAULT 'warned',
+           created_at TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_inconsistency_events_rule ON inconsistency_events(rule_id);",
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
          CREATE INDEX IF NOT EXISTS idx_prompts_recipe_use
@@ -3157,7 +3173,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 27] {
+fn migration_sql() -> [&'static str; 28] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3186,6 +3202,7 @@ fn migration_sql() -> [&'static str; 27] {
         include_str!("../migrations/025_prompt_builder_state.sql"),
         include_str!("../migrations/026_prompt_thumbnail_override.sql"),
         include_str!("../migrations/027_prompt_variant_label.sql"),
+        include_str!("../migrations/028_inconsistency_events.sql"),
     ]
 }
 

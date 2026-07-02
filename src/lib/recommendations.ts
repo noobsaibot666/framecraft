@@ -14,6 +14,7 @@
 import type { Prompt, Token, SREF, Profile, Reference, Recipe } from "@/types";
 import { createBoundedAsyncCache } from "./boundedCache";
 import { getFramecraftDb } from "./dbConnection";
+import { getTopConsistencyConflicts } from "./inconsistencyIntelligence";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -414,6 +415,23 @@ export async function recommendAvoidance(ctx: RecommendationContext, limit = 4):
       recs.push({
         label,
         reason: `Appeared in ${count} failed result${count !== 1 ? "s" : ""} in your library`,
+        severity: "medium",
+      });
+    }
+  }
+
+  // Recurring rule-based inconsistency conflicts (App Intelligence feedback loop) —
+  // a conflict that keeps firing across prompts becomes a personal avoidance pattern,
+  // the same way built-in avoidance_patterns rows do.
+  if (recs.length < limit) {
+    const recurring = await getTopConsistencyConflicts(limit).catch(() => []);
+    for (const conflict of recurring) {
+      if (recs.length >= limit) break;
+      if (conflict.count < 2 || recs.some((r) => r.label === conflict.rule_label)) continue;
+      recs.push({
+        label: conflict.rule_label,
+        correction: conflict.suggestion ?? undefined,
+        reason: `You've hit this conflict ${conflict.count} times across your prompts`,
         severity: "medium",
       });
     }

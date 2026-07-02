@@ -45,6 +45,7 @@
     "react-dropzone": "^15.0.0",
     "react-hook-form": "^7.80.0",
     "react-router-dom": "^7.18.0",
+    "skillfish": "^1.0.38",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

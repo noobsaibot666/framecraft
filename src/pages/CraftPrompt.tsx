@@ -26,6 +26,7 @@ import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { detectConsistencyIssues, detectProviderMismatch, findConflictingTexts, type ConsistencyMatch, type ProviderMismatch } from "@/lib/tokenConsistency";
+import { isVideoProvider } from "@/lib/providerCapabilities";
 import { useShortcut } from "@/lib/shortcuts";
 import { toast } from "@/lib/toast";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
@@ -405,8 +406,9 @@ function assembleSD(f: Fields, _sd: SDParams): string {
 }
 
 function assembleGeneric(f: Fields): string {
-  return [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism]
-    .map((s) => s.trim()).filter(Boolean).join(", ");
+  const parts = [f.subject, f.environment, f.camera, f.lens, f.lighting, f.mood, f.realism];
+  if (isVideoProvider(f.provider)) parts.push(f.motion, f.duration ? `${f.duration} duration` : "");
+  return parts.map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
 // ─── Nano Banana ───────────────────────────────────────────────
@@ -623,6 +625,7 @@ interface Fields {
   tags: string[]; notes: string;
   is_winner: boolean; is_failed: boolean;
   variation: string;
+  motion: string; duration: string;
 }
 
 const EMPTY: Fields = {
@@ -635,6 +638,7 @@ const EMPTY: Fields = {
   tags: [], notes: "",
   is_winner: false, is_failed: false,
   variation: "",
+  motion: "", duration: "",
 };
 
 const EMPTY_MJ: MJParams = {
@@ -889,6 +893,7 @@ export function CraftPrompt() {
             tokens?: { id: string; text: string; quality_score: number }[];
             overrides?: Record<string, string>;
             subject?: string; environment?: string; mood?: string; realism?: string; variation?: string;
+            motion?: string; duration?: string;
             usedAvoidanceIds?: string[];
           };
           if (bs.mode) setMode(bs.mode);
@@ -911,6 +916,8 @@ export function CraftPrompt() {
             mood: bs.mood ?? "",
             realism: bs.realism ?? "",
             variation: bs.variation ?? "",
+            motion: bs.motion ?? "",
+            duration: bs.duration ?? "",
           }));
         } catch { /* ignore corrupt builder state */ }
       } else {
@@ -1293,6 +1300,8 @@ export function CraftPrompt() {
       mood: fields.mood,
       realism: fields.realism,
       variation: fields.variation,
+      motion: fields.motion,
+      duration: fields.duration,
       usedAvoidanceIds: Array.from(usedAvoidanceIds),
     }),
   });
@@ -1669,6 +1678,31 @@ export function CraftPrompt() {
                     style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                   />
                 </div>
+                {/* Video-only fields — hidden entirely for image-only providers */}
+                {isVideoProvider(fields.provider) && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">MOTION / CAMERA MOVEMENT</label>
+                      <input
+                        value={fields.motion}
+                        onChange={(e) => setF("motion", e.target.value)}
+                        placeholder="slow dolly in, handheld sway"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">DURATION</label>
+                      <input
+                        value={fields.duration}
+                        onChange={(e) => setF("duration", e.target.value)}
+                        placeholder="5s, 10s…"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">

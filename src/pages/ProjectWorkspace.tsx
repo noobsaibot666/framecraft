@@ -35,6 +35,7 @@ import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 import { AIImproveButton } from "@/components/ui/AIImproveButton";
+import { isVideoProvider } from "@/lib/providerCapabilities";
 
 registerShortcutLabel("cmd+s", "Save (Craft / Project Workspace)");
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -71,7 +72,6 @@ const PROJECT_TYPE_OPTIONS = [
 ];
 
 const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
-const VIDEO_ONLY_PROVIDERS = new Set(["seedance", "kling", "runway", "higgsfield"]);
 
 // ─── Shared field atoms ───────────────────────────────────────
 
@@ -566,8 +566,8 @@ export function ProjectWorkspace() {
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
-  const hasImageProvider = providerTargets.length === 0 || providerTargets.some((p) => !VIDEO_ONLY_PROVIDERS.has(p));
-  const hasVideoProvider = providerTargets.length === 0 || providerTargets.some((p) => VIDEO_ONLY_PROVIDERS.has(p));
+  const hasImageProvider = providerTargets.length === 0 || providerTargets.some((p) => !isVideoProvider(p));
+  const hasVideoProvider = providerTargets.length === 0 || providerTargets.some((p) => isVideoProvider(p));
 
   // Linked content
   const [linkedPrompts, setLinkedPrompts] = useState<Awaited<ReturnType<typeof getPromptsForProject>>>([]);

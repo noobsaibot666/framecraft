@@ -2,6 +2,8 @@
 // instructions (camera, lighting, style, subject count, provider mismatch)
 // before they reach the provider, per the "App Intelligence" feedback.
 
+import { isVideoProvider } from "./providerCapabilities";
+
 export interface ConsistencyRule {
   id: string;
   label: string;
@@ -10,7 +12,6 @@ export interface ConsistencyRule {
   suggestion: string;
 }
 
-const VIDEO_PROVIDERS = new Set(["seedance", "kling", "runway", "higgsfield"]);
 const VIDEO_ONLY_WORDS = ["motion", "video", "fps", "frame rate", "duration", "clip", "footage", "animate", "animation"];
 const IMAGE_ONLY_WORDS = ["still image", "static shot", "single frame", "photograph only"];
 
@@ -91,8 +92,8 @@ export interface ProviderMismatch {
 export function detectProviderMismatch(text: string, provider: string): ProviderMismatch | null {
   if (!text.trim()) return null;
   const lower = text.toLowerCase();
-  const isVideoProvider = VIDEO_PROVIDERS.has(provider);
-  if (!isVideoProvider) {
+  const videoProvider = isVideoProvider(provider);
+  if (!videoProvider) {
     const hit = VIDEO_ONLY_WORDS.find((w) => lower.includes(w));
     if (hit) {
       return {

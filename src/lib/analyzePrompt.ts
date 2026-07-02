@@ -24,10 +24,21 @@ const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "environment", "camera", 
 function buildSystemPrompt(brief?: string, provenTokens?: string[]): string {
   const parts: string[] = [
     "You are an expert AI image prompt engineer for advertising-grade production.",
-    "Analyze the draft prompt (and current field values when provided) and return ONLY a valid JSON object:",
+    "Analyze the draft prompt (and current field values when provided) specifically for these failure modes — only report ones you actually find, do not force every category:",
+    `- visual hierarchy (no clear focal point / everything competing for attention)
+- visual logic (elements that don't cohere into one coherent scene)
+- prompt overload (too much crammed into one prompt)
+- too many competing ideas / subjects
+- unclear main subject
+- conflicting style references (e.g. documentary realism + surreal CGI)
+- conflicting camera instructions (e.g. macro + wide establishing shot)
+- conflicting lighting (e.g. night + morning sunlight)
+- overloaded exclusions (avoidance/negative list doing too much work)`,
+    "",
+    "Return ONLY a valid JSON object:",
     `{
   "suggestions": ["concrete actionable improvement (max 2 items, each starts with a verb)"],
-  "risks": ["specific risk — AI-look, generic phrasing, conflicts, missing params (max 2 items)"],
+  "risks": ["specific risk found from the failure-mode list above, or other AI-look/generic-phrasing risk (max 2 items)"],
   "improvements": [
     { "field": "subject|environment|camera|lens|lighting|mood|realism|avoidance_text", "label": "Subject|Environment|Camera|Lens|Lighting|Mood|Realism|Avoidance", "value": "ready-to-use replacement text for that field only" }
   ]

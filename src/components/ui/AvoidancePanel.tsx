@@ -11,6 +11,8 @@ interface AvoidancePanelProps {
   provider?: string;
   onAddCorrection: (text: string) => void;
   onRiskScoreChange: (score: number) => void;
+  usedPatternIds?: Set<string>;
+  onMarkUsed?: (patternId: string) => void;
 }
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -30,11 +32,13 @@ const SEVERITY_LABEL: Record<string, string> = {
 function RiskItem({
   risk,
   dismissed,
+  used,
   onAddCorrection,
   onDismiss,
 }: {
   risk: DetectedRisk;
   dismissed: boolean;
+  used: boolean;
   onAddCorrection: (text: string) => void;
   onDismiss: () => void;
 }) {
@@ -45,8 +49,8 @@ function RiskItem({
 
   return (
     <div
-      className="flex flex-col rounded-sm overflow-hidden"
-      style={{ border: "var(--border-default)" }}
+      className="flex flex-col rounded-sm overflow-hidden transition-precise"
+      style={{ border: used ? "1px solid rgba(72,229,232,0.4)" : "var(--border-default)", background: used ? "rgba(72,229,232,0.05)" : undefined }}
     >
       {/* Header row */}
       <div className="flex min-h-10 items-center gap-2.5 px-3 py-2.5">
@@ -57,6 +61,7 @@ function RiskItem({
           {SEVERITY_LABEL[pattern.severity]}
         </span>
         <span className="flex-1 font-mono text-[12px] text-soft-white truncate">{pattern.label}</span>
+        {used && <span className="font-mono text-[9px] text-cyan tracking-widest uppercase shrink-0">Used</span>}
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
@@ -100,11 +105,14 @@ function RiskItem({
             <button
               type="button"
               onClick={() => onAddCorrection(pattern.correction_prompt!)}
-              className="flex min-h-8 items-center gap-1.5 self-start font-mono text-[10px] text-readable hover:text-cyan px-2.5 py-1.5 rounded-sm transition-precise"
-              style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.05)" }}
+              className={cn(
+                "flex min-h-8 items-center gap-1.5 self-start font-mono text-[10px] px-2.5 py-1.5 rounded-sm transition-precise",
+                used ? "text-cyan" : "text-readable hover:text-cyan"
+              )}
+              style={{ border: used ? "1px solid rgba(72,229,232,0.4)" : "var(--border-default)", background: used ? "rgba(72,229,232,0.08)" : "rgba(255,255,255,0.05)" }}
             >
               <Plus size={10} />
-              Add correction
+              {used ? "Added again" : "Add correction"}
             </button>
           )}
         </div>
@@ -197,7 +205,7 @@ function AddRuleForm({ onSave, onClose }: { onSave: (p: AvoidancePattern) => voi
 
 // ─── Main Panel ───────────────────────────────────────────────
 
-export function AvoidancePanel({ promptText, category, provider, onAddCorrection, onRiskScoreChange }: AvoidancePanelProps) {
+export function AvoidancePanel({ promptText, category, provider, onAddCorrection, onRiskScoreChange, usedPatternIds, onMarkUsed }: AvoidancePanelProps) {
   const [patterns, setPatterns] = useState<AvoidancePattern[]>([]);
   const [risks, setRisks] = useState<DetectedRisk[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -243,11 +251,12 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
   const highCount = activeRisks.filter((r) => r.pattern.severity === "high").length;
 
   const handleAddAll = () => {
-    const corrections = activeRisks
-      .filter((r) => r.pattern.correction_prompt)
-      .map((r) => r.pattern.correction_prompt!)
-      .join(", ");
-    if (corrections) onAddCorrection(corrections);
+    const withCorrection = activeRisks.filter((r) => r.pattern.correction_prompt);
+    const corrections = withCorrection.map((r) => r.pattern.correction_prompt!).join(", ");
+    if (corrections) {
+      onAddCorrection(corrections);
+      withCorrection.forEach((r) => onMarkUsed?.(r.pattern.id));
+    }
   };
 
   const handleDismiss = (patternId: string) => {
@@ -343,7 +352,8 @@ export function AvoidancePanel({ promptText, category, provider, onAddCorrection
             <RiskItem
               risk={risk}
               dismissed={dismissed.has(risk.pattern.id)}
-              onAddCorrection={onAddCorrection}
+              used={usedPatternIds?.has(risk.pattern.id) ?? false}
+              onAddCorrection={(text) => { onAddCorrection(text); onMarkUsed?.(risk.pattern.id); }}
               onDismiss={() => handleDismiss(risk.pattern.id)}
             />
             {!risk.pattern.is_builtin && !dismissed.has(risk.pattern.id) && (

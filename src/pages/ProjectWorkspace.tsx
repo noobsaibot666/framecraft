@@ -34,8 +34,7 @@ import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/l
 import { toast } from "@/lib/toast";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
-import { improveProjectField } from "@/lib/fieldImprovement";
+import { AIImproveButton } from "@/components/ui/AIImproveButton";
 
 registerShortcutLabel("cmd+s", "Save (Craft / Project Workspace)");
 import type { Campaign, Project, ProjectStatus, Category, Prompt, Reference } from "@/types";
@@ -197,62 +196,6 @@ function ProviderSelect({ values, options, onChange }: {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function FieldImproveButton({ value, fieldName, projectTitle, projectContext, onImproved }: {
-  value: string;
-  fieldName: string;
-  projectTitle: string;
-  projectContext?: string;
-  onImproved: (v: string) => void;
-}) {
-  const availableModels = AI_MODELS.filter((m) => Boolean(getApiKey(m.provider)));
-  const [modelId, setModelId] = useState(() => availableModels[0]?.id ?? AI_MODELS[0].id);
-  const [improving, setImproving] = useState(false);
-
-  if (availableModels.length === 0) return null;
-
-  const model = AI_MODELS.find((m) => m.id === modelId) ?? availableModels[0];
-
-  const handleImprove = async () => {
-    if (!value.trim() || improving) return;
-    setImproving(true);
-    try {
-      const improved = await improveProjectField({ fieldName, currentValue: value, projectTitle, context: projectContext, model });
-      onImproved(improved);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setImproving(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {availableModels.length > 1 && (
-        <select
-          value={modelId}
-          onChange={(e) => setModelId(e.target.value)}
-          className="h-7 px-2 rounded-sm bg-dark font-mono text-[10px] text-readable focus:outline-none"
-          style={{ border: "var(--border-default)" }}
-        >
-          {availableModels.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
-        </select>
-      )}
-      <button
-        type="button"
-        onClick={handleImprove}
-        disabled={improving || !value.trim()}
-        className="flex items-center gap-1 h-7 px-2.5 rounded-sm font-mono text-[10px] text-cyan border border-cyan/30 hover:bg-cyan/10 disabled:opacity-40 transition-precise"
-        title={`Improve ${fieldName} with AI`}
-      >
-        <Sparkles size={9} />
-        {improving ? "Improving…" : "Improve"}
-      </button>
     </div>
   );
 }
@@ -1059,7 +1002,7 @@ export function ProjectWorkspace() {
                 <FileText size={9} className="text-dim/40" />
                 <FieldLabel ai>BRIEF</FieldLabel>
               </div>
-              <FieldImproveButton
+              <AIImproveButton
                 value={briefText}
                 fieldName="brief"
                 projectTitle={title}
@@ -1074,7 +1017,7 @@ export function ProjectWorkspace() {
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <FieldLabel ai>PRODUCTION GOAL</FieldLabel>
-              <FieldImproveButton
+              <AIImproveButton
                 value={productionGoal}
                 fieldName="production goal"
                 projectTitle={title}

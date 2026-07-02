@@ -52,9 +52,11 @@ export async function chatComplete(
     return data.content.find((c) => c.type === "text")?.text ?? "";
   }
 
+  // OpenAI and DeepSeek both expose an OpenAI-compatible chat completions endpoint.
+  const baseUrl = model.provider === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
   const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
-    "openai",
-    "https://api.openai.com/v1/chat/completions",
+    model.provider,
+    baseUrl,
     {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },

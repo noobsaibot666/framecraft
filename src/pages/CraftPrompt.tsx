@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch, Sparkles } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, GitBranch } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -20,8 +20,7 @@ import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
 import { getTokenById } from "@/lib/tokenDetail";
-import { improveProjectField } from "@/lib/fieldImprovement";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AIImproveButton } from "@/components/ui/AIImproveButton";
 import { formatPromptForProvider, getProviderHints } from "@/lib/promptFormatter";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -811,6 +810,7 @@ export function CraftPrompt() {
   const [includeAvoidance, setIncludeAvoidance] = useState(false);
   const [tokenSequence, setTokenSequence] = useState<Token[]>([]);
   const [tokenOverrides, setTokenOverrides] = useState<Record<string, string>>({});
+  const [usedAvoidanceIds, setUsedAvoidanceIds] = useState<Set<string>>(new Set());
   const [provenCombos, setProvenCombos] = useState<ProvenCombo[]>([]);
   const [lowQualityDismissed, setLowQualityDismissed] = useState(false);
   const [srefPickerOpen, setSrefPickerOpen] = useState(false);
@@ -819,8 +819,8 @@ export function CraftPrompt() {
   const [advice, setAdvice] = useState<PromptAdvice>(EMPTY_ADVICE);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceDismissed, setAdviceDismissed] = useState(false);
+  const [adviceJustIn, setAdviceJustIn] = useState(false);
   const [analyzeDirection, setAnalyzeDirection] = useState("");
-  const [improvingAvoidance, setImprovingAvoidance] = useState(false);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
@@ -885,6 +885,7 @@ export function CraftPrompt() {
             tokens?: { id: string; text: string; quality_score: number }[];
             overrides?: Record<string, string>;
             subject?: string; environment?: string; mood?: string; realism?: string; variation?: string;
+            usedAvoidanceIds?: string[];
           };
           if (bs.mode) setMode(bs.mode);
           if (bs.tokens?.length) {
@@ -895,6 +896,9 @@ export function CraftPrompt() {
           }
           if (bs.overrides && Object.keys(bs.overrides).length) {
             setTokenOverrides(bs.overrides);
+          }
+          if (bs.usedAvoidanceIds?.length) {
+            setUsedAvoidanceIds(new Set(bs.usedAvoidanceIds));
           }
           setFields((f) => ({
             ...f,
@@ -1140,6 +1144,47 @@ export function CraftPrompt() {
     }
   };
 
+  const handleAnalyzeDraft = async (focusDirection?: string) => {
+    const check = validatePromptForAnalysis(assembled);
+    if (!check.valid) { toast.error(check.message ?? "Add more to the prompt before analyzing"); return; }
+    const request = analysisGuard.current.begin();
+    setAdviceLoading(true);
+    setAdviceDismissed(false);
+    try {
+      const result = await analyzePromptDraft({
+        promptText: assembled,
+        brief: projectContext?.brief_text,
+        provenTokens: tokenSequence.filter((t) => t.quality_score > 0.3).map((t) => t.text).slice(0, 5),
+        fields: mode === "builder" ? {
+          subject: fields.subject || undefined,
+          environment: fields.environment || undefined,
+          camera: fields.camera || undefined,
+          lens: fields.lens || undefined,
+          lighting: fields.lighting || undefined,
+          mood: fields.mood || undefined,
+          realism: fields.realism || undefined,
+        } : undefined,
+        userDirection: focusDirection ?? (analyzeDirection || undefined),
+      });
+      if (!analysisGuard.current.isCurrent(request)) return;
+      setAdvice(result);
+      const total = result.suggestions.length + result.risks.length + result.improvements.length;
+      if (total > 0) {
+        setAdviceJustIn(true);
+        setTimeout(() => setAdviceJustIn(false), 2000);
+        toast.success(`Analysis found ${total} point${total !== 1 ? "s" : ""} to review`);
+      } else {
+        toast.success("Analysis complete — no issues found");
+      }
+    } catch (err) {
+      if (analysisGuard.current.isCurrent(request)) {
+        toast.error(err instanceof Error ? err.message : "Analysis failed — check your API key in Settings");
+      }
+    } finally {
+      if (analysisGuard.current.isCurrent(request)) setAdviceLoading(false);
+    }
+  };
+
   const varSuffix = fields.variation.trim() ? `, ${fields.variation.trim()}` : "";
   const fullCopyText = includeAvoidance && fields.avoidance_text
     ? `${assembled}${varSuffix}\n\n${fields.avoidance_text}`
@@ -1223,6 +1268,7 @@ export function CraftPrompt() {
       mood: fields.mood,
       realism: fields.realism,
       variation: fields.variation,
+      usedAvoidanceIds: Array.from(usedAvoidanceIds),
     }),
   });
 
@@ -1739,38 +1785,15 @@ export function CraftPrompt() {
                 <span className="system-label text-[13px] text-soft-white">AI-LOOK AVOIDANCE</span>
                 <div className="flex-1 h-px bg-white/16" />
               </div>
-              {(() => {
-                const availableModels = AI_MODELS.filter((m) => Boolean(getApiKey(m.provider)));
-                if (availableModels.length === 0) return null;
-                const model = availableModels[0];
-                return (
-                  <button
-                    type="button"
-                    disabled={improvingAvoidance || !assembled.trim()}
-                    onClick={async () => {
-                      setImprovingAvoidance(true);
-                      try {
-                        const improved = await improveProjectField({
-                          fieldName: "AI-look avoidance list",
-                          currentValue: fields.avoidance_text || "No avoidance text yet — generate a comprehensive list",
-                          projectTitle: fields.title || "this prompt",
-                          context: assembled,
-                          model,
-                        });
-                        setF("avoidance_text", improved);
-                      } catch (err) {
-                        toast.error(String(err));
-                      } finally {
-                        setImprovingAvoidance(false);
-                      }
-                    }}
-                    className="flex items-center gap-1 h-7 px-2.5 rounded-sm font-mono text-[10px] text-cyan border border-cyan/30 hover:bg-cyan/10 disabled:opacity-40 transition-precise"
-                  >
-                    <Sparkles size={9} />
-                    {improvingAvoidance ? "Improving…" : "Improve"}
-                  </button>
-                );
-              })()}
+              <AIImproveButton
+                value={fields.avoidance_text}
+                fieldName="AI-look avoidance list"
+                projectTitle={fields.title || "this prompt"}
+                projectContext={assembled}
+                disabled={!assembled.trim()}
+                fallbackValue="No avoidance text yet — generate a comprehensive list"
+                onImproved={(v) => setF("avoidance_text", v)}
+              />
             </div>
             <div className="flex flex-col gap-3">
               <AvoidancePanel
@@ -1781,6 +1804,8 @@ export function CraftPrompt() {
                   setF("avoidance_text", fields.avoidance_text ? `${fields.avoidance_text}, ${text}` : text);
                 }}
                 onRiskScoreChange={(score) => setF("ai_look_risk", Math.round(score))}
+                usedPatternIds={usedAvoidanceIds}
+                onMarkUsed={(patternId) => setUsedAvoidanceIds((prev) => new Set(prev).add(patternId))}
               />
               <Textarea
                 value={fields.avoidance_text}
@@ -2213,48 +2238,35 @@ export function CraftPrompt() {
                   className="h-8 px-2.5 rounded-sm bg-transparent font-mono text-[10px] text-soft-white placeholder:text-dim focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.12)" }}
                 />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!canAnalyze || adviceLoading}
-                  title={!canAnalyze ? analyzeCheck.message : "Analyze with Claude Haiku"}
-                  onClick={async () => {
-                    const request = analysisGuard.current.begin();
-                    setAdviceLoading(true);
-                    setAdviceDismissed(false);
-                    try {
-                      const result = await analyzePromptDraft({
-                        promptText: assembled,
-                        brief: projectContext?.brief_text,
-                        provenTokens: tokenSequence.filter(t => t.quality_score > 0.3).map(t => t.text).slice(0, 5),
-                        fields: mode === "builder" ? {
-                          subject: fields.subject || undefined,
-                          environment: fields.environment || undefined,
-                          camera: fields.camera || undefined,
-                          lens: fields.lens || undefined,
-                          lighting: fields.lighting || undefined,
-                          mood: fields.mood || undefined,
-                          realism: fields.realism || undefined,
-                        } : undefined,
-                        userDirection: analyzeDirection || undefined,
-                      });
-                      if (analysisGuard.current.isCurrent(request)) setAdvice(result);
-                    } catch (err) {
-                      if (analysisGuard.current.isCurrent(request)) {
-                        toast.error(err instanceof Error ? err.message : "Analysis failed — check your API key in Settings");
-                      }
-                    } finally {
-                      if (analysisGuard.current.isCurrent(request)) setAdviceLoading(false);
-                    }
-                  }}
-                  className="w-full justify-center"
-                >
-                  <Wand2 size={10} />
-                  {adviceLoading ? "Analyzing…" : "Analyze Draft"}
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!canAnalyze || adviceLoading}
+                    title={!canAnalyze ? analyzeCheck.message : "Analyze with Claude Haiku"}
+                    onClick={() => handleAnalyzeDraft()}
+                    className="flex-1 justify-center"
+                  >
+                    <Wand2 size={10} />
+                    {adviceLoading ? "Analyzing…" : "Analyze Draft"}
+                  </Button>
+                  <button
+                    type="button"
+                    disabled={!canAnalyze || adviceLoading}
+                    title="Magic Wand — refines hierarchy, visual logic, and reduces prompt overload"
+                    aria-label="Magic Wand — refines hierarchy, visual logic, and reduces prompt overload"
+                    onClick={() => handleAnalyzeDraft("Focus only on visual hierarchy, visual logic, and reducing prompt overload (too many competing ideas). Ignore other categories.")}
+                    className="flex items-center justify-center w-8 h-8 shrink-0 rounded-sm text-cyan border border-cyan/30 hover:bg-cyan/10 disabled:opacity-40 transition-precise"
+                  >
+                    <Wand2 size={12} />
+                  </button>
+                </div>
                 {hasAdvice && (
-                  <div className="flex flex-col gap-2 px-3 py-2.5 rounded-sm"
-                    style={{ border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)" }}>
+                  <div className={cn(
+                    "flex flex-col gap-2 px-3 py-2.5 rounded-sm transition-precise",
+                    adviceJustIn && "ring-1 ring-cyan/50"
+                  )}
+                    style={{ border: "1px solid rgba(255,255,255,0.1)", background: adviceJustIn ? "rgba(72,229,232,0.06)" : "rgba(255,255,255,0.03)" }}>
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[8px] uppercase tracking-widest text-readable">AI Advice</span>
                       <button onClick={() => setAdviceDismissed(true)} className="text-readable hover:text-white text-[10px]">×</button>

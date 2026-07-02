@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
 import { exportPromptTransfer, parsePromptTransfer, importPromptTransfer } from "@/lib/promptTransfer";
-import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, validateApiKey, type AIProvider } from "@/lib/aiConfig";
+import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_KEY_DEEPSEEK, validateApiKey, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import {
   backupActiveLibrary,
@@ -939,6 +939,13 @@ export function Settings() {
               storageKey={AI_KEY_OPENAI}
               placeholder="sk-proj-…"
               mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}
+            />
+            <ApiKeyField
+              label="DeepSeek"
+              provider="deepseek"
+              storageKey={AI_KEY_DEEPSEEK}
+              placeholder="sk-…"
+              mask={(v) => v.length > 8 ? `sk-${"·".repeat(14)}${v.slice(-4)}` : v}
             />
 
           </div>

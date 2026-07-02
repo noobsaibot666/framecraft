@@ -226,20 +226,38 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
   const promptLower = (ctx.promptText ?? "").toLowerCase();
   const filtered = tokens.filter((t) => !promptLower.includes(t.text.toLowerCase()));
 
-  return filtered.slice(0, limit).map((t) => ({
-    token: t,
-    score: t.quality_score,
-    reason: t.is_favorite
-      ? "Favorited"
-      : t.use_count > 5
-        ? `Used ${t.use_count}× with high score`
-        : "High quality score",
-  }));
+  // Tag overlap boosts ranking — a token whose text echoes one of the prompt's
+  // own tags (e.g. tag "cinematic" ~ token "cinematic lighting") ranks first.
+  const tagsLower = (ctx.tags ?? []).map((t) => t.toLowerCase());
+  const scored = tagsLower.length > 0
+    ? [...filtered].sort((a, b) => {
+        const aMatch = tagsLower.some((tag) => a.text.toLowerCase().includes(tag)) ? 1 : 0;
+        const bMatch = tagsLower.some((tag) => b.text.toLowerCase().includes(tag)) ? 1 : 0;
+        return bMatch - aMatch;
+      })
+    : filtered;
+
+  return scored.slice(0, limit).map((t) => {
+    const tagMatch = tagsLower.length > 0 && tagsLower.some((tag) => t.text.toLowerCase().includes(tag));
+    return {
+      token: t,
+      score: t.quality_score,
+      reason: tagMatch
+        ? "Matches this prompt's tags"
+        : t.is_favorite
+          ? "Favorited"
+          : t.use_count > 5
+            ? `Used ${t.use_count}× with high score`
+            : "High quality score",
+    };
+  });
 }
 
 /**
  * Related prompts: same provider + category, sorted by actual gallery win count
  * then avg result score, then user rating. Gallery wins trump manual ratings.
+ * AI-Look risk is a final tiebreaker — a lower-risk prompt is preferred when
+ * everything else is equal, so recorded AI-Look data actually shapes ranking.
  */
 export async function recommendPrompts(ctx: RecommendationContext, limit = 4): Promise<PromptRec[]> {
   if (!isTauri) return [];
@@ -261,16 +279,28 @@ export async function recommendPrompts(ctx: RecommendationContext, limit = 4): P
     conditions.push(`p.category = $${values.length}`);
   }
 
+  // Tag overlap boosts ranking (doesn't filter) — same pattern as recommendReferences.
+  const tagMatchExpr = ctx.tags && ctx.tags.length > 0
+    ? (() => {
+        const clauses = ctx.tags.slice(0, 3).map((tag) => {
+          values.push(`%${tag}%`);
+          return `lower(p.tags) LIKE $${values.length}`;
+        });
+        return `CASE WHEN ${clauses.join(" OR ")} THEN 1 ELSE 0 END`;
+      })()
+    : "0";
+
   const rows = (await db.select(
     `SELECT p.*,
        COUNT(r.id) AS result_count,
        SUM(CASE WHEN r.is_winner = 1 THEN 1 ELSE 0 END) AS win_count,
-       COALESCE(AVG(CASE WHEN r.score_overall > 0 THEN r.score_overall END), 0) AS avg_score
+       COALESCE(AVG(CASE WHEN r.score_overall > 0 THEN r.score_overall END), 0) AS avg_score,
+       ${tagMatchExpr} AS tag_match
      FROM prompts p
      LEFT JOIN results r ON r.prompt_id = p.id
      WHERE ${conditions.join(" AND ")}
      GROUP BY p.id
-     ORDER BY win_count DESC, avg_score DESC, p.is_winner DESC, p.rating DESC, p.reuse_potential DESC
+     ORDER BY tag_match DESC, win_count DESC, avg_score DESC, p.is_winner DESC, p.rating DESC, p.reuse_potential DESC, p.ai_look_risk ASC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
@@ -280,15 +310,20 @@ export async function recommendPrompts(ctx: RecommendationContext, limit = 4): P
     const winCount = (row.win_count as number) ?? 0;
     const avgScore = (row.avg_score as number) ?? 0;
     const resultCount = (row.result_count as number) ?? 0;
+    const tagMatch = Boolean(row.tag_match);
     const reason = winCount > 0
       ? `${winCount} winning result${winCount !== 1 ? "s" : ""} in gallery`
       : resultCount > 0
         ? `${resultCount} result${resultCount !== 1 ? "s" : ""} · avg score ${avgScore.toFixed(1)}`
-        : p.is_winner
-          ? "Winner in same category"
-          : p.rating >= 4
-            ? `Rated ${p.rating}/5 — same provider`
-            : "High reuse potential";
+        : tagMatch
+          ? "Shares tags with this prompt"
+          : p.is_winner
+            ? "Winner in same category"
+            : p.rating >= 4
+              ? `Rated ${p.rating}/5 — same provider`
+              : p.ai_look_risk === 0
+                ? "High reuse potential · low AI-look risk"
+                : "High reuse potential";
     return { prompt: p, reason };
   });
 }

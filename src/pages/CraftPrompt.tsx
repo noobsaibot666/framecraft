@@ -2189,6 +2189,7 @@ export function CraftPrompt() {
                   excludePromptId: id,
                   projectId: projectId ?? undefined,
                   promptText: deferredAssembled,
+                  tags: fields.tags,
                 }}
               />
             ) : (

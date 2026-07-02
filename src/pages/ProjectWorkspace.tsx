@@ -1307,7 +1307,7 @@ export function ProjectWorkspace() {
           {/* Recommendations */}
           <div className="flex flex-col gap-4 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
             <RecommendationPanel
-              context={{ category: category || undefined, provider: providerTargets[0] || undefined, projectId: id }}
+              context={{ category: category || undefined, provider: providerTargets[0] || undefined, projectId: id, tags }}
             />
           </div>
 

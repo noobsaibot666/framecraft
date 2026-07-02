@@ -53,6 +53,33 @@ function MetaRow({ label, value }: { label: string; value?: string | number }) {
   );
 }
 
+// Splits a comma-separated prompt into one clause per line for scanability —
+// the underlying copy/edit actions still use the exact raw prompt_text string.
+function splitPromptClauses(text: string): string[] {
+  return text.split(",").map((c) => c.trim()).filter(Boolean);
+}
+
+function ReadablePromptText({ text }: { text: string }) {
+  const clauses = splitPromptClauses(text);
+  if (clauses.length < 2) {
+    return <pre className="prompt-text whitespace-pre-wrap wrap-break-word select-text">{text}</pre>;
+  }
+  return (
+    <ul className="flex flex-col gap-1.5 select-text">
+      {clauses.map((clause, i) => (
+        <li key={i} className="prompt-text flex items-baseline gap-2 wrap-break-word">
+          <span className="font-mono text-[9px] text-dim/35 shrink-0 select-none">{String(i + 1).padStart(2, "0")}</span>
+          <span>{clause}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function formatParamValue(v: string | boolean | number): string {
+  return typeof v === "boolean" ? (v ? "on" : "off") : String(v);
+}
+
 
 function ResultImage({ src }: { src?: string }) {
   const image = useImageDisplaySrc(src);
@@ -704,9 +731,7 @@ export function PromptDetail() {
               className="p-4 rounded-card"
               style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
             >
-              <pre className="prompt-text whitespace-pre-wrap wrap-break-word select-text">
-                {prompt.prompt_text}
-              </pre>
+              <ReadablePromptText text={prompt.prompt_text} />
             </div>
           </div>
 
@@ -1208,6 +1233,20 @@ export function PromptDetail() {
               <MetaRow label="LENS" value={prompt.lens} />
               <MetaRow label="LIGHTING" value={prompt.lighting} />
             </div>
+            {prompt.parameters && Object.keys(prompt.parameters).length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <span className="font-mono text-[9px] tracking-widest uppercase text-dim/40">Provider Parameters</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(prompt.parameters).map(([key, value]) => (
+                    <span key={key}
+                      className="font-mono text-[9.5px] text-readable px-2 py-1 rounded-sm"
+                      style={{ border: "var(--border-dim)" }}>
+                      {key}{typeof value === "boolean" ? "" : `: ${formatParamValue(value)}`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Version info */}

@@ -469,6 +469,7 @@ export function PromptDetail() {
                 <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
                 <div className="absolute right-0 top-full mt-1 z-20 flex flex-col min-w-44 rounded-sm py-1"
                   style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+                  <span className="px-3 pt-1.5 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/40">Copy / Export</span>
                   <button type="button"
                     onClick={() => { handleCopy(); setShowExportMenu(false); }}
                     className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
@@ -507,6 +508,7 @@ export function PromptDetail() {
                     </button>
                   )}
                   <div className="my-1 border-t border-white/8" />
+                  <span className="px-3 pt-1 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/40">Save / Recipe</span>
                   <button type="button"
                     onClick={() => { handleDuplicate(); setShowExportMenu(false); }}
                     className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
@@ -538,6 +540,7 @@ export function PromptDetail() {
                     </button>
                   )}
                   <div className="my-1 border-t border-white/8" />
+                  <span className="px-3 pt-1 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/40">Queue</span>
                   <button type="button"
                     onClick={() => { handleAddToQueue(); setShowExportMenu(false); }}
                     className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">

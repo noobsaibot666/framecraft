@@ -523,3 +523,24 @@ export async function getProjectsForPrompt(
     campaign_title: r.campaign_title as string | undefined,
   }));
 }
+
+/** One project (+ campaign, if any) per prompt, for library card badges. Batched — not per-prompt. */
+export async function getPromptProjectMap(): Promise<Record<string, { projectTitle: string; campaignTitle?: string }>> {
+  if (!isTauri) return {};
+  const db = await getDb();
+  const rows = (await db.select(
+    `SELECT pp.prompt_id, p.title AS project_title, c.title AS campaign_title
+     FROM project_prompts pp
+     JOIN projects p ON p.id = pp.project_id
+     LEFT JOIN campaigns c ON c.id = p.campaign_id
+     GROUP BY pp.prompt_id`
+  )) as Record<string, unknown>[];
+  const map: Record<string, { projectTitle: string; campaignTitle?: string }> = {};
+  for (const r of rows) {
+    map[r.prompt_id as string] = {
+      projectTitle: r.project_title as string,
+      campaignTitle: r.campaign_title as string | undefined,
+    };
+  }
+  return map;
+}

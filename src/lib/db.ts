@@ -1094,6 +1094,44 @@ export async function getChildPrompts(parentId: string): Promise<{ id: string; t
   return [];
 }
 
+/** Version count per prompt (number of prompts whose parent_id points at it). */
+export async function getVersionCountMap(): Promise<Record<string, number>> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT parent_id, COUNT(*) as count FROM prompts WHERE parent_id IS NOT NULL GROUP BY parent_id`
+    )) as Record<string, unknown>[];
+    return Object.fromEntries(rows.map((r) => [r.parent_id as string, r.count as number]));
+  }
+  return {};
+}
+
+/** Up to `limit` result thumbnails per prompt, best-rated first, for library card carousels. */
+export async function getResultThumbsMap(limit = 5): Promise<Record<string, string[]>> {
+  if (isTauri) {
+    const db = await getDb();
+    const rows = (await db.select(
+      `SELECT prompt_id, thumbnail_path
+       FROM (
+         SELECT prompt_id, thumbnail_path,
+                ROW_NUMBER() OVER (PARTITION BY prompt_id ORDER BY score_overall DESC, created_at DESC) AS rn
+         FROM results
+         WHERE thumbnail_path IS NOT NULL AND thumbnail_path != ''
+       )
+       WHERE rn <= $1
+       ORDER BY prompt_id`,
+      [limit]
+    )) as Record<string, unknown>[];
+    const map: Record<string, string[]> = {};
+    for (const r of rows) {
+      const id = r.prompt_id as string;
+      (map[id] ??= []).push(r.thumbnail_path as string);
+    }
+    return map;
+  }
+  return {};
+}
+
 // ─── Production Memory (Phase 06) ────────────────────────────
 
 export async function updateTokenQualityFromResult(

@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultSummaryMap, getResultCoverMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { getResultSummaryMap, getResultCoverMap, getResultThumbsMap, getVersionCountMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { getPromptProjectMap } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
 import { addToQueue } from "@/lib/queue";
@@ -109,10 +110,21 @@ function PromptCardThumb({ src }: { src: string }) {
   );
 }
 
-function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index, pendingDelete }: {
+function CarouselMiniThumb({ src }: { src: string }) {
+  const { src: displaySrc } = useImageDisplaySrc(src);
+  if (!displaySrc) return (
+    <div className="w-9 h-9 rounded-sm shrink-0" style={{ background: "rgba(255,255,255,0.06)" }} />
+  );
+  return <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-sm object-cover shrink-0" />;
+}
+
+function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCount, projectRelation, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index, pendingDelete }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   coverImage?: string;
+  resultThumbs?: string[];
+  versionCount?: number;
+  projectRelation?: { projectTitle: string; campaignTitle?: string };
   onCopy: (p: Prompt) => void;
   onDelete: (p: Prompt) => void;
   onQueue: (p: Prompt) => void;
@@ -124,6 +136,7 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
   pendingDelete: boolean;
 }) {
   const navigate = useNavigate();
+  const carouselThumbs = (resultThumbs ?? []).slice(1); // first one is already the hero coverImage
 
   return (
     <article
@@ -133,6 +146,13 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
     >
       {/* Cover thumbnail */}
       {coverImage && <PromptCardThumb src={coverImage} />}
+
+      {/* Result carousel — additional thumbnails beyond the hero cover */}
+      {carouselThumbs.length > 0 && (
+        <div className="flex gap-1.5 -mt-3 overflow-x-auto">
+          {carouselThumbs.map((src, i) => <CarouselMiniThumb key={i} src={src} />)}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3 min-w-0">
@@ -176,6 +196,19 @@ function PromptCard({ prompt, resultSummary, coverImage, onCopy, onDelete, onQue
         )}
         {prompt.category && <Badge variant="category">{prompt.category}</Badge>}
         {prompt.aspect_ratio && <Badge variant="default">{prompt.aspect_ratio}</Badge>}
+        {!!versionCount && (
+          <span className="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-cyan/70"
+            style={{ border: "1px solid rgba(72,229,232,0.28)" }}>
+            {versionCount} version{versionCount !== 1 ? "s" : ""}
+          </span>
+        )}
+        {projectRelation && (
+          <span className="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-readable truncate max-w-30"
+            style={{ border: "1px solid rgba(255,255,255,0.14)" }}
+            title={projectRelation.campaignTitle ? `${projectRelation.campaignTitle} / ${projectRelation.projectTitle}` : projectRelation.projectTitle}>
+            {projectRelation.projectTitle}
+          </span>
+        )}
         {prompt.tags?.slice(0, 2).map((tag) => (
           <Badge key={tag} variant="tag">{tag}</Badge>
         ))}
@@ -312,6 +345,9 @@ export function PromptLibrary() {
   const confirmDeleteRef = useRef<string | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
   const [coverMap, setCoverMap] = useState<Record<string, string>>({});
+  const [thumbsMap, setThumbsMap] = useState<Record<string, string[]>>({});
+  const [versionCountMap, setVersionCountMap] = useState<Record<string, number>>({});
+  const [projectMap, setProjectMap] = useState<Record<string, { projectTitle: string; campaignTitle?: string }>>({});
   const [batchMode, setBatchMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
@@ -335,6 +371,9 @@ export function PromptLibrary() {
   }, [patch]);
 
   useEffect(() => { getResultSummaryMap().then(setResultMap); }, []);
+  useEffect(() => { getResultThumbsMap(5).then(setThumbsMap); }, []);
+  useEffect(() => { getVersionCountMap().then(setVersionCountMap); }, []);
+  useEffect(() => { getPromptProjectMap().then(setProjectMap); }, []);
   useEffect(() => { getResultCoverMap().then(setCoverMap); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchVal, filters, sortBy, tagFilter, noResultsOnly, originalsOnly]);
 
@@ -832,6 +871,9 @@ export function PromptLibrary() {
                   prompt={p}
                   resultSummary={resultMap[p.id]}
                   coverImage={coverMap[p.id] ?? p.thumbnail_data}
+                  resultThumbs={thumbsMap[p.id]}
+                  versionCount={versionCountMap[p.id]}
+                  projectRelation={projectMap[p.id]}
                   onCopy={handleCopy}
                   onDelete={handleDelete}
                   onQueue={handleQueue}

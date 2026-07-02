@@ -4,9 +4,10 @@ import { getSessions } from "./comparisons";
 import { summarizeComparisonIntelligence } from "./comparisonIntelligence";
 import { getApiKey, AI_MODELS } from "./aiConfig";
 import { fetchProviderJson, requireValidApiKey } from "./aiClient";
+import { formatFormulaForAI, getFormulaForProvider } from "./promptFormula";
 import { getFramecraftDb } from "./dbConnection";
 import type {
-  AssistantThread, AssistantMessage, AssistantSuggestion, ProjectContextPack,
+  AssistantThread, AssistantMessage, AssistantSuggestion, ProjectContextPack, Provider,
 } from "@/types";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -75,6 +76,7 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
       failed: prompts.filter((p) => p.is_failed).length,
       avgRating: Math.round(avgRating * 10) / 10,
       top: prompts.slice(0, 5),
+      providers: [...new Set(prompts.map((p) => p.provider as Provider))],
     },
     results: {
       total: results.length,
@@ -227,6 +229,15 @@ export function serializePackToSystem(pack: ProjectContextPack): string {
       ? pack.comparisons.recentOutcomes.map((outcome) => `  - ${outcome}`)
       : ["No saved comparison outcomes."]),
   ];
+  // Provider success formulas (doc 03 §1) — when suggesting prompt changes,
+  // the assistant should respect each provider's winning structure.
+  const providers = pack.prompts.providers ?? [];
+  if (providers.length > 0) {
+    lines.push("", "## PROVIDER PROMPT FORMULAS (follow these when suggesting prompt changes)");
+    for (const provider of providers.slice(0, 4)) {
+      lines.push(`  - ${formatFormulaForAI(getFormulaForProvider(provider), provider)}`);
+    }
+  }
   return lines.filter(Boolean).join("\n");
 }
 

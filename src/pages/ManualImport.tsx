@@ -17,7 +17,7 @@ import {
   buildImportLearningNotes,
   type ImportLearningSignal,
 } from "@/lib/importLearning";
-import { learnFormulaFromImport } from "@/lib/promptFormula";
+import { detectFormulaOrder, getFormulaForProvider, learnFormulaFromImport, missingFormulaSteps } from "@/lib/promptFormula";
 import { cn } from "@/lib/utils";
 import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
 
@@ -387,8 +387,8 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "firefly", label: "Firefly" },
   { value: "ideogram", label: "Ideogram" },
   { value: "flux", label: "Flux" },
-  { value: "nano_banana", label: "Nano Banana" },
-  { value: "gpt_image", label: "GPT Image" },
+  { value: "nano_banana", label: "Nano Banana Pro" },
+  { value: "gpt_image", label: "GPT Image 2" },
   { value: "seedance", label: "Seedance" },
   { value: "kling", label: "Kling" },
   { value: "runway", label: "Runway" },
@@ -541,8 +541,11 @@ export function ManualImport() {
       if (linkedProjectId) {
         addPromptToProject(linkedProjectId, id).catch(() => {});
       }
-      // Imported prompts refine the provider's success formula (V2 §11)
-      learnFormulaFromImport(isNbMode ? raw : (clean || raw), provider);
+      // Imported prompts refine the provider's success formula (V2 §11, doc 03)
+      const learnedFormula = learnFormulaFromImport(isNbMode ? raw : (clean || raw), provider);
+      if (learnedFormula) {
+        toast.success(`Formula refined for ${provider}: ${learnedFormula.slice(0, 5).join(" + ")}…`);
+      }
       navigate(`/library/${id}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
@@ -576,6 +579,15 @@ export function ManualImport() {
   };
 
   const paramCount = Object.keys(detected).filter((k) => detected[k as keyof DetectedParams]).length;
+
+  // Formula pattern analysis (doc 03) — which provider-formula steps the
+  // imported prompt demonstrates, in the order they appear, and which it lacks.
+  const formulaPattern = useMemo(() => {
+    if (!analyzed || !raw.trim()) return { observed: [] as string[], missing: [] as string[] };
+    const providerFormula = getFormulaForProvider(provider);
+    const observed = detectFormulaOrder(raw).filter((s) => providerFormula.includes(s));
+    return { observed, missing: missingFormulaSteps(raw, providerFormula) };
+  }, [analyzed, raw, provider]);
 
   return (
     <PageContainer
@@ -766,6 +778,38 @@ export function ManualImport() {
                   </div>
                 )}
                 <p className="font-mono text-[9px] text-dim/60">Parameters stored separately. Clean prompt text saved to library.</p>
+              </div>
+            )}
+
+            {/* Formula pattern (doc 03) — structure of the import vs the provider's success formula */}
+            {analyzed && formulaPattern.observed.length > 0 && (
+              <div className="flex flex-col gap-3 p-4 rounded-card"
+                style={{ border: "var(--border-default)", background: "var(--surface-base)" }}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="system-label">FORMULA PATTERN</span>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/70">{provider}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {formulaPattern.observed.map((step, i) => (
+                    <div key={step} className="flex items-center gap-1.5">
+                      {i > 0 && <span className="font-mono text-[10px] text-cyan/35">+</span>}
+                      <span className="font-mono text-[10px] px-2 py-1 rounded-sm text-cyan/90"
+                        style={{ border: "1px solid rgba(72,229,232,0.35)", background: "rgba(72,229,232,0.06)" }}>
+                        {step}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {formulaPattern.missing.length > 0 && (
+                  <p className="font-mono text-[9px] text-dim/60 leading-relaxed">
+                    Not covered: {formulaPattern.missing.join(", ")}
+                  </p>
+                )}
+                <p className="font-mono text-[9px] text-dim/60">
+                  {formulaPattern.observed.length >= 3
+                    ? "Structured import — saving will refine this provider's learned formula order."
+                    : "Too little structure to refine the provider formula."}
+                </p>
               </div>
             )}
 

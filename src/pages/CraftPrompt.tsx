@@ -19,7 +19,7 @@ import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { FormulaBar } from "@/components/ui/FormulaBar";
-import { formatFormulaForAI, getFormulaForProvider } from "@/lib/promptFormula";
+import { formatFormulaForAI, getFormulaForProvider, getNarrativeArc, NARRATIVE_FORMATS } from "@/lib/promptFormula";
 import { CONSISTENCY_FACTOR_PRESETS, buildConsistencySuffix, suggestConsistencyFactors } from "@/lib/consistencyFactors";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
 import { getTokenById } from "@/lib/tokenDetail";
@@ -411,7 +411,22 @@ function assembleSD(f: Fields, _sd: SDParams): string {
 
 function assembleGeneric(f: Fields): string {
   const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism];
-  if (isVideoProvider(f.provider)) parts.push(f.motion, f.duration ? `${f.duration} duration` : "");
+  if (f.provider === "nano_banana") {
+    parts.push(
+      f.text_graphics ? `text: ${f.text_graphics}` : "",
+      f.reference_role ? `references: ${f.reference_role}` : ""
+    );
+  }
+  if (isVideoProvider(f.provider)) {
+    const arc = getNarrativeArc(f.narrative_format);
+    parts.push(
+      arc ? `narrative arc: ${arc}` : "",
+      f.motion,
+      f.transitions ? `transitions: ${f.transitions}` : "",
+      f.audio ? `audio: ${f.audio}` : "",
+      f.duration ? `${f.duration} duration` : ""
+    );
+  }
   return parts.map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
@@ -475,6 +490,8 @@ function buildNanaBananaJson(f: Fields, assembled: string, aspectRatio: string):
       use_case: f.use_case || "realism study, editorial macro detail",
       success_criteria: "clearly visible natural texture with realistic lighting",
     },
+    ...(f.text_graphics.trim() ? { text_render: { content: f.text_graphics.trim(), must_render_exactly: true } } : {}),
+    ...(f.reference_role.trim() ? { reference_usage: { instruction: f.reference_role.trim() } } : {}),
     ...(f.variation.trim() ? { sequence_delta: { instruction: f.variation.trim(), base_consistent: true } } : {}),
   }, null, 2);
 }
@@ -594,8 +611,8 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "firefly", label: "Firefly" },
   { value: "ideogram", label: "Ideogram" },
   { value: "flux", label: "Flux" },
-  { value: "nano_banana", label: "Nano Banana" },
-  { value: "gpt_image", label: "GPT Image" },
+  { value: "nano_banana", label: "Nano Banana Pro" },
+  { value: "gpt_image", label: "GPT Image 2" },
   { value: "seedance", label: "Seedance" },
   { value: "kling", label: "Kling" },
   { value: "runway", label: "Runway" },
@@ -631,6 +648,8 @@ interface Fields {
   is_winner: boolean; is_failed: boolean;
   variation: string;
   motion: string; duration: string;
+  narrative_format: string; transitions: string; audio: string;
+  text_graphics: string; reference_role: string;
 }
 
 const EMPTY: Fields = {
@@ -645,6 +664,8 @@ const EMPTY: Fields = {
   is_winner: false, is_failed: false,
   variation: "",
   motion: "", duration: "",
+  narrative_format: "", transitions: "", audio: "",
+  text_graphics: "", reference_role: "",
 };
 
 // Token category → builder field routing (V2 §7). Categories without a
@@ -940,10 +961,13 @@ export function CraftPrompt() {
             subject?: string; character?: string; environment?: string; composition?: string;
             mood?: string; realism?: string; variation?: string;
             motion?: string; duration?: string;
+            narrative_format?: string; transitions?: string; audio?: string;
+            text_graphics?: string; reference_role?: string;
             usedAvoidanceIds?: string[];
             fieldTokenIds?: Record<string, keyof Fields>;
             consistencyFactors?: string[];
             formula?: string[];
+            formulaCustomized?: boolean;
           };
           if (bs.mode) setMode(bs.mode);
           if (bs.tokens?.length) {
@@ -964,7 +988,12 @@ export function CraftPrompt() {
           if (bs.consistencyFactors?.length) {
             setConsistencyFactors(bs.consistencyFactors);
           }
-          if (bs.formula?.length) {
+          // The formula is always saved with the prompt (doc 03 §1); only a
+          // user-customized one overrides the provider default on reload, so
+          // uncustomized prompts keep following improved provider defaults.
+          // Older records saved formula only when customized — treat a saved
+          // formula without the flag as customized.
+          if (bs.formula?.length && (bs.formulaCustomized ?? true)) {
             setFormulaSteps(bs.formula);
             setFormulaCustomized(true);
           } else {
@@ -981,6 +1010,11 @@ export function CraftPrompt() {
             variation: bs.variation ?? "",
             motion: bs.motion ?? "",
             duration: bs.duration ?? "",
+            narrative_format: bs.narrative_format ?? "",
+            transitions: bs.transitions ?? "",
+            audio: bs.audio ?? "",
+            text_graphics: bs.text_graphics ?? "",
+            reference_role: bs.reference_role ?? "",
           }));
         } catch { /* ignore corrupt builder state */ }
       } else {
@@ -1345,6 +1379,15 @@ export function CraftPrompt() {
           lighting: fields.lighting || undefined,
           mood: fields.mood || undefined,
           realism: fields.realism || undefined,
+          ...(fields.provider === "nano_banana" ? {
+            text_graphics: fields.text_graphics || undefined,
+            reference_role: fields.reference_role || undefined,
+          } : {}),
+          ...(isVideoProvider(fields.provider) ? {
+            motion: fields.motion || undefined,
+            transitions: fields.transitions || undefined,
+            audio: fields.audio || undefined,
+          } : {}),
         } : undefined,
         userDirection: focusDirection ?? (analyzeDirection || undefined),
         formulaContext: formatFormulaForAI(formulaSteps, fields.provider),
@@ -1459,10 +1502,16 @@ export function CraftPrompt() {
       variation: fields.variation,
       motion: fields.motion,
       duration: fields.duration,
+      narrative_format: fields.narrative_format,
+      transitions: fields.transitions,
+      audio: fields.audio,
+      text_graphics: fields.text_graphics,
+      reference_role: fields.reference_role,
       usedAvoidanceIds: Array.from(usedAvoidanceIds),
       fieldTokenIds,
       consistencyFactors,
-      formula: formulaCustomized ? formulaSteps : undefined,
+      formula: formulaSteps,
+      formulaCustomized,
     }),
   });
 
@@ -1868,15 +1917,74 @@ export function CraftPrompt() {
                     style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                   />
                 </div>
-                {/* Video-only fields — hidden entirely for image-only providers */}
+                {/* Nano Banana brief fields — in-image text + reference roles (doc 03 §3) */}
+                {fields.provider === "nano_banana" && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">TEXT / TYPOGRAPHY</label>
+                      <input
+                        value={fields.text_graphics}
+                        onChange={(e) => setF("text_graphics", e.target.value)}
+                        placeholder='headline "SUMMER" in bold grotesk, top third'
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">REFERENCE ROLE</label>
+                      <input
+                        value={fields.reference_role}
+                        onChange={(e) => setF("reference_role", e.target.value)}
+                        placeholder="match lighting from ref 1, product from ref 2"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                  </>
+                )}
+                {/* Video-only fields — hidden entirely for image-only providers (doc 03 §4–5) */}
                 {isVideoProvider(fields.provider) && (
                   <>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">NARRATIVE FORMAT</label>
+                      <select
+                        value={fields.narrative_format}
+                        onChange={(e) => setF("narrative_format", e.target.value)}
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      >
+                        <option value="">No narrative arc</option>
+                        {NARRATIVE_FORMATS.map((f) => (
+                          <option key={f.value} value={f.value}>{f.label} — {f.arc}</option>
+                        ))}
+                      </select>
+                    </div>
                     <div className="flex flex-col gap-1.5">
                       <label className="system-label text-[12px] text-muted">MOTION / CAMERA MOVEMENT</label>
                       <input
                         value={fields.motion}
                         onChange={(e) => setF("motion", e.target.value)}
                         placeholder="slow dolly in, handheld sway"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">TRANSITIONS</label>
+                      <input
+                        value={fields.transitions}
+                        onChange={(e) => setF("transitions", e.target.value)}
+                        placeholder="match cut on hands, dissolve to wide"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">{fields.provider === "kling" ? "AUDIO / DIALOGUE" : "AUDIO / RHYTHM"}</label>
+                      <input
+                        value={fields.audio}
+                        onChange={(e) => setF("audio", e.target.value)}
+                        placeholder={fields.provider === "kling" ? 'she whispers "ready?", low ambient hum' : "slow pulse building to silence"}
                         className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                         style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                       />

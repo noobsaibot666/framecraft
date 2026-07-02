@@ -31,7 +31,7 @@ describe("appendProjectNote", () => {
 function makePack(overrides: Partial<ProjectContextPack> = {}): ProjectContextPack {
   return {
     project: { id: "proj1", title: "Test Project", status: "active" },
-    prompts: { total: 0, winners: 0, failed: 0, avgRating: 0, top: [] },
+    prompts: { total: 0, winners: 0, failed: 0, avgRating: 0, top: [], providers: [] },
     results: { total: 0, winners: 0, failed: 0, avgScore: 0 },
     references: { total: 0, kinds: [] },
     deliverables: { total: 0, byStatus: {}, missingResults: 0 },
@@ -50,14 +50,14 @@ describe("generateSuggestions", () => {
 
   it("suggests generate results when prompts exist but no results", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [] },
+      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [], providers: [] },
     }));
     expect(s.some((x) => x.kind === "next_action" && x.body.includes("no results"))).toBe(true);
   });
 
   it("suggests marking winners when results >= 3 but none marked", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [] },
+      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [], providers: [] },
       results: { total: 4, winners: 0, failed: 0, avgScore: 6 },
     }));
     expect(s.some((x) => x.kind === "next_action" && x.body.includes("winners marked"))).toBe(true);
@@ -65,7 +65,7 @@ describe("generateSuggestions", () => {
 
   it("suggests build on winner when prompt winner exists", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 3, winners: 1, failed: 0, avgRating: 8, top: [] },
+      prompts: { total: 3, winners: 1, failed: 0, avgRating: 8, top: [], providers: [] },
       results: { total: 4, winners: 1, failed: 0, avgScore: 7 },
     }));
     expect(s.some((x) => x.kind === "next_action" && x.body.includes("winning"))).toBe(true);
@@ -73,7 +73,7 @@ describe("generateSuggestions", () => {
 
   it("suggests documenting failures when failed prompts exist", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 3, winners: 0, failed: 2, avgRating: 5, top: [] },
+      prompts: { total: 3, winners: 0, failed: 2, avgRating: 5, top: [], providers: [] },
       results: { total: 2, winners: 0, failed: 1, avgScore: 4 },
     }));
     expect(s.some((x) => x.kind === "avoidance_improvement")).toBe(true);
@@ -81,14 +81,14 @@ describe("generateSuggestions", () => {
 
   it("suggests adding references when none exist and prompts do", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [] },
+      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [], providers: [] },
     }));
     expect(s.some((x) => x.kind === "reference_gap")).toBe(true);
   });
 
   it("suggests adding style reference when refs exist but no style kind", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [] },
+      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [], providers: [] },
       references: { total: 2, kinds: ["image", "product"] },
     }));
     expect(s.some((x) => x.kind === "reference_gap" && x.body.includes("style"))).toBe(true);
@@ -96,7 +96,7 @@ describe("generateSuggestions", () => {
 
   it("suggests tracing back to prompt when result winners but no prompt winners", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [] },
+      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [], providers: [] },
       results: { total: 5, winners: 2, failed: 0, avgScore: 7 },
     }));
     expect(s.some((x) => x.kind === "winner_interpretation")).toBe(true);
@@ -104,7 +104,7 @@ describe("generateSuggestions", () => {
 
   it("warns about missing deliverable results", () => {
     const s = generateSuggestions(makePack({
-      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [] },
+      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [], providers: [] },
       deliverables: { total: 3, byStatus: { generating: 2 }, missingResults: 2 },
     }));
     expect(s.some((x) => x.body.includes("missing") || x.body.includes("Missing"))).toBe(true);
@@ -112,7 +112,7 @@ describe("generateSuggestions", () => {
 
   it("directs the user to unresolved comparison sessions", () => {
     const suggestions = generateSuggestions(makePack({
-      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [] },
+      prompts: { total: 2, winners: 0, failed: 0, avgRating: 6, top: [], providers: [] },
       results: { total: 2, winners: 0, failed: 0, avgScore: 3.5 },
       comparisons: { total: 2, decided: 1, pending: 1, recentOutcomes: ["Winner: Result A"] },
     }));
@@ -123,7 +123,7 @@ describe("generateSuggestions", () => {
 
   it("serializes comparison outcomes and the five-point result scale", () => {
     const context = serializePackToSystem(makePack({
-      prompts: { total: 2, winners: 1, failed: 0, avgRating: 4.5, top: [] },
+      prompts: { total: 2, winners: 1, failed: 0, avgRating: 4.5, top: [], providers: [] },
       results: { total: 2, winners: 1, failed: 0, avgScore: 4.5 },
       comparisons: {
         total: 2,

@@ -464,6 +464,8 @@ export interface ProjectContextPack {
     failed: number;
     avgRating: number;
     top: { id: string; title: string; rating: number; is_winner: boolean; is_failed: boolean }[];
+    /** Distinct generation providers used by this project's prompts — drives formula context (doc 03). */
+    providers: Provider[];
   };
   results: {
     total: number;

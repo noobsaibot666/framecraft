@@ -62,7 +62,7 @@ describe("buildComparisonOutcome", () => {
       slot({ label: "Option B", provider: "midjourney", promptVersion: 4 }),
     ]);
 
-    expect(outcome).toContain("GPT Image");
+    expect(outcome).toContain("GPT Image 2");
     expect(outcome).toContain("v3");
     expect(outcome).toContain("Midjourney");
     expect(outcome).toContain("v4");

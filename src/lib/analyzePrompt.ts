@@ -3,7 +3,10 @@ import { pickAvailableModel } from "./aiConfig";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export type AdviceFieldKey = "subject" | "character" | "environment" | "composition" | "camera" | "lens" | "lighting" | "mood" | "realism" | "avoidance_text";
+export type AdviceFieldKey =
+  | "subject" | "character" | "environment" | "composition" | "camera" | "lens" | "lighting" | "mood" | "realism" | "avoidance_text"
+  // Provider-specific brief fields (doc 03): Nano Banana text/reference roles, video motion/transitions/audio.
+  | "text_graphics" | "reference_role" | "motion" | "transitions" | "audio";
 
 export interface FieldImprovement {
   field: AdviceFieldKey;
@@ -19,7 +22,7 @@ export interface PromptAdvice {
 
 export const EMPTY_ADVICE: PromptAdvice = { suggestions: [], risks: [], improvements: [] };
 
-const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "character", "environment", "composition", "camera", "lens", "lighting", "mood", "realism", "avoidance_text"];
+const VALID_FIELD_KEYS: AdviceFieldKey[] = ["subject", "character", "environment", "composition", "camera", "lens", "lighting", "mood", "realism", "avoidance_text", "text_graphics", "reference_role", "motion", "transitions", "audio"];
 
 function buildSystemPrompt(brief?: string, provenTokens?: string[], formulaContext?: string, consistencyFactors?: string[]): string {
   const parts: string[] = [
@@ -40,7 +43,7 @@ function buildSystemPrompt(brief?: string, provenTokens?: string[], formulaConte
   "suggestions": ["concrete actionable improvement (max 2 items, each starts with a verb)"],
   "risks": ["specific risk found from the failure-mode list above, or other AI-look/generic-phrasing risk (max 2 items)"],
   "improvements": [
-    { "field": "subject|character|environment|composition|camera|lens|lighting|mood|realism|avoidance_text", "label": "Subject|Character|Environment|Composition|Camera|Lens|Lighting|Mood|Realism|Avoidance", "value": "ready-to-use replacement text for that field only" }
+    { "field": "subject|character|environment|composition|camera|lens|lighting|mood|realism|avoidance_text|text_graphics|reference_role|motion|transitions|audio", "label": "Subject|Character|Environment|Composition|Camera|Lens|Lighting|Mood|Realism|Avoidance|Text/Graphics|Reference role|Motion|Transitions|Audio", "value": "ready-to-use replacement text for that field only" }
   ]
 }`,
     "",

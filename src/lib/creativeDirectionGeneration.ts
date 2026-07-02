@@ -18,7 +18,7 @@ const REQUIRED_FIELDS: (keyof GeneratedCreativeDirection)[] = [
   "prompt_direction",
 ];
 
-function extractJson(raw: string): unknown {
+export function extractJson(raw: string): unknown {
   const trimmed = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   try {
     return JSON.parse(trimmed);
@@ -159,7 +159,7 @@ Return ONLY valid JSON with exactly ${existing.length} direction${existing.lengt
 ${DIRECTION_JSON_SHAPE}`;
 }
 
-async function callDirectionModel(model: AIModel, prompt: string): Promise<string> {
+export async function callDirectionModel(model: AIModel, prompt: string): Promise<string> {
   const apiKey = getApiKey(model.provider);
   requireValidApiKey(model.provider, apiKey);
 

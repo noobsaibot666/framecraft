@@ -184,6 +184,12 @@ pub fn run() {
             sql: include_str!("../migrations/029_color_grade_category.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 30,
+            description: "direction_storyboards",
+            sql: include_str!("../migrations/030_direction_storyboards.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

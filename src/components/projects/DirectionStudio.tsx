@@ -29,6 +29,7 @@ import { updateProject } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type { CreativeDirection, Project } from "@/types";
+import { StorytellingPanel } from "./StorytellingPanel";
 
 interface DirectionStudioProps {
   project: Project;
@@ -442,6 +443,10 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
                       </Button>
                     )}
                   </div>
+
+                  {direction.is_selected && (
+                    <StorytellingPanel project={project} direction={direction} visualRefContext={visualRefContext || undefined} />
+                  )}
                 </article>
               ))}
             </div>

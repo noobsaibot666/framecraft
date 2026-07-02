@@ -275,6 +275,20 @@ export interface CreativeDirection {
   updated_at: string;
 }
 
+export interface DirectionStoryboard {
+  id: string;
+  direction_id: string;
+  project_id: string;
+  sort_order: number;
+  shot_label: string;
+  description: string;
+  is_approved: boolean;
+  prompt_id?: string;
+  accent_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ReferenceKind =
   | "image"
   | "frame"

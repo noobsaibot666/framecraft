@@ -29,6 +29,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { BatchImportZone } from "@/components/ui/BatchImportZone";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { getProjectShots } from "@/lib/shotSequence";
+import { accentColorForVariantLabel } from "@/lib/storytelling";
 import { getCampaigns } from "@/lib/campaigns";
 import { buildReport, generateDeliveryReceipt, downloadText, slugify } from "@/lib/exportReport";
 import { toast } from "@/lib/toast";
@@ -236,7 +237,7 @@ function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; c
 
 type ProjectResult = { id: string; prompt_id?: string; score_overall: number; is_winner: boolean; is_failed: boolean; thumbnail_path?: string };
 
-type ProjectPrompt = { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean; version: number; parent_id?: string; thumbnail_data?: string };
+type ProjectPrompt = { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean; version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string };
 
 function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
   prompt: ProjectPrompt;
@@ -245,6 +246,7 @@ function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
   onOpen: () => void;
   onImport?: () => void;
 }) {
+  const shotAccentColor = accentColorForVariantLabel(prompt.variant_label);
   return (
     <div className="flex flex-col rounded-sm group overflow-hidden"
       style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
@@ -256,6 +258,9 @@ function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
         )}
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
           <div className="flex items-center gap-1.5">
+            {shotAccentColor && (
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: shotAccentColor }} title={prompt.variant_label} />
+            )}
             {prompt.version > 1 && (
               <span className="font-mono text-[9px] text-cyan border border-cyan/30 px-1 py-0.5 rounded-sm shrink-0">v{prompt.version}</span>
             )}

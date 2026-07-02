@@ -316,13 +316,13 @@ export async function removePromptFromProject(projectId: string, promptId: strin
 
 export async function getPromptsForProject(projectId: string): Promise<{
   id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean;
-  version: number; parent_id?: string; thumbnail_data?: string;
+  version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string;
 }[]> {
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
     `SELECT p.id, p.title, p.provider, p.rating, p.is_winner, p.is_failed,
-            p.version, p.parent_id, p.thumbnail_data
+            p.version, p.parent_id, p.thumbnail_data, p.variant_label
      FROM prompts p
      JOIN project_prompts pp ON p.id = pp.prompt_id
      WHERE pp.project_id = $1
@@ -339,6 +339,7 @@ export async function getPromptsForProject(projectId: string): Promise<{
     version: (r.version as number) ?? 1,
     parent_id: r.parent_id as string | undefined,
     thumbnail_data: r.thumbnail_data as string | undefined,
+    variant_label: r.variant_label as string | undefined,
   }));
 }
 

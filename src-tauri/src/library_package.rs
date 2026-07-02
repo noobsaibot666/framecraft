@@ -728,7 +728,7 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 30] = [
+const REQUIRED_RELEASE_TABLES: [&str; 31] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
@@ -738,6 +738,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 30] = [
     "comparison_sessions",
     "creative_directions",
     "deliverable_references",
+    "direction_storyboards",
     "export_presets",
     "generation_queue",
     "inconsistency_events",
@@ -968,6 +969,24 @@ const FK_SHOT: &[MergeForeignKey] = &[
         table: "results",
     },
 ];
+const FK_STORYBOARD: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "direction_id",
+        table: "creative_directions",
+    },
+    MergeForeignKey {
+        column: "project_id",
+        table: "projects",
+    },
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+];
+const FK_INCONSISTENCY: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "prompt_id",
+    table: "prompts",
+}];
 const FK_PATTERN: &[MergeForeignKey] = &[
     MergeForeignKey {
         column: "token_a_id",
@@ -1186,6 +1205,29 @@ const SHOT_COLUMNS: &[&str] = &[
     "prompt_id",
     "result_id",
     "notes",
+    "created_at",
+];
+const STORYBOARD_COLUMNS: &[&str] = &[
+    "id",
+    "direction_id",
+    "project_id",
+    "sort_order",
+    "shot_label",
+    "description",
+    "is_approved",
+    "prompt_id",
+    "accent_index",
+    "created_at",
+    "updated_at",
+];
+const INCONSISTENCY_COLUMNS: &[&str] = &[
+    "id",
+    "rule_id",
+    "rule_label",
+    "suggestion",
+    "prompt_id",
+    "provider",
+    "action",
     "created_at",
 ];
 const APP_META_COLUMNS: &[&str] = &["key", "value", "updated_at"];
@@ -1412,6 +1454,22 @@ const MERGE_MANIFEST: &[MergeTableSpec] = &[
         columns: SHOT_COLUMNS,
         identity: MergeIdentity::Id(&[]),
         foreign_keys: FK_SHOT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "direction_storyboards",
+        columns: STORYBOARD_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_STORYBOARD,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "inconsistency_events",
+        columns: INCONSISTENCY_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_INCONSISTENCY,
         media_columns: &[],
         user_only: false,
     },
@@ -2244,7 +2302,9 @@ fn excluded_foreign_key_policy(table: &str, column: &str) -> ExcludedForeignKeyP
         | ("project_deliverables", "linked_result_id")
         | ("generation_queue", "project_id")
         | ("shot_sequence", "prompt_id")
-        | ("shot_sequence", "result_id") => ExcludedForeignKeyPolicy::Null,
+        | ("shot_sequence", "result_id")
+        | ("direction_storyboards", "prompt_id")
+        | ("inconsistency_events", "prompt_id") => ExcludedForeignKeyPolicy::Null,
         _ => ExcludedForeignKeyPolicy::Exclude,
     }
 }
@@ -2982,6 +3042,7 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
             !matches!(
                 **table,
                 "campaigns" | "creative_directions" | "shot_sequence" | "inconsistency_events"
+                    | "direction_storyboards"
             )
         })
         .all(|table| connection_table_exists(&conn, table)))
@@ -3131,6 +3192,9 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
     )
     .map_err(|error| error.to_string())?;
 
+    tx.execute_batch(include_str!("../migrations/030_direction_storyboards.sql"))
+        .map_err(|error| error.to_string())?;
+
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
@@ -3173,7 +3237,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 29] {
+fn migration_sql() -> [&'static str; 30] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3204,6 +3268,7 @@ fn migration_sql() -> [&'static str; 29] {
         include_str!("../migrations/027_prompt_variant_label.sql"),
         include_str!("../migrations/028_inconsistency_events.sql"),
         include_str!("../migrations/029_color_grade_category.sql"),
+        include_str!("../migrations/030_direction_storyboards.sql"),
     ]
 }
 

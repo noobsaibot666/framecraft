@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, Plus, ImageOff, GitBranch, BookOpen,
-  Layers, ListPlus, Shuffle, X, FolderOpen,
+  Layers, ListPlus, Shuffle, X, FolderOpen, Image as ImageIcon,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { ExtractRecipePanel } from "@/components/recipes/ExtractRecipePanel";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary, getChildPrompts } from "@/lib/db";
+import { getResultsForPrompt, deleteResult, updateResult, recomputePromptResultSummary, getChildPrompts, setPromptThumbnail } from "@/lib/db";
 import { getProjectsForPrompt, addPromptToProject, removePromptFromProject, getProjects } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { addToQueue } from "@/lib/queue";
@@ -801,6 +801,13 @@ export function PromptDetail() {
                       <div className="absolute inset-0 flex flex-col justify-between p-1.5 opacity-0 group-hover:opacity-100 transition-precise pointer-events-none">
                         <div className="flex justify-end pointer-events-auto">
                           <div className="flex gap-0.5">
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); setPromptThumbnail(prompt.id, r.id).then(() => setPrompt((p) => p ? { ...p, thumbnail_result_id: r.id } : p)); }}
+                              className={cn("p-1 rounded-sm transition-precise", prompt.thumbnail_result_id === r.id ? "text-cyan" : "text-white/50 hover:text-cyan")}
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title={prompt.thumbnail_result_id === r.id ? "Current prompt thumbnail" : "Set as prompt thumbnail"}>
+                              <ImageIcon size={9} className={prompt.thumbnail_result_id === r.id ? "fill-cyan/30" : ""} />
+                            </button>
                             <button type="button"
                               onClick={(e) => { e.stopPropagation(); updateResult(r.id, { is_winner: !r.is_winner, is_failed: !r.is_winner ? false : r.is_failed }).then(() => recomputePromptResultSummary(prompt.id)); setResults((prev) => prev.map((x) => x.id === r.id ? { ...x, is_winner: !r.is_winner, is_failed: !r.is_winner ? false : x.is_failed } : x)); }}
                               className={cn("p-1 rounded-sm transition-precise", r.is_winner ? "text-amber" : "text-white/50 hover:text-amber")}

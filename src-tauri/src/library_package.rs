@@ -777,6 +777,7 @@ const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
             "source_url",
             "thumbnail_data",
             "builder_state",
+            "thumbnail_result_id",
         ],
     ),
 ];
@@ -3100,6 +3101,12 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
         "builder_state",
         "ALTER TABLE prompts ADD COLUMN builder_state TEXT;",
     )?;
+    add_column_if_missing(
+        &tx,
+        "prompts",
+        "thumbnail_result_id",
+        "ALTER TABLE prompts ADD COLUMN thumbnail_result_id TEXT REFERENCES results(id) ON DELETE SET NULL;",
+    )?;
 
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
@@ -3143,7 +3150,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 25] {
+fn migration_sql() -> [&'static str; 26] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3170,6 +3177,7 @@ fn migration_sql() -> [&'static str; 25] {
         include_str!("../migrations/023_prompt_thumbnail.sql"),
         include_str!("../migrations/024_remove_seeded_recipes.sql"),
         include_str!("../migrations/025_prompt_builder_state.sql"),
+        include_str!("../migrations/026_prompt_thumbnail_override.sql"),
     ]
 }
 

@@ -77,6 +77,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     source_url: row.source_url as string | undefined,
     thumbnail_data: row.thumbnail_data as string | undefined,
     builder_state: row.builder_state as string | undefined,
+    thumbnail_result_id: row.thumbnail_result_id as string | undefined,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
@@ -85,7 +86,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
 export const PROMPT_SUMMARY_COLUMNS = [
   "id", "title", "description", "provider", "category", "prompt_text", "aspect_ratio",
   "tags", "rating", "ai_look_risk", "is_recipe", "is_winner", "is_failed",
-  "parent_id", "thumbnail_data", "created_at", "updated_at",
+  "parent_id", "thumbnail_data", "thumbnail_result_id", "created_at", "updated_at",
 ].join(", ");
 
 // ─── Public API ──────────────────────────────────────────────
@@ -123,6 +124,7 @@ export interface CreatePromptInput {
   source_url?: string;
   thumbnail_data?: string;
   builder_state?: string;
+  thumbnail_result_id?: string | null;
 }
 
 export type CreateRecipeInput = Omit<CreatePromptInput, "is_recipe">;
@@ -342,6 +344,7 @@ export async function updatePrompt(
     if ("source_url" in data) add("source_url", data.source_url ?? null);
     if ("thumbnail_data" in data) add("thumbnail_data", data.thumbnail_data ?? null);
     if ("builder_state" in data) add("builder_state", data.builder_state ?? null);
+    if ("thumbnail_result_id" in data) add("thumbnail_result_id", data.thumbnail_result_id ?? null);
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
@@ -356,6 +359,8 @@ export async function updatePrompt(
     ...store.prompts[idx],
     ...data,
     tags: data.tags ?? store.prompts[idx].tags,
+    thumbnail_result_id:
+      "thumbnail_result_id" in data ? (data.thumbnail_result_id ?? undefined) : store.prompts[idx].thumbnail_result_id,
     updated_at: ts,
   };
   saveMemStore(store);
@@ -942,19 +947,33 @@ export async function getResultSummaryMap(): Promise<Record<string, { count: num
   return map;
 }
 
+// Cover image per prompt: manual override (prompts.thumbnail_result_id) wins if
+// set, otherwise the best-rated result (ties broken by most recent).
 export async function getResultCoverMap(): Promise<Record<string, string>> {
   if (isTauri) {
     const db = await getDb();
     const rows = (await db.select(
-      `SELECT prompt_id, file_path
-       FROM results
-       WHERE file_path IS NOT NULL AND file_path != ''
-       GROUP BY prompt_id
-       HAVING created_at = MAX(created_at)`
+      `SELECT p.id AS prompt_id,
+              COALESCE(ov.file_path, best.file_path) AS file_path
+       FROM prompts p
+       LEFT JOIN results ov
+         ON ov.id = p.thumbnail_result_id AND ov.file_path IS NOT NULL AND ov.file_path != ''
+       LEFT JOIN (
+         SELECT prompt_id, file_path,
+                ROW_NUMBER() OVER (PARTITION BY prompt_id ORDER BY score_overall DESC, created_at DESC) AS rn
+         FROM results
+         WHERE file_path IS NOT NULL AND file_path != ''
+       ) best ON best.prompt_id = p.id AND best.rn = 1
+       WHERE ov.file_path IS NOT NULL OR best.file_path IS NOT NULL`
     )) as Record<string, unknown>[];
     return Object.fromEntries(rows.map((r) => [r.prompt_id as string, r.file_path as string]));
   }
   return {};
+}
+
+// Manual thumbnail override — pass null to clear and fall back to auto-selection.
+export async function setPromptThumbnail(promptId: string, resultId: string | null): Promise<void> {
+  return updatePrompt(promptId, { thumbnail_result_id: resultId });
 }
 
 export async function getRecentResults(limit = 10): Promise<(Result & { prompt_title: string })[]> {

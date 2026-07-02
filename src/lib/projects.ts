@@ -498,14 +498,23 @@ export async function getReferencesForProject(projectId: string): Promise<{
 
 // ─── Projects that contain a given prompt/result/reference ────
 
-export async function getProjectsForPrompt(promptId: string): Promise<{ id: string; title: string }[]> {
+export async function getProjectsForPrompt(
+  promptId: string
+): Promise<{ id: string; title: string; campaign_id?: string; campaign_title?: string }[]> {
   if (!isTauri) return [];
   const db = await getDb();
   const rows = (await db.select(
-    `SELECT p.id, p.title FROM projects p
+    `SELECT p.id, p.title, p.campaign_id, c.title AS campaign_title
+     FROM projects p
      JOIN project_prompts pp ON p.id = pp.project_id
+     LEFT JOIN campaigns c ON c.id = p.campaign_id
      WHERE pp.prompt_id = $1 ORDER BY p.title ASC`,
     [promptId]
   )) as Record<string, unknown>[];
-  return rows.map((r) => ({ id: r.id as string, title: r.title as string }));
+  return rows.map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    campaign_id: r.campaign_id as string | undefined,
+    campaign_title: r.campaign_title as string | undefined,
+  }));
 }

@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckSquare, Square, Star, Trash2, Check, AlertTriangle } from "lucide-react";
+import { ArrowLeft, CheckSquare, Square, Star, Trash2, Check, AlertTriangle, Layers, Briefcase, Folder } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
-import { getResultById, updateResult, deleteResult, recomputePromptResultSummary } from "@/lib/db";
+import { getResultById, updateResult, deleteResult, recomputePromptResultSummary, getPromptById, setPromptThumbnail } from "@/lib/db";
+import { getProjectsForPrompt } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import type { Result } from "@/types";
+import type { Prompt, Result } from "@/types";
 
 // ─── AI Artifact Checklist ────────────────────────────────────
 
@@ -98,10 +99,13 @@ export function ResultDetail() {
   const navigate = useNavigate();
 
   const [result, setResult] = useState<Result | null>(null);
+  const [prompt, setPrompt] = useState<Prompt | null>(null);
+  const [owningProjects, setOwningProjects] = useState<{ id: string; title: string; campaign_id?: string; campaign_title?: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [settingThumbnail, setSettingThumbnail] = useState(false);
 
   const [scores, setScores] = useState({
     overall: 0, realism: 0, brand_fit: 0,
@@ -134,8 +138,23 @@ export function ResultDetail() {
       setCheckedArtifacts(new Set(r.artifacts ?? []));
       setNotes(r.notes ?? "");
       setLoading(false);
+      getPromptById(r.prompt_id).then(setPrompt).catch(() => {});
+      getProjectsForPrompt(r.prompt_id).then(setOwningProjects).catch(() => {});
     });
   }, [id, navigate]);
+
+  const handleSetThumbnail = async () => {
+    if (!id || !result?.prompt_id) return;
+    setSettingThumbnail(true);
+    try {
+      await setPromptThumbnail(result.prompt_id, id);
+      toast.success("Set as prompt thumbnail");
+    } catch {
+      toast.error("Failed to set thumbnail");
+    } finally {
+      setSettingThumbnail(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!id || !result) return;
@@ -194,7 +213,7 @@ export function ResultDetail() {
   return (
     <PageContainer
       title="Result"
-      subtitle={result ? `PROMPT ${result.prompt_id.slice(0, 8).toUpperCase()}` : "RESULT DETAIL"}
+      subtitle={prompt ? `FROM "${prompt.title}" — V${prompt.version}` : result ? `PROMPT ${result.prompt_id.slice(0, 8).toUpperCase()}` : "RESULT DETAIL"}
       action={
         <div className="flex items-center gap-2">
           <button
@@ -343,6 +362,72 @@ export function ResultDetail() {
               invert
             />
             <ScoreDots label="REUSE" value={scores.reuse} onChange={(v) => setScore("reuse", v)} />
+          </div>
+
+          {/* Ownership context: prompt / version / project / campaign / provider */}
+          <div
+            className="flex flex-col gap-2.5 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <span className="system-label">CONTEXT</span>
+            <div className="flex items-center gap-2 text-[11px] font-mono">
+              <Layers size={11} className="text-readable shrink-0" />
+              <span className="text-dim/50 shrink-0">Prompt</span>
+              <button
+                type="button"
+                onClick={() => navigate(`/library/${result?.prompt_id}`)}
+                className="text-soft-white hover:text-white truncate text-left"
+              >
+                {prompt?.title ?? "—"}{prompt ? ` (v${prompt.version})` : ""}
+              </button>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] font-mono">
+              <span className="w-2.75 shrink-0" />
+              <span className="text-dim/50 shrink-0">Provider</span>
+              <span className="text-soft-white truncate">{result?.provider ?? prompt?.provider ?? "—"}</span>
+            </div>
+            {owningProjects.length > 0 ? owningProjects.map((proj) => (
+              <div key={proj.id} className="flex flex-col gap-2.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "10px" }}>
+                <div className="flex items-center gap-2 text-[11px] font-mono">
+                  <Folder size={11} className="text-readable shrink-0" />
+                  <span className="text-dim/50 shrink-0">Project</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/projects/${proj.id}`)}
+                    className="text-soft-white hover:text-white truncate text-left"
+                  >
+                    {proj.title}
+                  </button>
+                </div>
+                {proj.campaign_id && (
+                  <div className="flex items-center gap-2 text-[11px] font-mono">
+                    <Briefcase size={11} className="text-readable shrink-0" />
+                    <span className="text-dim/50 shrink-0">Campaign</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/campaigns/${proj.campaign_id}`)}
+                      className="text-soft-white hover:text-white truncate text-left"
+                    >
+                      {proj.campaign_title}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )) : (
+              <div className="flex items-center gap-2 text-[11px] font-mono" style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "10px" }}>
+                <Folder size={11} className="text-dim/30 shrink-0" />
+                <span className="text-dim/40">Not attached to a project</span>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSetThumbnail}
+              disabled={settingThumbnail || prompt?.thumbnail_result_id === id}
+              className="w-full justify-center mt-1"
+            >
+              {prompt?.thumbnail_result_id === id ? "Current Prompt Thumbnail" : settingThumbnail ? "Setting…" : "Set as Prompt Thumbnail"}
+            </Button>
           </div>
 
           {/* Go to prompt */}

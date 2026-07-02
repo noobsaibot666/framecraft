@@ -78,6 +78,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
     thumbnail_data: row.thumbnail_data as string | undefined,
     builder_state: row.builder_state as string | undefined,
     thumbnail_result_id: row.thumbnail_result_id as string | undefined,
+    variant_label: row.variant_label as string | undefined,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
   };
@@ -86,7 +87,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
 export const PROMPT_SUMMARY_COLUMNS = [
   "id", "title", "description", "provider", "category", "prompt_text", "aspect_ratio",
   "tags", "rating", "ai_look_risk", "is_recipe", "is_winner", "is_failed",
-  "parent_id", "thumbnail_data", "thumbnail_result_id", "created_at", "updated_at",
+  "parent_id", "thumbnail_data", "thumbnail_result_id", "variant_label", "created_at", "updated_at",
 ].join(", ");
 
 // ─── Public API ──────────────────────────────────────────────
@@ -125,6 +126,7 @@ export interface CreatePromptInput {
   thumbnail_data?: string;
   builder_state?: string;
   thumbnail_result_id?: string | null;
+  variant_label?: string;
 }
 
 export type CreateRecipeInput = Omit<CreatePromptInput, "is_recipe">;
@@ -200,8 +202,8 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
          style_ref, character_ref, image_ref, parameters,
          tags, rating, ai_look_risk, reuse_potential, is_recipe, is_winner, is_failed,
          failure_notes, notes, best_use, risk_notes, version, parent_id,
-         source_url, thumbnail_data, builder_state, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,0,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34)`,
+         source_url, thumbnail_data, builder_state, variant_label, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,0,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35)`,
       [
         id,
         data.title,
@@ -235,6 +237,7 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
         data.source_url ?? null,
         data.thumbnail_data ?? null,
         data.builder_state ?? null,
+        data.variant_label ?? null,
         ts,
         ts,
       ]
@@ -274,6 +277,7 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
     notes: data.notes,
     version: data.version ?? 1,
     parent_id: data.parent_id,
+    variant_label: data.variant_label,
     created_at: ts,
     updated_at: ts,
   };
@@ -345,6 +349,7 @@ export async function updatePrompt(
     if ("thumbnail_data" in data) add("thumbnail_data", data.thumbnail_data ?? null);
     if ("builder_state" in data) add("builder_state", data.builder_state ?? null);
     if ("thumbnail_result_id" in data) add("thumbnail_result_id", data.thumbnail_result_id ?? null);
+    if ("variant_label" in data) add("variant_label", data.variant_label ?? null);
     add("updated_at", ts);
 
     await db.execute(`UPDATE prompts SET ${sets.join(", ")} WHERE id = $1`, [id, ...values]);
@@ -1077,11 +1082,11 @@ export async function getProviderStats(): Promise<{ provider: string; total: num
   return [];
 }
 
-export async function getChildPrompts(parentId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number }[]> {
+export async function getChildPrompts(parentId: string): Promise<{ id: string; title: string; is_winner: boolean; rating: number; variant_label?: string }[]> {
   if (isTauri) {
     const db = await getDb();
     const rows = (await db.select(
-      `SELECT id, title, is_winner, rating FROM prompts WHERE parent_id = $1 ORDER BY created_at DESC`,
+      `SELECT id, title, is_winner, rating, variant_label FROM prompts WHERE parent_id = $1 ORDER BY created_at DESC`,
       [parentId]
     )) as Record<string, unknown>[];
     return rows.map((r) => ({
@@ -1089,6 +1094,7 @@ export async function getChildPrompts(parentId: string): Promise<{ id: string; t
       title: r.title as string,
       is_winner: Boolean(r.is_winner),
       rating: (r.rating as number) ?? 0,
+      variant_label: r.variant_label as string | undefined,
     }));
   }
   return [];

@@ -166,6 +166,12 @@ pub fn run() {
             sql: include_str!("../migrations/026_prompt_thumbnail_override.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 27,
+            description: "prompt_variant_label",
+            sql: include_str!("../migrations/027_prompt_variant_label.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

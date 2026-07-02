@@ -85,7 +85,10 @@ export function PromptDetail() {
   const [notesValue, setNotesValue] = useState("");
   const [editingFailureNotes, setEditingFailureNotes] = useState(false);
   const [failureNotesValue, setFailureNotesValue] = useState("");
-  const [childPrompts, setChildPrompts] = useState<{ id: string; title: string; is_winner: boolean; rating: number }[]>([]);
+  const [childPrompts, setChildPrompts] = useState<{ id: string; title: string; is_winner: boolean; rating: number; variant_label?: string }[]>([]);
+  const [showCreateVariationModal, setShowCreateVariationModal] = useState(false);
+  const [variationNameInput, setVariationNameInput] = useState("");
+  const [creatingVariation, setCreatingVariation] = useState(false);
   const [editingBestUse, setEditingBestUse] = useState(false);
   const [bestUseValue, setBestUseValue] = useState("");
   const [editingRiskNotes, setEditingRiskNotes] = useState(false);
@@ -300,6 +303,43 @@ export function PromptDetail() {
     }
   };
 
+  const handleCreateVariation = async () => {
+    if (!prompt || !variationNameInput.trim()) return;
+    setCreatingVariation(true);
+    try {
+      const name = variationNameInput.trim();
+      const newId = await create({
+        title: name,
+        provider: prompt.provider,
+        category: prompt.category,
+        use_case: prompt.use_case,
+        prompt_text: prompt.prompt_text,
+        avoidance_text: prompt.avoidance_text,
+        aspect_ratio: prompt.aspect_ratio,
+        model_version: prompt.model_version,
+        camera: prompt.camera,
+        lens: prompt.lens,
+        lighting: prompt.lighting,
+        tags: prompt.tags,
+        notes: prompt.notes,
+        parent_id: prompt.id,
+        version: prompt.version,
+        variant_label: name,
+      });
+      // Variation inherits the original's project membership.
+      const projects = await getProjectsForPrompt(prompt.id).catch(() => []);
+      await Promise.all(projects.map((p) => addPromptToProject(p.id, newId).catch(() => {})));
+      toast.success(`Variation "${name}" created`);
+      setShowCreateVariationModal(false);
+      setVariationNameInput("");
+      navigate(`/library/${newId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create variation");
+    } finally {
+      setCreatingVariation(false);
+    }
+  };
+
   const handleExportResultsCSV = () => {
     if (!prompt || results.length === 0) return;
     const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -369,8 +409,8 @@ export function PromptDetail() {
       const result = await generatePromptVariations({ promptText: prompt.prompt_text });
       setVariations(result.variations);
       if (result.variations.length === 0) toast.error("No variations returned — try a longer prompt");
-    } catch {
-      toast.error("Variation generation failed — check your Anthropic API key");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Variation generation failed — check your API key in Settings");
     } finally {
       setVariationsLoading(false);
     }
@@ -515,6 +555,11 @@ export function PromptDetail() {
                     <CopyPlus size={10} /> Duplicate
                   </button>
                   <button type="button"
+                    onClick={() => { setVariationNameInput(""); setShowCreateVariationModal(true); setShowExportMenu(false); }}
+                    className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
+                    <GitBranch size={10} /> Create Variation
+                  </button>
+                  <button type="button"
                     onClick={() => { handleGenerateVariations(); setShowExportMenu(false); }}
                     className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] text-readable hover:text-white hover:bg-white/5 text-left">
                     <Shuffle size={10} /> Generate variations
@@ -562,6 +607,42 @@ export function PromptDetail() {
         </div>
       }
     >
+      {/* Create Variation naming modal */}
+      {showCreateVariationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowCreateVariationModal(false)}>
+          <div
+            className="flex flex-col gap-4 w-full max-w-sm p-5 rounded-card"
+            style={{ border: "var(--border-strong)", background: "var(--surface-card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <span className="system-label text-soft-white">CREATE VARIATION</span>
+              <button type="button" onClick={() => setShowCreateVariationModal(false)} className="text-dim/40 hover:text-white transition-precise">
+                <X size={12} />
+              </button>
+            </div>
+            <p className="font-mono text-[11px] text-readable leading-relaxed">
+              Creates a new prompt record linked to "{prompt.title}", starting from the same content. Give it a name to tell it apart.
+            </p>
+            <input
+              autoFocus
+              value={variationNameInput}
+              onChange={(e) => setVariationNameInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleCreateVariation(); if (e.key === "Escape") setShowCreateVariationModal(false); }}
+              placeholder="e.g. Night version"
+              className="h-10 px-3 font-mono text-[13px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none"
+              style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+            />
+            <div className="flex items-center gap-2">
+              <Button variant="primary" size="sm" onClick={handleCreateVariation} disabled={!variationNameInput.trim() || creatingVariation}>
+                {creatingVariation ? "Creating…" : "Create Variation"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowCreateVariationModal(false)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-8 min-w-0">
         {/* Main column */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
@@ -1202,6 +1283,14 @@ export function PromptDetail() {
                         <span className="font-mono text-[8px] text-dim/40">{"★".repeat(child.rating)}</span>
                       )}
                     </div>
+                    {child.variant_label ? (
+                      <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/70 shrink-0 px-1.5 py-0.5 rounded-sm"
+                        style={{ border: "1px solid rgba(72,229,232,0.28)" }}>
+                        variation
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[8px] uppercase tracking-widest text-dim/40 shrink-0">version</span>
+                    )}
                     {child.is_winner && <span className="font-mono text-[8px] text-amber shrink-0">★</span>}
                   </button>
                 ))}

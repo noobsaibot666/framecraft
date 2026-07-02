@@ -63,6 +63,7 @@ export interface Prompt {
   thumbnail_data?: string;
   builder_state?: string;
   thumbnail_result_id?: string;
+  variant_label?: string;
   created_at: string;
   updated_at: string;
 }

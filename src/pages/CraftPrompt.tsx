@@ -11,7 +11,7 @@ import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
-import { addPromptToProject, getProjectById } from "@/lib/projects";
+import { addPromptToProject, getProjectById, getReferencesForProject } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
 import { buildRecipeDraft, getRecipeSuggestions, type RecipeSuggestion } from "@/lib/craftRecipe";
 import { getPreferences } from "@/lib/userPreferences";
@@ -704,6 +704,17 @@ function ImpactRefThumb({ src }: { src?: string }) {
   return <img src={image.src} onError={image.onError} className="w-9 h-9 rounded-sm object-cover shrink-0" />;
 }
 
+function InspirationThumb({ src }: { src?: string }) {
+  const image = useImageDisplaySrc(src ?? "");
+  if (!image.src) return (
+    <div className="w-full h-full flex items-center justify-center"
+      style={{ background: "rgba(255,255,255,0.05)" }}>
+      <span className="font-mono text-[8px] text-dim/40">REF</span>
+    </div>
+  );
+  return <img src={image.src} onError={image.onError} className="w-full h-full object-cover" />;
+}
+
 function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
   const navigate = useNavigate();
   return (
@@ -813,6 +824,7 @@ export function CraftPrompt() {
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
   const [suggestingTags, setSuggestingTags] = useState(false);
   const [impactRefs, setImpactRefs] = useState<ImpactReference[]>([]);
+  const [projectRefs, setProjectRefs] = useState<{ id: string; title: string; kind: string; thumbnail_data?: string; rating: number }[]>([]);
   const [insightsReady, setInsightsReady] = useState(false);
   const promptLoadGuard = useRef(createLatestRequestGuard());
   const projectLoadGuard = useRef(createLatestRequestGuard());
@@ -911,12 +923,16 @@ export function CraftPrompt() {
     if (!projectId) {
       setProjectContext(null);
       setImpactRefs([]);
+      setProjectRefs([]);
       return;
     }
     const token = projectLoadGuard.current.begin();
     getProjectById(projectId).then((project) => {
       if (projectLoadGuard.current.isCurrent(token)) setProjectContext(project);
     });
+    getReferencesForProject(projectId).then((refs) => {
+      if (projectLoadGuard.current.isCurrent(token)) setProjectRefs(refs);
+    }).catch(() => {});
     return () => projectLoadGuard.current.invalidate();
   }, [projectId]);
 
@@ -1059,9 +1075,9 @@ export function CraftPrompt() {
   useEffect(() => {
     if (tokenSequence.length < 2) { setProvenCombos([]); setRecipeSuggestions([]); return; }
     getProvenCombos(tokenSequence.map((t) => t.id)).then(setProvenCombos).catch(() => {});
-    getRecipeSuggestions(tokenSequence.map((t) => t.text), 2).then(setRecipeSuggestions).catch(() => {});
+    getRecipeSuggestions(tokenSequence.map((t) => t.text), 2, fields.provider).then(setRecipeSuggestions).catch(() => {});
     setLowQualityDismissed(false);
-  }, [tokenSequence]);
+  }, [tokenSequence, fields.provider]);
 
   // Debounced duplicate + related prompts detection (Phase 06)
   useEffect(() => {
@@ -1139,9 +1155,10 @@ export function CraftPrompt() {
     () =>
       allPrompts
         .filter((p) => p.is_recipe && p.id !== id)
+        .filter((r) => r.provider === fields.provider)
         .filter((r) => !fields.category || !r.category || r.category === fields.category)
         .slice(0, 5),
-    [allPrompts, id, fields.category]
+    [allPrompts, id, fields.category, fields.provider]
   );
 
   const validate = (): boolean => {
@@ -1441,10 +1458,21 @@ export function CraftPrompt() {
                   </span>
                 ))}
               </div>
+              {projectContext.brief_text && (
+                <div className="flex flex-col gap-1">
+                  <span className="system-label text-[10px] text-muted">BRIEF</span>
+                  <p className="font-mono text-[13px] text-readable leading-relaxed">
+                    {projectContext.brief_text}
+                  </p>
+                </div>
+              )}
               {(projectContext.visual_direction || projectContext.creative_goals) && (
-                <p className="font-mono text-[13px] text-readable leading-relaxed">
-                  {projectContext.visual_direction || projectContext.creative_goals}
-                </p>
+                <div className="flex flex-col gap-1">
+                  <span className="system-label text-[10px] text-muted">DIRECTION</span>
+                  <p className="font-mono text-[13px] text-readable leading-relaxed">
+                    {projectContext.visual_direction || projectContext.creative_goals}
+                  </p>
+                </div>
               )}
             </div>
           )}
@@ -1935,6 +1963,35 @@ export function CraftPrompt() {
                   <span className="font-mono text-[9px] text-cyan shrink-0">Use</span>
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Project inspirations — full visual reference board */}
+          {projectRefs.length > 0 && (
+            <div className="flex flex-col gap-3 p-5 rounded-card"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="system-label text-soft-white">INSPIRATIONS</span>
+                <span className="font-mono text-[9px] text-muted">{projectRefs.length} project ref{projectRefs.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {projectRefs.map((ref) => (
+                  <button
+                    key={ref.id}
+                    type="button"
+                    onClick={() => navigate(`/references/${ref.id}`)}
+                    className="group relative aspect-square rounded-sm overflow-hidden"
+                    style={{ border: "var(--border-dim)" }}
+                    title={ref.title}
+                  >
+                    <InspirationThumb src={ref.thumbnail_data} />
+                    <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[8px] text-white/80 truncate opacity-0 group-hover:opacity-100 transition-precise"
+                      style={{ background: "rgba(0,0,0,0.75)" }}>
+                      {ref.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

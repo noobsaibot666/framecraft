@@ -99,6 +99,24 @@ describe("rankRecipeSuggestions", () => {
     );
     expect(rankRecipeSuggestions(["studio"], recipes, 2)).toHaveLength(2);
   });
+
+  it("excludes recipes from other providers when a provider is given", () => {
+    const recipes = [
+      makeRecipe({ id: "mj", provider: "midjourney", prompt_text: "studio product shot" }),
+      makeRecipe({ id: "kling", provider: "kling", prompt_text: "studio product shot" }),
+    ];
+    const results = rankRecipeSuggestions(["studio"], recipes, 5, "midjourney");
+    expect(results).toHaveLength(1);
+    expect(results[0].recipe.id).toBe("mj");
+  });
+
+  it("includes all providers when no provider filter is given", () => {
+    const recipes = [
+      makeRecipe({ id: "mj", provider: "midjourney", prompt_text: "studio product shot" }),
+      makeRecipe({ id: "kling", provider: "kling", prompt_text: "studio product shot" }),
+    ];
+    expect(rankRecipeSuggestions(["studio"], recipes, 5)).toHaveLength(2);
+  });
 });
 
 describe("getRecipeSuggestions (dev mode)", () => {

@@ -37,10 +37,12 @@ export function scoreRecipeOverlap(tokenTexts: string[], recipe: Prompt): Recipe
 export function rankRecipeSuggestions(
   tokenTexts: string[],
   recipes: Prompt[],
-  limit = 2
+  limit = 2,
+  provider?: string
 ): RecipeSuggestion[] {
   if (tokenTexts.length === 0 || recipes.length === 0) return [];
-  return recipes
+  const pool = provider ? recipes.filter((r) => r.provider === provider) : recipes;
+  return pool
     .map((r) => scoreRecipeOverlap(tokenTexts, r))
     .filter((s) => s.matchedCount > 0)
     .sort((a, b) => b.matchedCount - a.matchedCount || b.matchPercent - a.matchPercent)
@@ -49,9 +51,10 @@ export function rankRecipeSuggestions(
 
 export async function getRecipeSuggestions(
   tokenTexts: string[],
-  limit = 2
+  limit = 2,
+  provider?: string
 ): Promise<RecipeSuggestion[]> {
   if (!isTauriEnvironment() || tokenTexts.length === 0) return [];
   const recipes = await getRecipePrompts();
-  return rankRecipeSuggestions(tokenTexts, recipes, limit);
+  return rankRecipeSuggestions(tokenTexts, recipes, limit, provider);
 }

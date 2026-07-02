@@ -26,6 +26,7 @@ interface SortablePillProps {
   displayText: string;
   isEditing: boolean;
   editText: string;
+  conflicting: boolean;
   onEditStart: (id: string) => void;
   onEditChange: (text: string) => void;
   onEditCommit: () => void;
@@ -37,6 +38,7 @@ function SortablePill({
   displayText,
   isEditing,
   editText,
+  conflicting,
   onEditStart,
   onEditChange,
   onEditCommit,
@@ -60,12 +62,16 @@ function SortablePill({
 
   const isLowQuality = token.quality_score < -0.1;
   const isHighQuality = token.quality_score > 0.3;
-  const pillBorder = isLowQuality
+  const pillBorder = conflicting
+    ? "1px solid rgba(251,191,36,0.55)"
+    : isLowQuality
     ? "1px solid rgba(215,25,33,0.35)"
     : isHighQuality
     ? "1px solid rgba(255,255,255,0.28)"
     : "var(--border-strong)";
-  const qualityHint = isLowQuality
+  const qualityHint = conflicting
+    ? " · Conflicts with another instruction — see warning above"
+    : isLowQuality
     ? ` · Low quality score (${token.quality_score.toFixed(2)})`
     : isHighQuality
     ? ` · Proven token (${token.quality_score.toFixed(2)})`
@@ -74,8 +80,8 @@ function SortablePill({
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, border: pillBorder, background: "rgba(255,255,255,0.06)" }}
-      className="shrink-0 inline-flex min-h-8 items-center gap-1.5 rounded-sm"
+      style={{ ...style, border: pillBorder, background: conflicting ? "rgba(251,191,36,0.06)" : "rgba(255,255,255,0.06)", opacity: conflicting ? 0.6 : style.opacity }}
+      className="shrink-0 inline-flex min-h-8 items-center gap-1.5 rounded-sm transition-precise"
       title={`${displayText}${qualityHint}`}
     >
       {/* Drag handle */}
@@ -130,6 +136,8 @@ interface SequenceBuilderProps {
   onReorder: (tokens: Token[]) => void;
   onRemove: (tokenId: string) => void;
   onEditCommit: (tokenId: string, text: string) => void;
+  /** Token IDs flagged by inconsistency detection — rendered greyed-out with a warning accent. */
+  conflictingIds?: Set<string>;
 }
 
 export function SequenceBuilder({
@@ -138,6 +146,7 @@ export function SequenceBuilder({
   onReorder,
   onRemove,
   onEditCommit,
+  conflictingIds,
 }: SequenceBuilderProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
@@ -193,6 +202,7 @@ export function SequenceBuilder({
               displayText={overrides[token.id] ?? token.text}
               isEditing={editingId === token.id}
               editText={editText}
+              conflicting={conflictingIds?.has(token.id) ?? false}
               onEditStart={startEdit}
               onEditChange={setEditText}
               onEditCommit={commitEdit}

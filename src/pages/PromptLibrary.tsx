@@ -110,15 +110,24 @@ function PromptCardThumb({ src }: { src: string }) {
   );
 }
 
-function CarouselMiniThumb({ src }: { src: string }) {
+function CarouselMiniThumb({ src, onEnlarge }: { src: string; onEnlarge: (src: string) => void }) {
   const { src: displaySrc } = useImageDisplaySrc(src);
   if (!displaySrc) return (
     <div className="w-9 h-9 rounded-sm shrink-0" style={{ background: "rgba(255,255,255,0.06)" }} />
   );
-  return <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-sm object-cover shrink-0" />;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onEnlarge(displaySrc); }}
+      className="w-9 h-9 rounded-sm shrink-0 overflow-hidden cursor-zoom-in transition-precise hover:ring-1 hover:ring-cyan/50"
+      title="Click to enlarge"
+    >
+      <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+    </button>
+  );
 }
 
-function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCount, projectRelation, onCopy, onDelete, onQueue, onRate, batchMode, selected, onSelect, index, pendingDelete }: {
+function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCount, projectRelation, onCopy, onDelete, onQueue, onRate, onEnlargeResult, batchMode, selected, onSelect, index, pendingDelete }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   coverImage?: string;
@@ -129,6 +138,7 @@ function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCo
   onDelete: (p: Prompt) => void;
   onQueue: (p: Prompt) => void;
   onRate: (p: Prompt, rating: number) => void;
+  onEnlargeResult: (src: string) => void;
   batchMode: boolean;
   selected: boolean;
   onSelect: (id: string, selected: boolean, index: number, shiftHeld: boolean) => void;
@@ -150,7 +160,7 @@ function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCo
       {/* Result carousel — additional thumbnails beyond the hero cover */}
       {carouselThumbs.length > 0 && (
         <div className="flex gap-1.5 -mt-3 overflow-x-auto">
-          {carouselThumbs.map((src, i) => <CarouselMiniThumb key={i} src={src} />)}
+          {carouselThumbs.map((src, i) => <CarouselMiniThumb key={i} src={src} onEnlarge={onEnlargeResult} />)}
         </div>
       )}
 
@@ -345,6 +355,7 @@ export function PromptLibrary() {
   const confirmDeleteRef = useRef<string | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
   const [coverMap, setCoverMap] = useState<Record<string, string>>({});
+  const [enlargedSrc, setEnlargedSrc] = useState<string | null>(null);
   const [thumbsMap, setThumbsMap] = useState<Record<string, string[]>>({});
   const [versionCountMap, setVersionCountMap] = useState<Record<string, number>>({});
   const [projectMap, setProjectMap] = useState<Record<string, { projectTitle: string; campaignTitle?: string }>>({});
@@ -615,6 +626,19 @@ export function PromptLibrary() {
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
   return (
+    <>
+    {enlargedSrc && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+        onClick={() => setEnlargedSrc(null)}>
+        <div className="relative max-w-[90vw] max-h-[90vh] rounded-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <img src={enlargedSrc} alt="Result" className="max-w-[90vw] max-h-[90vh] object-contain" />
+          <button type="button" onClick={() => setEnlargedSrc(null)}
+            className="absolute top-2 right-2 w-7 h-7 rounded-sm bg-black/70 text-white/60 hover:text-white flex items-center justify-center">
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+    )}
     <PageContainer
       title="Prompt Library"
       subtitle="STORED PROMPT ASSETS"
@@ -878,6 +902,7 @@ export function PromptLibrary() {
                   onDelete={handleDelete}
                   onQueue={handleQueue}
                   onRate={handleRate}
+                  onEnlargeResult={setEnlargedSrc}
                   batchMode={batchMode}
                   selected={selectedIds.has(p.id)}
                   onSelect={handleSelect}
@@ -952,5 +977,6 @@ export function PromptLibrary() {
         </>
       )}
     </PageContainer>
+    </>
   );
 }

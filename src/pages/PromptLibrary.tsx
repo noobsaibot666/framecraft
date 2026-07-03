@@ -674,7 +674,13 @@ export function PromptLibrary() {
               </span>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          {/* flex-wrap, not a rigid grid-cols-5 — the fixed 5-column grid
+              forced each 120px-min-width card into a track as narrow as
+              89px whenever this row shared space with the description text
+              beside it (any viewport in the xl:flex-row range), causing the
+              cards to overlap instead of shrinking. Wrapping is safe here:
+              cards reflow onto a second line instead of overlapping. */}
+          <div className="flex flex-wrap gap-3">
             <LibraryStat label="Prompts" value={metrics.total} accent />
             <LibraryStat label="Winners" value={metrics.winners} />
             <LibraryStat label="Recipes" value={metrics.recipes} />

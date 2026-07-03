@@ -240,6 +240,8 @@ export interface Project {
   visual_direction?: string;
   constraints?: string;
   creative_goals?: string;
+  /** Creative Director Mode strategy JSON (doc 04 §4, migration 031). */
+  creative_strategy?: string;
   brief_text?: string;
   production_goal?: string;
   category?: Category;
@@ -351,7 +353,10 @@ export type ComparisonType =
   | "result_result"
   | "reference_result"
   | "provider_provider"
-  | "prompt_version";
+  | "prompt_version"
+  | "direction_result"
+  | "sref_sref"
+  | "ai_risk";
 
 export type ComparisonSourceRole =
   | "result"
@@ -363,7 +368,11 @@ export type ComparisonSourceRole =
   | "version_a"
   | "version_b"
   | "version_c"
-  | "version_d";
+  | "version_d"
+  | "sref_a"
+  | "sref_b"
+  | "sref_c"
+  | "sref_d";
 
 export interface ComparisonSession {
   id: string;
@@ -397,6 +406,8 @@ export interface ComparisonResult {
   prompt_title: string;
   prompt_provider: Provider;
   prompt_version: number;
+  /** Prompt's style reference code — labels slots in SREF vs SREF mode. */
+  prompt_style_ref?: string;
   thumbnail_path?: string;
   file_path?: string;
   score_overall: number;
@@ -457,6 +468,8 @@ export interface ProjectContextPack {
     status: string;
     client?: string;
     notes?: string;
+    /** Creative Director Mode strategy JSON (doc 04 §4). */
+    creative_strategy?: string;
   };
   prompts: {
     total: number;

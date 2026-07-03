@@ -20,6 +20,7 @@ import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { FormulaBar } from "@/components/ui/FormulaBar";
 import { formatFormulaForAI, getFormulaForProvider, getNarrativeArc, NARRATIVE_FORMATS } from "@/lib/promptFormula";
+import { formatStrategyForContext, readStoredStrategy } from "@/lib/creativeDirectorMode";
 import { CONSISTENCY_FACTOR_PRESETS, buildConsistencySuffix, suggestConsistencyFactors } from "@/lib/consistencyFactors";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
 import { getTokenById } from "@/lib/tokenDetail";
@@ -1214,6 +1215,18 @@ export function CraftPrompt() {
   })();
 
   const assembled = outputOverride ?? builtAssembled;
+
+  // Creative Director strategy (doc 04 §4) — shown in the Pre-Craft panel and
+  // folded into the analysis brief so advice stays strategy-aligned.
+  const projectStrategy = useMemo(
+    () => readStoredStrategy(projectContext?.creative_strategy),
+    [projectContext]
+  );
+  const projectStrategyContext = useMemo(
+    () => (projectStrategy ? formatStrategyForContext(projectStrategy) : ""),
+    [projectStrategy]
+  );
+
   const deferredAssembled = useDeferredValue(assembled);
   const deferredProvider = useDeferredValue(fields.provider);
   const deferredCategory = useDeferredValue(fields.category);
@@ -1367,7 +1380,8 @@ export function CraftPrompt() {
     try {
       const result = await analyzePromptDraft({
         promptText: assembled,
-        brief: projectContext?.brief_text,
+        // Brief context includes the project's saved Creative Director strategy (doc 04 §4).
+        brief: [projectContext?.brief_text, projectStrategyContext].filter(Boolean).join("\n\n") || undefined,
         provenTokens: tokenSequence.filter((t) => t.quality_score > 0.3).map((t) => t.text).slice(0, 5),
         fields: mode === "builder" ? {
           subject: fields.subject || undefined,
@@ -1770,6 +1784,15 @@ export function CraftPrompt() {
                   <span className="system-label text-[10px] text-muted">DIRECTION</span>
                   <p className="font-mono text-[13px] text-readable leading-relaxed">
                     {projectContext.visual_direction || projectContext.creative_goals}
+                  </p>
+                </div>
+              )}
+              {projectStrategy?.campaign_idea && (
+                <div className="flex flex-col gap-1">
+                  <span className="system-label text-[10px] text-cyan/60">STRATEGY</span>
+                  <p className="font-mono text-[13px] text-readable leading-relaxed">
+                    {projectStrategy.campaign_idea}
+                    {projectStrategy.product_message ? ` — ${projectStrategy.product_message}` : ""}
                   </p>
                 </div>
               )}

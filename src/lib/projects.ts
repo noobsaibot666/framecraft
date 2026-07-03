@@ -40,6 +40,7 @@ function rowToProject(row: Record<string, unknown>): Project {
     visual_direction: row.visual_direction as string | undefined,
     constraints: row.constraints as string | undefined,
     creative_goals: row.creative_goals as string | undefined,
+    creative_strategy: row.creative_strategy as string | undefined,
     brief_text: row.brief_text as string | undefined,
     production_goal: row.production_goal as string | undefined,
     category: row.category as Project["category"] | undefined,

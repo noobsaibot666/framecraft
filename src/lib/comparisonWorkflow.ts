@@ -13,6 +13,9 @@ export const COMPARISON_TYPES: ComparisonTypeDefinition[] = [
   { id: "reference_result", label: "Reference vs Result", purpose: "Check whether a result follows the intended visual direction." },
   { id: "provider_provider", label: "Provider vs Provider", purpose: "Compare how providers interpret the same production goal." },
   { id: "prompt_version", label: "Prompt Version vs Version", purpose: "Decide which prompt revision produces the stronger output." },
+  { id: "direction_result", label: "Direction vs Result", purpose: "Judge whether results deliver the project's chosen creative direction." },
+  { id: "sref_sref", label: "SREF vs SREF", purpose: "Compare how different style references shape the same idea." },
+  { id: "ai_risk", label: "AI-Look Risk", purpose: "Rank results by how synthetic they read — keep the most authentic." },
 ];
 
 export interface ComparisonOutcomeSlot {
@@ -57,6 +60,12 @@ export function getComparisonRoles(type: ComparisonType, count: number): Compari
     const roles: ComparisonSourceRole[] = ["version_a", "version_b", "version_c", "version_d"];
     return roles.slice(0, count);
   }
+  if (type === "sref_sref") {
+    const roles: ComparisonSourceRole[] = ["sref_a", "sref_b", "sref_c", "sref_d"];
+    return roles.slice(0, count);
+  }
+  // direction_result and ai_risk compare plain results — the direction text /
+  // AI-risk scores provide the judging context, not the slot roles.
   return Array.from({ length: count }, () => "result");
 }
 
@@ -72,6 +81,10 @@ export function formatComparisonRole(role: ComparisonSourceRole): string {
     version_b: "Version B",
     version_c: "Version C",
     version_d: "Version D",
+    sref_a: "SREF A",
+    sref_b: "SREF B",
+    sref_c: "SREF C",
+    sref_d: "SREF D",
   };
   return labels[role];
 }

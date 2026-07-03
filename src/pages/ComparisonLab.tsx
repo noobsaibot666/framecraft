@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Star, AlertTriangle, Check, X,
-  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload, Edit2,
+  LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload, Edit2, Sparkles,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,12 @@ import {
   getWeakestDimension,
 } from "@/lib/comparisons";
 import { summarizeComparisonSlots } from "@/lib/comparisonSummary";
+import {
+  formatDecisionOutcome,
+  generateComparisonDecision,
+  isEmptyDecision,
+  type ComparisonDecision,
+} from "@/lib/comparisonDecision";
 import {
   COMPARISON_TYPES,
   buildComparisonOutcome,
@@ -114,9 +120,14 @@ function ComparisonSlot({
       )}
       style={{ border: slot.isWinner ? "1px solid rgba(223,168,58,0.70)" : "var(--border-default)", background: "var(--surface-card)" }}
     >
-      {/* Source label (Phase 188) */}
-      <div className="flex items-center px-4 py-2.5" style={{ borderBottom: "1px solid rgba(56,183,200,0.18)", background: "rgba(56,183,200,0.06)" }}>
+      {/* Source label (Phase 188) — SREF slots also show the style ref code (doc 04 §3) */}
+      <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid rgba(56,183,200,0.18)", background: "rgba(56,183,200,0.06)" }}>
         <span className="font-mono text-[10px] tracking-[0.14em] uppercase text-cyan">{formatComparisonRole(slot.sourceRole)}</span>
+        {slot.sourceRole.startsWith("sref_") && (
+          <span className="font-mono text-[9px] text-cyan/60 truncate">
+            {r.prompt_style_ref ? `--sref ${r.prompt_style_ref}` : "no sref"}
+          </span>
+        )}
       </div>
 
       {/* Image */}
@@ -491,6 +502,11 @@ export function ComparisonLab() {
   const [editingOutcome, setEditingOutcome] = useState(false);
   const [outcomeEditValue, setOutcomeEditValue] = useState("");
 
+  // AI decision summary (doc 04 §3)
+  const [decision, setDecision] = useState<ComparisonDecision | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
+
   // Project validation — only relevant when projectId is set
   const [projectLoadState, setProjectLoadState] = useState<"idle" | "loading" | "not-found">("idle");
 
@@ -789,6 +805,52 @@ export function ComparisonLab() {
     }
   };
 
+  // ── AI decision summary (doc 04 §3) ───────────────────────
+  const handleGenerateDecision = async () => {
+    setDecisionLoading(true);
+    setDecisionError("");
+    try {
+      // Direction vs Result judges against the project's applied creative direction.
+      let directionContext: string | undefined;
+      if (comparisonType === "direction_result" && projectId) {
+        const proj = await getProjectById(projectId);
+        directionContext = [proj?.visual_direction, proj?.creative_goals].filter(Boolean).join("\n") || undefined;
+      }
+      const result = await generateComparisonDecision({
+        type: comparisonType,
+        slots: slots
+          .filter((slot): slot is SlotState => Boolean(slot))
+          .map((slot) => ({
+            label: formatComparisonRole(slot.sourceRole) + ` — ${slot.result.prompt_title}`,
+            result: slot.result,
+            isWinner: slot.isWinner,
+            isRejected: slot.isRejected,
+            notes: slot.notes,
+          })),
+        directionContext,
+      });
+      if (isEmptyDecision(result)) {
+        setDecisionError("The model returned no usable decision — try again.");
+      } else {
+        setDecision(result);
+      }
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : "Decision analysis failed.");
+    } finally {
+      setDecisionLoading(false);
+    }
+  };
+
+  const handleSaveDecisionOutcome = async () => {
+    if (!activeSessionId || !decision) return;
+    const text = formatDecisionOutcome(decision);
+    if (!text) return;
+    await updateSession(activeSessionId, { outcome_summary: text });
+    setOutcomeSummary(text);
+    setDecision(null);
+    reloadSessions();
+  };
+
   // ── Save edited outcome (Phase 190) ──────────────────────
   const handleSaveOutcome = async () => {
     if (!activeSessionId) return;
@@ -914,6 +976,12 @@ export function ComparisonLab() {
               <Check size={9} /> Outcome saved
             </span>
           )}
+          {filledSlots >= 2 && (
+            <Button variant="ghost" size="sm" onClick={handleGenerateDecision} disabled={decisionLoading}
+              title="AI judges the filled slots: stronger option, why, what failed, what to reuse and avoid">
+              <Sparkles size={11} /> {decisionLoading ? "Judging…" : "AI Decision"}
+            </Button>
+          )}
           {comparisonSummary.canApplyDecisions && (
             <Button variant="primary" size="sm" onClick={handleApplyDecision}>
               <Check size={11} /> Apply Decisions
@@ -1016,6 +1084,64 @@ export function ComparisonLab() {
               </div>
             ) : (
               <p className="font-mono text-[12px] leading-relaxed text-soft-white">{outcomeSummary}</p>
+            )}
+          </div>
+        )}
+
+        {/* AI decision summary (doc 04 §3) */}
+        {decisionError && (
+          <p className="font-mono text-[11px] text-red/80 px-1">{decisionError}</p>
+        )}
+        {decision && (
+          <div className="flex flex-col gap-3 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.32)", background: "rgba(56,183,200,0.045)" }}>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-cyan">
+                <Sparkles size={10} /> AI Decision Summary
+              </span>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={handleSaveDecisionOutcome}
+                  className="font-mono text-[8px] tracking-widest uppercase text-cyan/70 hover:text-cyan px-2 py-0.5 rounded-sm transition-precise"
+                  style={{ border: "1px solid rgba(56,183,200,0.3)" }}>
+                  Save as Outcome
+                </button>
+                <button type="button" onClick={() => setDecision(null)} className="text-cyan/50 hover:text-white text-[10px]">×</button>
+              </div>
+            </div>
+            {decision.stronger_option && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Stronger</span>
+                <span className="font-mono text-[12px] text-soft-white leading-relaxed">{decision.stronger_option}</span>
+              </div>
+            )}
+            {decision.why_stronger && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Why</span>
+                <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.why_stronger}</span>
+              </div>
+            )}
+            {decision.what_failed && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60 w-16 shrink-0">Failed</span>
+                <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.what_failed}</span>
+              </div>
+            )}
+            {decision.reuse.length > 0 && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-amber/60 w-16 shrink-0">Reuse</span>
+                <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.reuse.join(" · ")}</span>
+              </div>
+            )}
+            {decision.avoid.length > 0 && (
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60 w-16 shrink-0">Avoid</span>
+                <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.avoid.join(" · ")}</span>
+              </div>
+            )}
+            {decision.intelligence && (
+              <div className="flex items-baseline gap-2 pt-1" style={{ borderTop: "1px solid rgba(56,183,200,0.15)" }}>
+                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Intel</span>
+                <span className="font-mono text-[11px] text-cyan/80 leading-relaxed">{decision.intelligence}</span>
+              </div>
             )}
           </div>
         )}

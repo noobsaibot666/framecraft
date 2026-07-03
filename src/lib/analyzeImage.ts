@@ -37,15 +37,16 @@ ai_look_risks: list specific visual risks you detect in THIS image — things th
 avoidance_suggestions: 2-4 short avoidance tokens to prepend or append to the prompt to prevent the detected risks. Start each with "avoid" or "no".
 Return only the JSON object — no markdown fences, no preamble.`;
 
-export async function analyzeImage(
+/** Send one image + instruction to a vision-capable model and return the raw text reply. */
+export async function visionComplete(
   base64: string,
   mimeType: string,
-  model: AIModel
-): Promise<AnalysisResult> {
+  model: AIModel,
+  prompt: string,
+  maxTokens = 1536
+): Promise<string> {
   const apiKey = getApiKey(model.provider);
   requireValidApiKey(model.provider, apiKey);
-
-  let text: string;
 
   if (model.provider === "anthropic") {
     const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(model.provider, "https://api.anthropic.com/v1/messages", {
@@ -58,36 +59,42 @@ export async function analyzeImage(
       },
       body: JSON.stringify({
         model: model.id,
-        max_tokens: 1536,
+        max_tokens: maxTokens,
         messages: [{
           role: "user",
           content: [
             { type: "image", source: { type: "base64", media_type: mimeType, data: base64 } },
-            { type: "text", text: ANALYSIS_PROMPT },
+            { type: "text", text: prompt },
           ],
         }],
       }),
     });
-    text = data.content.find((c) => c.type === "text")?.text ?? "";
-
-  } else {
-    const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(model.provider, "https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        model: model.id,
-        max_tokens: 1536,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
-            { type: "text", text: ANALYSIS_PROMPT },
-          ],
-        }],
-      }),
-    });
-    text = data.choices[0]?.message?.content ?? "";
+    return data.content.find((c) => c.type === "text")?.text ?? "";
   }
 
+  const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(model.provider, "https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      model: model.id,
+      max_tokens: maxTokens,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64}` } },
+          { type: "text", text: prompt },
+        ],
+      }],
+    }),
+  });
+  return data.choices[0]?.message?.content ?? "";
+}
+
+export async function analyzeImage(
+  base64: string,
+  mimeType: string,
+  model: AIModel
+): Promise<AnalysisResult> {
+  const text = await visionComplete(base64, mimeType, model, ANALYSIS_PROMPT);
   return parseAnalysisResult(text);
 }

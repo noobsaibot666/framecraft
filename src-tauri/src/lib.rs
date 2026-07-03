@@ -190,6 +190,12 @@ pub fn run() {
             sql: include_str!("../migrations/030_direction_storyboards.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 31,
+            description: "creative_strategy",
+            sql: include_str!("../migrations/031_creative_strategy.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -5,6 +5,7 @@ import { summarizeComparisonIntelligence } from "./comparisonIntelligence";
 import { getApiKey, AI_MODELS } from "./aiConfig";
 import { fetchProviderJson, requireValidApiKey } from "./aiClient";
 import { formatFormulaForAI, getFormulaForProvider } from "./promptFormula";
+import { formatStrategyForContext, readStoredStrategy } from "./creativeDirectorMode";
 import { getFramecraftDb } from "./dbConnection";
 import type {
   AssistantThread, AssistantMessage, AssistantSuggestion, ProjectContextPack, Provider,
@@ -69,6 +70,7 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
       status: project.status,
       client: project.client,
       notes: project.notes,
+      creative_strategy: project.creative_strategy,
     },
     prompts: {
       total: prompts.length,
@@ -205,6 +207,10 @@ export function serializePackToSystem(pack: ProjectContextPack): string {
     pack.project.status ? `Status: ${pack.project.status}` : "",
     pack.project.brief_text ? `Brief: ${pack.project.brief_text}` : "",
     pack.project.production_goal ? `Production goal: ${pack.project.production_goal}` : "",
+    (() => {
+      const strategy = readStoredStrategy(pack.project.creative_strategy);
+      return strategy ? formatStrategyForContext(strategy) : "";
+    })(),
     ``,
     `## PROMPTS (${pack.prompts.total} total, avg rating ${pack.prompts.avgRating}/5)`,
     `Winners: ${pack.prompts.winners} | Failed: ${pack.prompts.failed}`,

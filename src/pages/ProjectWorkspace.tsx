@@ -28,6 +28,7 @@ import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { BatchImportZone } from "@/components/ui/BatchImportZone";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
+import { CreativeDirectorPanel } from "@/components/projects/CreativeDirectorPanel";
 import { getProjectShots } from "@/lib/shotSequence";
 import { accentColorForVariantLabel } from "@/lib/storytelling";
 import { getCampaigns } from "@/lib/campaigns";
@@ -570,6 +571,9 @@ export function ProjectWorkspace() {
   const [category, setCategory] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  // Creative Director strategy JSON — read-only here; the panel persists it
+  // directly, this copy keeps Direction Studio's generation context current.
+  const [creativeStrategyRaw, setCreativeStrategyRaw] = useState("");
 
   const hasImageProvider = providerTargets.length === 0 || providerTargets.some((p) => !isVideoProvider(p));
   const hasVideoProvider = providerTargets.length === 0 || providerTargets.some((p) => isVideoProvider(p));
@@ -632,6 +636,7 @@ export function ProjectWorkspace() {
         setCategory(proj.category ?? "");
         setTags(proj.tags ?? []);
         setNotes(proj.notes ?? "");
+        setCreativeStrategyRaw(proj.creative_strategy ?? "");
         setLinkedPrompts(prompts);
         setLinkedRefs(refs);
         setLinkedResults(results);
@@ -1033,6 +1038,31 @@ export function ProjectWorkspace() {
             <FieldTextarea value={productionGoal} onChange={setProductionGoal} placeholder="What does success look like for this production?" rows={3} />
           </div>
 
+          {/* Creative Director Mode — early project strategy (doc 04 §4) */}
+          <CreativeDirectorPanel
+            project={{
+              id: id!,
+              title,
+              client: client || undefined,
+              campaign: campaign || undefined,
+              status,
+              project_type: projectType || undefined,
+              provider_targets: providerTargets,
+              visual_direction: visualDirection || undefined,
+              constraints: constraints || undefined,
+              brief_text: briefText || undefined,
+              production_goal: productionGoal || undefined,
+              category: (category || undefined) as Project["category"] | undefined,
+              created_at: "",
+              updated_at: "",
+            }}
+            onApplyToSetup={(fields) => {
+              if (fields.visual_direction !== undefined) setVisualDirection(fields.visual_direction);
+              if (fields.creative_goals !== undefined) setCreativeGoals(fields.creative_goals);
+            }}
+            onStrategyChanged={(raw) => setCreativeStrategyRaw(raw ?? "")}
+          />
+
           <DirectionStudio
             project={{
               id: id!,
@@ -1049,6 +1079,7 @@ export function ProjectWorkspace() {
               visual_direction: visualDirection || undefined,
               constraints: constraints || undefined,
               creative_goals: creativeGoals || undefined,
+              creative_strategy: creativeStrategyRaw || undefined,
               brief_text: briefText || undefined,
               production_goal: productionGoal || undefined,
               category: (category || undefined) as Project["category"] | undefined,

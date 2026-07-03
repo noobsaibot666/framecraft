@@ -91,17 +91,39 @@ const DIRECTION_JSON_SHAPE = `{
   ]
 }`;
 
+/**
+ * Compact one-line view of the stored Creative Director strategy JSON
+ * (doc 04 §4). Local re-parse rather than importing creativeDirectorMode —
+ * that module imports callDirectionModel from here.
+ */
+function summarizeStrategyJson(raw: string): string {
+  try {
+    const json = JSON.parse(raw) as Record<string, unknown>;
+    return Object.entries(json)
+      .map(([key, value]) => {
+        const text = Array.isArray(value) ? value.join(" | ") : typeof value === "string" ? value : "";
+        return text.trim() ? `${key.replace(/_/g, " ")}: ${text.trim()}` : "";
+      })
+      .filter(Boolean)
+      .join("; ");
+  } catch {
+    return "";
+  }
+}
+
 function buildProjectContext(
   project: Project,
   comparisonOutcomes: string[],
   userContext?: string,
   visualReferenceContext?: string
 ): string {
+  const strategy = project.creative_strategy ? summarizeStrategyJson(project.creative_strategy) : "";
   return [
     `Project: ${project.title}`,
     project.client ? `Client: ${project.client}` : "",
     project.campaign ? `Campaign: ${project.campaign}` : "",
     project.project_type ? `Project type: ${project.project_type}` : "",
+    strategy ? `Creative strategy (defined in Creative Director Mode — stay strategically aligned with it): ${strategy}` : "",
     project.brief_text ? `Brief: ${project.brief_text}` : "",
     project.production_goal ? `Production goal: ${project.production_goal}` : "",
     project.visual_direction ? `Current visual direction: ${project.visual_direction}` : "",

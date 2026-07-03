@@ -80,3 +80,14 @@ export function pickAvailableModel(): AIModel | undefined {
   }
   return undefined;
 }
+
+/** Like pickAvailableModel, but only providers whose models accept image input (DeepSeek has no vision endpoint). */
+export function pickVisionModel(): AIModel | undefined {
+  for (const provider of ["openai", "anthropic"] as const) {
+    if (validateApiKey(provider, getApiKey(provider)).valid) {
+      return AI_MODELS.find((m) => m.provider === provider && m.tier === "fast")
+        ?? AI_MODELS.find((m) => m.provider === provider);
+    }
+  }
+  return undefined;
+}

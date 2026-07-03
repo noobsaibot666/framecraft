@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ImagePlus, Plus, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { Check, ImagePlus, Plus, ScanEye, Sparkles, Trash2, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import { getSessions } from "@/lib/comparisons";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/creativeDirectionGeneration";
 import {
   addVisualReference,
+  analyzeVisualReference,
   buildVisualReferenceContext,
   getVisualReferences,
   MAX_VISUAL_REFERENCE_NOTE,
@@ -66,12 +67,29 @@ function VisualReferenceCard({
   refItem,
   onNoteSaved,
   onRemove,
+  onAnalyzed,
 }: {
   refItem: VisualReference;
   onNoteSaved: (id: string, note: string) => void;
   onRemove: (id: string) => void;
+  onAnalyzed: (id: string, analysis: string) => void;
 }) {
   const [note, setNote] = useState(refItem.note);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setAnalysisError("");
+    try {
+      const analysis = await analyzeVisualReference(refItem);
+      onAnalyzed(refItem.id, analysis);
+    } catch (caught) {
+      setAnalysisError(caught instanceof Error ? caught.message : "Analysis failed.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
   return (
     <div className="flex gap-2.5 p-2 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.02)" }}>
@@ -81,14 +99,25 @@ function VisualReferenceCard({
       <div className="flex-1 min-w-0 flex flex-col gap-1">
         <div className="flex items-start justify-between gap-1">
           <span className="font-mono text-[10px] text-soft-white/80 truncate">{refItem.title}</span>
-          <button
-            type="button"
-            onClick={() => onRemove(refItem.id)}
-            className="text-dim/50 hover:text-red transition-precise shrink-0"
-            title="Remove visual reference"
-          >
-            <X size={11} />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              disabled={analyzing || !refItem.thumbnail_data}
+              className="text-dim/50 hover:text-cyan disabled:opacity-40 transition-precise"
+              title={refItem.analysis ? "Re-run AI image analysis" : "Analyze this image with AI"}
+            >
+              <ScanEye size={11} className={analyzing ? "animate-pulse text-cyan" : undefined} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemove(refItem.id)}
+              className="text-dim/50 hover:text-red transition-precise"
+              title="Remove visual reference"
+            >
+              <X size={11} />
+            </button>
+          </div>
         </div>
         <input
           value={note}
@@ -100,6 +129,12 @@ function VisualReferenceCard({
           style={{ border: "var(--border-dim)" }}
         />
         <span className="font-mono text-[8px] text-dim/50 self-end">{note.length}/{MAX_VISUAL_REFERENCE_NOTE}</span>
+        {analysisError && (
+          <span className="font-mono text-[8.5px] text-red/80 leading-relaxed">{analysisError}</span>
+        )}
+        {refItem.analysis && (
+          <p className="font-mono text-[8.5px] text-cyan/60 leading-relaxed">{refItem.analysis}</p>
+        )}
       </div>
     </div>
   );
@@ -305,14 +340,14 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
         {/* ── Left: directions ─────────────────────────────── */}
         <div className="flex flex-col gap-4 min-w-0">
-          {/* Controls row */}
-          <div className="flex items-center gap-2">
+          {/* Controls row — wraps instead of overflowing into the visual reference column */}
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
               value={userContext}
               onChange={(event) => setUserContext(event.target.value)}
               placeholder={directions.length ? "Add input to improve the directions…" : "Add focus or constraints before generating…"}
-              className="flex-1 h-9 px-3 rounded-sm bg-black/20 font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
+              className="flex-1 min-w-40 h-9 px-3 rounded-sm bg-black/20 font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
               style={{ border: "var(--border-default)" }}
             />
             <select
@@ -470,6 +505,8 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
               refItem={refItem}
               onNoteSaved={handleNoteSaved}
               onRemove={handleRemoveRef}
+              onAnalyzed={(id, analysis) =>
+                setVisualRefs((current) => current.map((r) => (r.id === id ? { ...r, analysis } : r)))}
             />
           ))}
 

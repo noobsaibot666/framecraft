@@ -643,7 +643,7 @@ fn path_is_occupied(path: &Path) -> Result<bool, String> {
     }
 }
 
-const PROMPT_COLUMNS: [&str; 36] = [
+const PROMPT_COLUMNS: [&str; 38] = [
     "id",
     "title",
     "description",
@@ -680,6 +680,8 @@ const PROMPT_COLUMNS: [&str; 36] = [
     "source_url",
     "thumbnail_data",
     "builder_state",
+    "thumbnail_result_id",
+    "variant_label",
 ];
 
 const MIGRATION_022_NANO_BANANA_TITLES: [&str; 4] = [
@@ -768,7 +770,7 @@ const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
         &["comparison_type", "outcome_summary"],
     ),
     ("comparison_items", &["source_role"]),
-    ("projects", &["campaign_id"]),
+    ("projects", &["campaign_id", "creative_strategy"]),
     ("generation_queue", &["is_pinned"]),
     (
         "prompts",
@@ -819,10 +821,24 @@ const FK_PROJECT_CAMPAIGN: &[MergeForeignKey] = &[MergeForeignKey {
     column: "campaign_id",
     table: "campaigns",
 }];
-const FK_PROMPT_PARENT: &[MergeForeignKey] = &[MergeForeignKey {
-    column: "parent_id",
-    table: "prompts",
-}];
+// parent_id is remapped in-pass (prompt ids are preallocated before planning).
+// thumbnail_result_id points at results, which plan AFTER prompts — its map is
+// empty when prompt rows are rewritten, so the value passes through verbatim.
+// That is safe because a prompt's thumbnail override always references one of
+// its own results, which merge with the same UUID unless the id collides with
+// different content (practically impossible for cross-library UUIDs).
+// Declaring the FK keeps the excluded-target Null policy and the sentinel
+// coverage tests honest about the column being a reference.
+const FK_PROMPT_PARENT: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "parent_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "thumbnail_result_id",
+        table: "results",
+    },
+];
 const FK_RESULT: &[MergeForeignKey] = &[MergeForeignKey {
     column: "prompt_id",
     table: "prompts",
@@ -1030,6 +1046,7 @@ const PROJECT_COLUMNS: &[&str] = &[
     "constraints",
     "creative_goals",
     "campaign_id",
+    "creative_strategy",
 ];
 const RECIPE_COLUMNS: &[&str] = &[
     "id",
@@ -2296,6 +2313,7 @@ enum ExcludedForeignKeyPolicy {
 fn excluded_foreign_key_policy(table: &str, column: &str) -> ExcludedForeignKeyPolicy {
     match (table, column) {
         ("prompts", "parent_id")
+        | ("prompts", "thumbnail_result_id")
         | ("projects", "campaign_id")
         | ("comparison_sessions", "project_id")
         | ("project_deliverables", "linked_prompt_id")
@@ -3176,6 +3194,12 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
         "variant_label",
         "ALTER TABLE prompts ADD COLUMN variant_label TEXT;",
     )?;
+    add_column_if_missing(
+        &tx,
+        "projects",
+        "creative_strategy",
+        "ALTER TABLE projects ADD COLUMN creative_strategy TEXT;",
+    )?;
 
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS inconsistency_events (
@@ -3237,7 +3261,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 30] {
+fn migration_sql() -> [&'static str; 31] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3269,6 +3293,7 @@ fn migration_sql() -> [&'static str; 30] {
         include_str!("../migrations/028_inconsistency_events.sql"),
         include_str!("../migrations/029_color_grade_category.sql"),
         include_str!("../migrations/030_direction_storyboards.sql"),
+        include_str!("../migrations/031_creative_strategy.sql"),
     ]
 }
 
@@ -4940,6 +4965,8 @@ mod tests {
              INSERT INTO generation_queue(id,prompt_id,project_id,status,created_at,updated_at,is_pinned) VALUES('queue','p','proj','pending','t','t',1);
              INSERT INTO creative_directions(id,project_id,title,created_at,updated_at) VALUES('direction','proj','Direction','t','t');
              INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');
+             INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',1,'Shot 01','Source shot',1,'p',2,'t','t');
+             INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Source rule','fix it','p','midjourney','used','t');
              UPDATE app_meta SET value='source-must-not-overwrite' WHERE key='schema_version';
              INSERT INTO app_meta(key,value,updated_at) VALUES('source_custom_setting','kept','t');"
         ).unwrap();
@@ -4974,7 +5001,9 @@ mod tests {
              INSERT INTO export_presets(id,project_id,format,options,created_at,updated_at) VALUES('export','proj','json','{}','t','t');
              INSERT INTO generation_queue(id,prompt_id,project_id,status,created_at,updated_at) VALUES('queue','p','proj','pending','t','t');
              INSERT INTO creative_directions(id,project_id,title,created_at,updated_at) VALUES('direction','proj','Target direction','t','t');
-             INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');"
+             INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');
+             INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',9,'Shot 99','Target shot',0,'p',4,'t','t');
+             INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Target rule','ignore','p','kling','dismissed','t');"
         ).unwrap();
         drop(source_conn);
         drop(target_conn);
@@ -5921,6 +5950,8 @@ mod tests {
             "generation_queue" => (&["id"], vec![Value::Text("queue".into())]),
             "creative_directions" => (&["id"], vec![Value::Text("direction".into())]),
             "shot_sequence" => (&["id"], vec![Value::Text("shot".into())]),
+            "direction_storyboards" => (&["id"], vec![Value::Text("storyboard".into())]),
+            "inconsistency_events" => (&["id"], vec![Value::Text("event".into())]),
             "app_meta" => (&["key"], vec![Value::Text("source_custom_setting".into())]),
             _ => panic!("missing complete graph identity for {table}"),
         }

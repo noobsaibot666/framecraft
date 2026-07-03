@@ -9,6 +9,8 @@ import { addReferenceToProject, removeReferenceFromProject } from "./projects";
 import { importReferenceImage } from "./sharedImport";
 import { fileToDataUrl } from "./queueImport";
 import { validateImageFile } from "./imageUtils";
+import { pickVisionModel } from "./aiConfig";
+import { visionComplete } from "./analyzeImage";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -21,13 +23,15 @@ export interface VisualReference {
   title: string;
   note: string;
   thumbnail_data?: string;
+  /** AI vision analysis of the image (doc 04 §2) — stored on reference.description. */
+  analysis?: string;
 }
 
 export async function getVisualReferences(projectId: string): Promise<VisualReference[]> {
   if (!isTauri) return [];
   const db = await getFramecraftDb();
   const rows = (await db.select(
-    `SELECT r.id, r.title, r.notes, r.thumbnail_data
+    `SELECT r.id, r.title, r.notes, r.description, r.thumbnail_data
      FROM "references" r
      JOIN project_references pr ON r.id = pr.reference_id
      WHERE pr.project_id = $1 AND r.tags LIKE $2
@@ -39,6 +43,7 @@ export async function getVisualReferences(projectId: string): Promise<VisualRefe
     title: r.title as string,
     note: (r.notes as string | null) ?? "",
     thumbnail_data: (r.thumbnail_data as string | null) ?? undefined,
+    analysis: (r.description as string | null) ?? undefined,
   }));
 }
 
@@ -75,15 +80,35 @@ export async function removeVisualReference(projectId: string, referenceId: stri
   await deleteReference(referenceId);
 }
 
+const VISUAL_ANALYSIS_PROMPT = `You are a senior creative director's assistant. Describe this visual reference for a creative brief in 2-3 short sentences: what it shows, its lighting and color character, and what production quality or style cue it carries. Plain text only — no markdown, no preamble, no lists.`;
+
+/**
+ * Run AI vision analysis on a visual reference image and persist the result
+ * to the reference's description (doc 04 §2). Returns the analysis text.
+ */
+export async function analyzeVisualReference(ref: Pick<VisualReference, "id" | "thumbnail_data">): Promise<string> {
+  if (!ref.thumbnail_data) throw new Error("No image data available for this reference.");
+  const model = pickVisionModel();
+  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings to analyze images.");
+  const match = ref.thumbnail_data.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!match) throw new Error("Reference image is not a base64 data URL.");
+  const analysis = (await visionComplete(match[2], match[1], model, VISUAL_ANALYSIS_PROMPT, 320)).trim();
+  if (!analysis) throw new Error("The model returned no analysis.");
+  await updateReference(ref.id, { description: analysis });
+  return analysis;
+}
+
 /**
  * Text block describing the visual references for the Creative Director
  * prompt. Pure — the note defines what each image is a reference for.
  */
-export function buildVisualReferenceContext(refs: Pick<VisualReference, "title" | "note">[]): string {
+export function buildVisualReferenceContext(refs: Pick<VisualReference, "title" | "note" | "analysis">[]): string {
   const lines = refs
     .map((ref) => {
       const note = ref.note.trim();
-      return note ? `- ${ref.title}: ${note}` : `- ${ref.title}`;
+      const analysis = ref.analysis?.trim();
+      const parts = [note, analysis ? `(image analysis: ${analysis})` : ""].filter(Boolean).join(" ");
+      return parts ? `- ${ref.title}: ${parts}` : `- ${ref.title}`;
     })
     .filter(Boolean);
   if (!lines.length) return "";

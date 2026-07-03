@@ -57,19 +57,31 @@ fn assert_database_access(path: &Path) -> Result<(), String> {
         ));
     }
 
-    let probe = parent.join(format!(".framecraft-db-write-probe-{}", std::process::id()));
+    // Unique per attempt, not just per process — concurrent opens on the same
+    // directory from different threads share a pid and must not race on one
+    // probe file (write/remove interleaving made the loser's remove ENOENT).
+    static PROBE_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let probe = parent.join(format!(
+        ".framecraft-db-write-probe-{}-{}",
+        std::process::id(),
+        PROBE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     fs::write(&probe, b"probe").map_err(|error| {
         format!(
             "Database directory is not writable: {} ({error})",
             parent.display()
         )
     })?;
-    fs::remove_file(&probe).map_err(|error| {
-        format!(
-            "Database directory write probe could not be cleaned up: {} ({error})",
-            probe.display()
-        )
-    })?;
+    if let Err(error) = fs::remove_file(&probe) {
+        // Already gone means the probe served its purpose — only surface
+        // genuine cleanup failures (e.g. permissions flipped mid-flight).
+        if error.kind() != std::io::ErrorKind::NotFound {
+            return Err(format!(
+                "Database directory write probe could not be cleaned up: {} ({error})",
+                probe.display()
+            ));
+        }
+    }
 
     OpenOptions::new()
         .read(true)

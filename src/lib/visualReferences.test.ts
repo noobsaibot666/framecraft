@@ -21,6 +21,15 @@ describe("buildVisualReferenceContext", () => {
     expect(context).toContain("- moodboard 1");
     expect(context).not.toContain("moodboard 1:");
   });
+
+  it("appends the AI image analysis when present (doc 04 §2)", () => {
+    const context = buildVisualReferenceContext([
+      { title: "jacket studio", note: "clothing reference", analysis: "Soft top light on waxed cotton." },
+      { title: "no-note ref", note: "", analysis: "Backlit macro of condensation." },
+    ]);
+    expect(context).toContain("- jacket studio: clothing reference (image analysis: Soft top light on waxed cotton.)");
+    expect(context).toContain("- no-note ref: (image analysis: Backlit macro of condensation.)");
+  });
 });
 
 describe("constants", () => {

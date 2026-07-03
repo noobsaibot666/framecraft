@@ -20,12 +20,15 @@ function slot(overrides: Partial<ComparisonOutcomeSlot> = {}): ComparisonOutcome
 }
 
 describe("comparison workflow definitions", () => {
-  it("defines the four approved visual comparison types", () => {
+  it("defines the seven comparison modes from doc 04 §3", () => {
     expect(COMPARISON_TYPES.map((item) => item.id)).toEqual([
       "result_result",
       "reference_result",
       "provider_provider",
       "prompt_version",
+      "direction_result",
+      "sref_sref",
+      "ai_risk",
     ]);
   });
 
@@ -40,6 +43,15 @@ describe("comparison workflow definitions", () => {
       "provider_c",
       "provider_d",
     ]);
+  });
+
+  it("assigns sref roles in SREF vs SREF mode", () => {
+    expect(getComparisonRoles("sref_sref", 3)).toEqual(["sref_a", "sref_b", "sref_c"]);
+  });
+
+  it("uses plain result roles for direction and AI-risk modes", () => {
+    expect(getComparisonRoles("direction_result", 2)).toEqual(["result", "result"]);
+    expect(getComparisonRoles("ai_risk", 2)).toEqual(["result", "result"]);
   });
 });
 

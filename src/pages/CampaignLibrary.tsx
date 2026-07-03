@@ -11,6 +11,10 @@ export function CampaignLibrary() {
   const navigate = useNavigate();
   const toast = useToastStore((s) => s.add);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  // Audit doc 05 §2 — without this, the empty state rendered on every mount
+  // before the async fetch resolved, reproducing "Campaign page often loads
+  // empty" in the list view (CampaignDetail already had this guard).
+  const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newClient, setNewClient] = useState("");
@@ -23,6 +27,8 @@ export function CampaignLibrary() {
       setCampaigns(await getCampaigns());
     } catch {
       toast("Failed to load campaigns", "error");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -123,8 +129,16 @@ export function CampaignLibrary() {
           </div>
         )}
 
+        {/* Loading state — must gate the empty state below, not race it */}
+        {loading && (
+          <div className="flex items-center gap-3 py-8">
+            <span className="font-ndot text-[20px] text-dim/30 animate-pulse">···</span>
+            <span className="font-mono text-[12px] text-muted">Loading campaigns…</span>
+          </div>
+        )}
+
         {/* Empty state — centered in full width */}
-        {campaigns.length === 0 && !showCreate && (
+        {!loading && campaigns.length === 0 && !showCreate && (
           <div className="flex flex-col items-center justify-center gap-4 py-24 text-center w-full">
             <Briefcase size={28} className="text-readable" />
             <p className="font-mono text-[13px] text-readable leading-relaxed max-w-xs">

@@ -275,8 +275,20 @@ export async function createPrompt(data: CreatePromptInput): Promise<string> {
     is_failed: data.is_failed ?? false,
     failure_notes: data.failure_notes,
     notes: data.notes,
+    best_use: data.best_use,
+    risk_notes: data.risk_notes,
     version: data.version ?? 1,
     parent_id: data.parent_id,
+    source_url: data.source_url,
+    // builder_state fix is audit doc 05 §8 — this dev-store branch never
+    // included it, so the very first save of a new prompt in dev/browser
+    // mode silently dropped mode/tokens/avoidance/formula/consistency
+    // factors, reproducing "opens in Manual mode with empty Builder
+    // fields" outside Tauri. Fixed the same class of drop for the other
+    // fields missing from this object while in here.
+    builder_state: data.builder_state,
+    thumbnail_data: data.thumbnail_data,
+    thumbnail_result_id: data.thumbnail_result_id ?? undefined,
     variant_label: data.variant_label,
     created_at: ts,
     updated_at: ts,

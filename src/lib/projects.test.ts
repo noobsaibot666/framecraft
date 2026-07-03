@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   buildProjectResetBatchSql,
   createProject,
@@ -7,8 +7,30 @@ import {
   searchProjects,
   updateProject,
   deleteProject,
+  addPromptToProject,
+  removePromptFromProject,
+  getPromptsForProject,
 } from "./projects";
+import { createPrompt, getPromptById } from "./db";
 import type { ProjectStatus, Category } from "@/types";
+
+// db.ts's dev-mode prompt store is backed by localStorage, which Vitest's
+// default "node" environment doesn't provide as a global — mock it so
+// createPrompt/getPromptById round-trip across calls the way they do in a
+// real browser dev session (same pattern as promptFormula.test.ts).
+const _localStorageBacking = new Map<string, string>();
+beforeEach(() => {
+  _localStorageBacking.clear();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => _localStorageBacking.get(key) ?? null,
+      setItem: (key: string, value: string) => _localStorageBacking.set(key, value),
+      removeItem: (key: string) => _localStorageBacking.delete(key),
+      clear: () => _localStorageBacking.clear(),
+    },
+  });
+});
 
 // isTauri is false in Vitest — all calls use the in-memory _devStore
 
@@ -147,5 +169,73 @@ describe("project reset SQL", () => {
     expect(sql.match(/'project''; DELETE FROM projects; --'/g)).toHaveLength(9);
     expect(sql).toContain("updated_at = '2026-06-30T10:15:00.000Z'");
     expect(sql.trim()).toMatch(/^BEGIN;[\s\S]*COMMIT;$/);
+  });
+});
+
+// Audit doc 05 §8 — dev/browser-mode (isTauri false in Vitest) previously
+// had no real project<->prompt linking and dropped builder_state on create,
+// reproducing the exact "prompt doesn't show in its project" and "builder
+// fields empty on reopen" bugs outside the packaged Tauri app.
+describe("dev-mode project<->prompt linking (audit doc 05 §8)", () => {
+  it("a prompt linked to a project appears in getPromptsForProject", async () => {
+    const projectId = await createProject(proj({ title: "Linking Test Project" }));
+    const promptId = await createPrompt({
+      title: "Linked Prompt",
+      provider: "midjourney",
+      prompt_text: "a red vintage car",
+    });
+    await addPromptToProject(projectId, promptId);
+
+    const linked = await getPromptsForProject(projectId);
+    expect(linked.map((p) => p.id)).toContain(promptId);
+    expect(linked.find((p) => p.id === promptId)?.title).toBe("Linked Prompt");
+  });
+
+  it("removePromptFromProject unlinks the prompt", async () => {
+    const projectId = await createProject(proj({ title: "Unlink Test Project" }));
+    const promptId = await createPrompt({
+      title: "Prompt To Unlink",
+      provider: "midjourney",
+      prompt_text: "a mountain lake",
+    });
+    await addPromptToProject(projectId, promptId);
+    await removePromptFromProject(projectId, promptId);
+
+    const linked = await getPromptsForProject(projectId);
+    expect(linked.map((p) => p.id)).not.toContain(promptId);
+  });
+
+  it("linking the same prompt twice does not duplicate it", async () => {
+    const projectId = await createProject(proj({ title: "Dedup Test Project" }));
+    const promptId = await createPrompt({
+      title: "Duplicate Link Prompt",
+      provider: "midjourney",
+      prompt_text: "a city skyline",
+    });
+    await addPromptToProject(projectId, promptId);
+    await addPromptToProject(projectId, promptId);
+
+    const linked = await getPromptsForProject(projectId);
+    expect(linked.filter((p) => p.id === promptId)).toHaveLength(1);
+  });
+
+  it("getPromptsForProject returns an empty array for a project with no linked prompts", async () => {
+    const projectId = await createProject(proj({ title: "Empty Project" }));
+    expect(await getPromptsForProject(projectId)).toEqual([]);
+  });
+});
+
+describe("dev-mode createPrompt persists builder_state (audit doc 05 §8)", () => {
+  it("builder_state survives the initial create, not just update", async () => {
+    const builderState = JSON.stringify({ mode: "builder", subject: "a lighthouse at dusk" });
+    const promptId = await createPrompt({
+      title: "Builder State Prompt",
+      provider: "midjourney",
+      prompt_text: "a lighthouse at dusk",
+      builder_state: builderState,
+    });
+
+    const reloaded = await getPromptById(promptId);
+    expect(reloaded?.builder_state).toBe(builderState);
   });
 });

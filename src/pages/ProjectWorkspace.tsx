@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
-  Star, Check, Image, FileText, Upload, Sparkles,
+  Star, Check, Image, FileText, Upload, Sparkles, Copy,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -22,7 +22,7 @@ import {
   resetProjectContent,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { getPrompts, getRecentResults, searchPrompts } from "@/lib/db";
+import { getPrompts, getRecentResults, searchPrompts, getResultCoverMap } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
@@ -238,23 +238,29 @@ function SafeThumb({ src, alt = "", className }: { src?: string; alt?: string; c
 
 type ProjectResult = { id: string; prompt_id?: string; score_overall: number; is_winner: boolean; is_failed: boolean; thumbnail_path?: string };
 
-type ProjectPrompt = { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean; version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string };
+type ProjectPrompt = { id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean; version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string; prompt_text: string };
 
-function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
+function PromptRow({ prompt, results = [], coverImage, onRemove, onOpen, onImport, onEnlargeResult, onCopy }: {
   prompt: ProjectPrompt;
   results?: ProjectResult[];
+  // Best-rated result (or manual override) — audit doc 05 §3/§12. Falls back
+  // to prompt.thumbnail_data only when no cover result exists, matching the
+  // same coverMap-first pattern PromptLibrary.tsx already uses.
+  coverImage?: string;
   onRemove: () => void;
   onOpen: () => void;
   onImport?: () => void;
+  onEnlargeResult: (src: string) => void;
+  onCopy: () => void;
 }) {
   const shotAccentColor = accentColorForVariantLabel(prompt.variant_label);
   return (
     <div className="flex flex-col rounded-sm group overflow-hidden"
       style={{ background: "rgba(255,255,255,0.045)", border: "var(--border-default)" }}>
       <div className="flex items-center gap-3 px-3 py-3">
-        {prompt.thumbnail_data && (
+        {coverImage && (
           <div className="shrink-0 w-10 h-10 rounded-sm overflow-hidden cursor-pointer" onClick={onOpen}>
-            <SafeThumb src={prompt.thumbnail_data} className="w-full h-full object-cover" />
+            <SafeThumb src={coverImage} className="w-full h-full object-cover" />
           </div>
         )}
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
@@ -281,6 +287,10 @@ function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
             <Star key={i} size={9} className={cn(i < prompt.rating ? "text-amber fill-amber/40" : "text-white/14")} />
           ))}
         </div>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); }} title="Copy prompt"
+          className="text-muted hover:text-cyan transition-precise opacity-0 group-hover:opacity-100 shrink-0">
+          <Copy size={11} />
+        </button>
         <button type="button" onClick={onRemove}
           className="text-muted hover:text-red transition-precise opacity-0 group-hover:opacity-100 shrink-0">
           <X size={11} />
@@ -289,14 +299,7 @@ function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
       {results.length > 0 ? (
         <div className="flex gap-1.5 px-3 pb-3 overflow-x-auto">
           {results.slice(0, 12).map((r) => (
-            <div key={r.id} className="relative shrink-0 w-14 h-14 rounded-sm overflow-hidden cursor-pointer" onClick={onOpen}>
-              <SafeThumb src={r.thumbnail_path} className="w-full h-full object-cover" />
-              {r.is_winner && (
-                <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-sm bg-black/60 flex items-center justify-center">
-                  <Star size={7} className="text-amber fill-amber/60" />
-                </span>
-              )}
-            </div>
+            <ResultCarouselThumb key={r.id} result={r} onEnlarge={onEnlargeResult} />
           ))}
           {onImport && (
             <button type="button" onClick={(e) => { e.stopPropagation(); onImport(); }}
@@ -315,6 +318,25 @@ function PromptRow({ prompt, results = [], onRemove, onOpen, onImport }: {
           </button>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Result carousel thumbnail with click-to-enlarge (audit doc 05 §3/§13) — converts
+ * its file_path to a displayable src via useImageDisplaySrc before enlarging,
+ * matching PromptLibrary.tsx's CarouselMiniThumb pattern. */
+function ResultCarouselThumb({ result, onEnlarge }: { result: ProjectResult; onEnlarge: (src: string) => void }) {
+  const { src: displaySrc } = useImageDisplaySrc(result.thumbnail_path);
+  return (
+    <div className="relative shrink-0 w-14 h-14 rounded-sm overflow-hidden cursor-zoom-in transition-precise hover:ring-1 hover:ring-cyan/50"
+      onClick={(e) => { e.stopPropagation(); if (displaySrc) onEnlarge(displaySrc); }}
+      title="Click to enlarge">
+      <SafeThumb src={result.thumbnail_path} className="w-full h-full object-cover" />
+      {result.is_winner && (
+        <span className="absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-sm bg-black/60 flex items-center justify-center">
+          <Star size={7} className="text-amber fill-amber/60" />
+        </span>
+      )}
     </div>
   );
 }
@@ -582,6 +604,26 @@ export function ProjectWorkspace() {
   const [linkedPrompts, setLinkedPrompts] = useState<Awaited<ReturnType<typeof getPromptsForProject>>>([]);
   const [linkedRefs, setLinkedRefs] = useState<Awaited<ReturnType<typeof getReferencesForProject>>>([]);
   const [linkedResults, setLinkedResults] = useState<Awaited<ReturnType<typeof getResultsForProject>>>([]);
+  // Cover thumbnail (best-rated result / manual override) per prompt, and
+  // click-to-enlarge state — parity with PromptLibrary.tsx (audit doc 05 §3).
+  const [coverMap, setCoverMap] = useState<Record<string, string>>({});
+  const [enlargedSrc, setEnlargedSrc] = useState<string | null>(null);
+  useEffect(() => { getResultCoverMap().then(setCoverMap); }, [linkedResults]);
+
+  // Effective client: prefer the currently-selected campaign's client over
+  // the project's own (often stale/unset) client column — audit doc 05 §4.
+  // Live-reactive to campaignId, unlike the old pattern of writing a synced
+  // copy into `client` state only on initial load.
+  const effectiveClient = allCampaigns.find((c) => c.id === campaignId)?.client ?? client;
+
+  const handleCopyPrompt = async (promptText: string) => {
+    try {
+      await navigator.clipboard.writeText(promptText);
+      toast.success("Copied to clipboard");
+    } catch {
+      toast.error("Failed to copy");
+    }
+  };
 
   // Results grouped by owning prompt
   const resultsByPromptId = linkedResults.reduce<Record<string, ProjectResult[]>>((acc, r) => {
@@ -837,9 +879,23 @@ export function ProjectWorkspace() {
   }
 
   return (
+    <>
+    {/* Result enlarge lightbox (audit doc 05 §3/§13) — parity with PromptLibrary.tsx */}
+    {enlargedSrc && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+        onClick={() => setEnlargedSrc(null)}>
+        <div className="relative max-w-[90vw] max-h-[90vh] rounded-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <img src={enlargedSrc} alt="Result" className="max-w-[90vw] max-h-[90vh] object-contain" />
+          <button type="button" onClick={() => setEnlargedSrc(null)}
+            className="absolute top-2 right-2 w-7 h-7 rounded-sm bg-black/70 text-white/60 hover:text-white flex items-center justify-center">
+            <X size={12} />
+          </button>
+        </div>
+      </div>
+    )}
     <PageContainer
       title={title || "Project"}
-      subtitle={[allCampaigns.find((c) => c.id === campaignId)?.client ?? client, campaign].filter(Boolean).join(" · ") || "PROJECT WORKSPACE"}
+      subtitle={[effectiveClient, campaign].filter(Boolean).join(" · ") || "PROJECT WORKSPACE"}
       action={
         <div className="flex items-center gap-2">
           {/* Status pill — same h-10 as Button size="md" */}
@@ -1043,7 +1099,7 @@ export function ProjectWorkspace() {
             project={{
               id: id!,
               title,
-              client: client || undefined,
+              client: effectiveClient || undefined,
               campaign: campaign || undefined,
               status,
               project_type: projectType || undefined,
@@ -1067,7 +1123,7 @@ export function ProjectWorkspace() {
             project={{
               id: id!,
               title,
-              client: client || undefined,
+              client: effectiveClient || undefined,
               campaign: campaign || undefined,
               status,
               project_type: projectType || undefined,
@@ -1236,18 +1292,24 @@ export function ProjectWorkspace() {
                       <PromptRow
                         prompt={p}
                         results={resultsByPromptId[p.id] ?? []}
+                        coverImage={coverMap[p.id] ?? p.thumbnail_data}
                         onRemove={() => handleRemovePrompt(p.id)}
                         onOpen={() => navigate(`/library/${p.id}`)}
                         onImport={() => { setBatchImportPromptId(p.id); setBatchImportOpen(true); setPickerMode(null); }}
+                        onEnlargeResult={setEnlargedSrc}
+                        onCopy={() => handleCopyPrompt(p.prompt_text)}
                       />
                       {(childrenOf[p.id] ?? []).map((child) => (
                         <div key={child.id} className="pl-4">
                           <PromptRow
                             prompt={child}
                             results={resultsByPromptId[child.id] ?? []}
+                            coverImage={coverMap[child.id] ?? child.thumbnail_data}
                             onRemove={() => handleRemovePrompt(child.id)}
                             onOpen={() => navigate(`/library/${child.id}`)}
                             onImport={() => { setBatchImportPromptId(child.id); setBatchImportOpen(true); setPickerMode(null); }}
+                            onEnlargeResult={setEnlargedSrc}
+                            onCopy={() => handleCopyPrompt(child.prompt_text)}
                           />
                         </div>
                       ))}
@@ -1403,5 +1465,6 @@ export function ProjectWorkspace() {
         </div>
       </div>
     </PageContainer>
+    </>
   );
 }

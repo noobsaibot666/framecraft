@@ -272,90 +272,17 @@ WHERE c.name = 'parameters'
     SELECT 1 FROM tokens x WHERE x.text = t.text AND x.category_id = c.id
   );
 
--- ─── SREFS ───────────────────────────────────────────────────
--- Individual codes from the reference page.
--- Group A — general library
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1752440308', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('437192403',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3213854184', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3827426689', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('364269681',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2533988981', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('627825589',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1001260060', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3552910216', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('174814473',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1940968638', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('4173633986', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1374709361', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2537726996', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('909896426',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3815336367', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1412977448', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2060251142', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3648658859', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('4179632712', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2822390401', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('747537547',  'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2567556963', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3493489734', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3689676847', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1213814505', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2881425763', 'midjourney', 0, 'general library');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3979054814', 'midjourney', 0, 'general library');
--- Group B
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2207611679', 'midjourney', 0, NULL);
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('4135125841', 'midjourney', 0, NULL);
--- Group C — with style weights
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2963506762', 'midjourney', 0, NULL);
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('4100289737', 'midjourney', 0, 'best at ::3 weight');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2095998657', 'midjourney', 0, NULL);
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1432138761', 'midjourney', 0, 'best at ::2 weight');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('26398924',   'midjourney', 0, NULL);
--- Group D — favorites
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1302065766', 'midjourney', 5, 'top pick');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('1529672586', 'midjourney', 5, 'top pick');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3881464256', 'midjourney', 5, 'top pick — best at ::3 weight');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('3184442238', 'midjourney', 5, 'top pick');
--- Group E — favorites with profile combo
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('872275923',  'midjourney', 5, 'top pick — combine with --p');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2549935434', 'midjourney', 5, 'top pick — best at ::3 weight, combine with --p');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('889673409',  'midjourney', 5, 'top pick — best at ::2 weight, combine with --p');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2527129708', 'midjourney', 5, 'top pick — combine with --p');
-INSERT INTO srefs (code, provider, rating, notes) VALUES ('2556966953', 'midjourney', 5, 'top pick — combine with --p');
-
--- ─── PROFILES ────────────────────────────────────────────────
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('letkx5u', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('9kfodp8', 'midjourney', 'fashion', 'fashion — combine with m9jp5y4 fy8rnyh');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('m9jp5y4', 'midjourney', 'fashion', 'fashion — combine with 9kfodp8 fy8rnyh');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('fy8rnyh', 'midjourney', 'fashion', 'fashion — combine with 9kfodp8 m9jp5y4');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('2fsaith', 'midjourney', NULL, 'combine with 4wklqm1');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('4wklqm1', 'midjourney', NULL, 'combine with 2fsaith');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('d3ytkj2', 'midjourney', 'photography', 'photography — try --stylize 200');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('m8cjh6h', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('syumkio', 'midjourney', NULL, 'combine with latb1cc');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('latb1cc', 'midjourney', NULL, 'combine with syumkio');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('uqwkyub', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('8pq6kxn', 'midjourney', NULL, 'best with --stylize 75');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('h3izih4', 'midjourney', NULL, 'best with --stylize 325');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('gtbhewc', 'midjourney', NULL, 'combine with avw472p gj5325t gy97k8r');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('avw472p', 'midjourney', NULL, 'combine with gtbhewc gj5325t gy97k8r');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('gj5325t', 'midjourney', NULL, 'combine with gtbhewc avw472p gy97k8r');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('gy97k8r', 'midjourney', NULL, 'combine with gtbhewc avw472p gj5325t');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('njoijyy', 'midjourney', NULL, 'best with --stylize 500');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('rhwyqeu', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('xqdwnuo', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('ou1vizd', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('9qj77fq', 'midjourney', NULL, 'best with --stylize 250');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('b4iwxew', 'midjourney', NULL, 'best with --stylize 35');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('2ll7143', 'midjourney', NULL, 'best with --stylize 150');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('am3sk3z', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('rhuorij', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('kn7bbid', 'midjourney', NULL, NULL);
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('vkn6wee', 'midjourney', NULL, 'best with --stylize 1000');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('isoxsyg', 'midjourney', NULL, 'best with --stylize 500');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('waefcgm', 'midjourney', NULL, 'combine with x9scs97');
-INSERT INTO profiles (code, provider, best_use, notes) VALUES ('x9scs97', 'midjourney', NULL, 'combine with waefcgm');
+-- ─── SREFS / PROFILES ──────────────────────────────────────────
+-- Audit doc 05 §9: this migration used to seed ~29 personal SREF codes and
+-- ~29 personal Profile codes (the original developer's own Notion-imported
+-- reference library) into every newly created library, unconditionally and
+-- with no dedup guard — unlike the generic token vocabulary above, these are
+-- one specific person's arbitrary numeric/alphanumeric codes with no value
+-- to a new user, and doc 01 §2's Required Behavior explicitly lists SREFs
+-- and Profiles among the things a new library must NOT inherit. Removed.
+-- Existing libraries that already ran this migration keep their rows
+-- untouched (this file only affects libraries that have not yet migrated
+-- past version 5).
 
 -- ─── META ────────────────────────────────────────────────────
 UPDATE app_meta SET value = '5', updated_at = datetime('now') WHERE key = 'schema_version';

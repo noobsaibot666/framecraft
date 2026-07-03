@@ -109,9 +109,12 @@ export async function getDashboardHealth(): Promise<ProductionHealth> {
     ) as Promise<ProvenToken[]>,
 
     db.select(
-      `SELECT p.id, p.title, p.client, p.status,
+      // COALESCE campaign_client first — audit doc 05 §4, matching the same
+      // inheritance every other project list/search already applies.
+      `SELECT p.id, p.title, COALESCE(c.client, p.client) AS client, p.status,
          (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) AS prompt_count
        FROM projects p
+       LEFT JOIN campaigns c ON c.id = p.campaign_id
        WHERE p.status NOT IN ('delivered', 'archived')
        ORDER BY p.updated_at DESC
        LIMIT 4`

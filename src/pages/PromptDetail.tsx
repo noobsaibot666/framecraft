@@ -626,15 +626,21 @@ export function PromptDetail() {
               </>
             )}
           </div>
-          <Button
-            variant={confirmDelete ? "primary" : "ghost"}
-            size="sm"
-            onClick={handleDelete}
-            className={confirmDelete ? "bg-red/20 border-red/60 text-red" : "text-dim"}
-          >
-            <Trash2 size={11} />
-            {confirmDelete ? "Confirm Delete" : "Delete"}
-          </Button>
+          {/* Danger Zone — audit doc 05 §11: previously Delete was just the
+              last button in the flat row, distinguished only by red
+              confirm-styling. Grouped the same way Result Actions already
+              is, so it reads as its own zone, not a color accident. */}
+          <div className="flex items-center p-0.5 rounded-sm" style={{ border: "1px solid rgba(215,25,33,0.25)" }} title="Danger Zone">
+            <Button
+              variant={confirmDelete ? "primary" : "ghost"}
+              size="sm"
+              onClick={handleDelete}
+              className={confirmDelete ? "bg-red/20 border-red/60 text-red" : "text-dim"}
+            >
+              <Trash2 size={11} />
+              {confirmDelete ? "Confirm Delete" : "Delete"}
+            </Button>
+          </div>
         </div>
       }
     >
@@ -896,6 +902,13 @@ export function PromptDetail() {
                     >
                       <div className="relative max-w-[90vw] max-h-[90vh] rounded-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
                         <ResultImage src={r.file_path ?? r.thumbnail_path} />
+                        {/* Audit doc 05 §10 — notes, per-dimension scores, and
+                            artifacts were only reachable on the unlinked
+                            ResultDetail page; this is the discoverable path in. */}
+                        <button type="button" onClick={() => navigate(`/results/view/${r.id}`)}
+                          className="absolute top-2 right-11 flex items-center gap-1.5 h-7 px-2.5 rounded-sm bg-black/70 text-white/70 hover:text-white font-mono text-[10px] tracking-widest uppercase transition-precise">
+                          <ExternalLink size={11} /> Full Detail
+                        </button>
                         <button type="button" onClick={() => setEnlargedResult(null)}
                           className="absolute top-2 right-2 w-7 h-7 rounded-sm bg-black/70 text-white/60 hover:text-white flex items-center justify-center">
                           <X size={12} />
@@ -927,6 +940,13 @@ export function PromptDetail() {
                               style={{ background: "rgba(0,0,0,0.7)" }}
                               title={r.is_winner ? "Remove winner" : "Mark winner"}>
                               <Star size={9} className={r.is_winner ? "fill-amber/40" : ""} />
+                            </button>
+                            <button type="button"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/results/view/${r.id}`); }}
+                              className="p-1 rounded-sm text-white/50 hover:text-cyan transition-precise"
+                              style={{ background: "rgba(0,0,0,0.7)" }}
+                              title="Open full detail — notes, per-dimension scores, artifacts">
+                              <ExternalLink size={9} />
                             </button>
                             <button type="button"
                               onClick={(e) => { e.stopPropagation(); deleteResult(r.id).then(() => recomputePromptResultSummary(prompt.id)); setResults((prev) => prev.filter((x) => x.id !== r.id)); }}

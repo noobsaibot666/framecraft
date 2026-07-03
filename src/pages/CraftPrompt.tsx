@@ -19,6 +19,7 @@ import { getProvenCombos, type ProvenCombo } from "@/lib/tokenPatterns";
 import { SREFPickerModal } from "@/components/ui/SREFPickerModal";
 import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, EMPTY_ADVICE, type PromptAdvice } from "@/lib/analyzePrompt";
 import { FormulaBar } from "@/components/ui/FormulaBar";
+import { ShotListEditor, formatShotsForAssembly, type Shot } from "@/components/ui/ShotListEditor";
 import { formatFormulaForAI, getFormulaForProvider, getNarrativeArc, NARRATIVE_FORMATS } from "@/lib/promptFormula";
 import { formatStrategyForContext, readStoredStrategy } from "@/lib/creativeDirectorMode";
 import { CONSISTENCY_FACTOR_PRESETS, buildConsistencySuffix, suggestConsistencyFactors } from "@/lib/consistencyFactors";
@@ -182,15 +183,86 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 
 // ─── Provider Parameter Panels ────────────────────────────────
 
-interface MJParams {
+export interface MJParams {
   aspect_ratio: string; model_version: string; quality: string;
   stylize: string; chaos: string; weird: string; stop: string; repeat: string;
   seed: string; zoom: string; style: string; sw: string; sv: string;
   sref_code: string; profile: string; no_prompt: string;
   raw: boolean; hd: boolean; tile: boolean; fast: boolean; relax: boolean; exp: boolean;
 }
-interface DalleParams { size: string; quality: string; style: string; }
-interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
+export interface DalleParams { size: string; quality: string; style: string; }
+export interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
+
+/**
+ * Build the `parameters` DB column for the given provider (audit doc 05 §1).
+ * Pure — previously this logic only handled Midjourney inline in buildData(),
+ * so DALL-E/SD params were never written to the DB at all.
+ */
+export function buildProviderParameters(
+  provider: Provider,
+  mj: MJParams,
+  dalle: DalleParams,
+  sd: SDParams
+): Record<string, string | boolean> | undefined {
+  if (provider === "midjourney") {
+    const pp: Record<string, string | boolean> = {};
+    if (mj.profile)   pp.profile  = mj.profile;
+    if (mj.stylize)   pp.stylize  = mj.stylize;
+    if (mj.chaos)     pp.chaos    = mj.chaos;
+    if (mj.weird)     pp.weird    = mj.weird;
+    if (mj.quality)   pp.quality  = mj.quality;
+    if (mj.style)     pp.style    = mj.style;
+    if (mj.sw)        pp.sw       = mj.sw;
+    if (mj.sv)        pp.sv       = mj.sv;
+    if (mj.seed)      pp.seed     = mj.seed;
+    if (mj.zoom)      pp.zoom     = mj.zoom;
+    if (mj.stop)      pp.stop     = mj.stop;
+    if (mj.repeat)    pp.repeat   = mj.repeat;
+    if (mj.no_prompt) pp.no       = mj.no_prompt;
+    if (mj.raw)       pp.raw      = true;
+    if (mj.hd)        pp.hd       = true;
+    if (mj.tile)      pp.tile     = true;
+    if (mj.fast)      pp.fast     = true;
+    if (mj.relax)     pp.relax    = true;
+    if (mj.exp)       pp.exp      = true;
+    return Object.keys(pp).length ? pp : undefined;
+  }
+  if (provider === "dalle") {
+    const pp: Record<string, string | boolean> = {};
+    if (dalle.size)    pp.size    = dalle.size;
+    if (dalle.quality) pp.quality = dalle.quality;
+    if (dalle.style)   pp.style   = dalle.style;
+    return Object.keys(pp).length ? pp : undefined;
+  }
+  if (provider === "stable_diffusion") {
+    const pp: Record<string, string | boolean> = {};
+    if (sd.steps)           pp.steps           = sd.steps;
+    if (sd.cfg_scale)       pp.cfg_scale       = sd.cfg_scale;
+    if (sd.sampler)         pp.sampler         = sd.sampler;
+    if (sd.seed)            pp.seed            = sd.seed;
+    if (sd.negative_prompt) pp.negative_prompt = sd.negative_prompt;
+    return Object.keys(pp).length ? pp : undefined;
+  }
+  return undefined;
+}
+
+/** Restore DalleParams/SDParams from a loaded prompt's `parameters` column. Pure. */
+export function restoreDalleParams(pp: Record<string, unknown>): DalleParams {
+  return {
+    size:    String(pp.size    ?? ""),
+    quality: String(pp.quality ?? ""),
+    style:   String(pp.style   ?? ""),
+  };
+}
+export function restoreSDParams(pp: Record<string, unknown>): SDParams {
+  return {
+    steps:           String(pp.steps           ?? ""),
+    cfg_scale:       String(pp.cfg_scale        ?? ""),
+    sampler:         String(pp.sampler          ?? ""),
+    seed:            String(pp.seed             ?? ""),
+    negative_prompt: String(pp.negative_prompt  ?? ""),
+  };
+}
 
 const ASPECT_RATIOS = [
   { value: "", label: "Select ratio…" },
@@ -410,7 +482,7 @@ function assembleSD(f: Fields, _sd: SDParams): string {
   return parts.join(", ");
 }
 
-function assembleGeneric(f: Fields): string {
+function assembleGeneric(f: Fields, shots: Shot[] = []): string {
   const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism];
   if (f.provider === "nano_banana") {
     parts.push(
@@ -420,10 +492,15 @@ function assembleGeneric(f: Fields): string {
   }
   if (isVideoProvider(f.provider)) {
     const arc = getNarrativeArc(f.narrative_format);
+    // Kling's "scene world / spatial logic" and the shared continuity notes
+    // (audit doc 05 §12/§13) fold into assembly like the other video fields.
     parts.push(
       arc ? `narrative arc: ${arc}` : "",
+      f.provider === "kling" && f.scene_world ? `scene world: ${f.scene_world}` : "",
       f.motion,
+      formatShotsForAssembly(shots),
       f.transitions ? `transitions: ${f.transitions}` : "",
+      f.continuity_notes ? `${f.provider === "kling" ? "continuity lock" : "continuity"}: ${f.continuity_notes}` : "",
       f.audio ? `audio: ${f.audio}` : "",
       f.duration ? `${f.duration} duration` : ""
     );
@@ -651,6 +728,10 @@ interface Fields {
   motion: string; duration: string;
   narrative_format: string; transitions: string; audio: string;
   text_graphics: string; reference_role: string;
+  // Audit doc 05 §12/§13 — shared "what must stay stable across shots" field,
+  // labeled CONTINUITY RULES for Seedance / CONTINUITY LOCK for Kling; scene
+  // world/spatial logic is Kling-only, distinct from generic Environment.
+  continuity_notes: string; scene_world: string;
 }
 
 const EMPTY: Fields = {
@@ -667,6 +748,7 @@ const EMPTY: Fields = {
   motion: "", duration: "",
   narrative_format: "", transitions: "", audio: "",
   text_graphics: "", reference_role: "",
+  continuity_notes: "", scene_world: "",
 };
 
 // Token category → builder field routing (V2 §7). Categories without a
@@ -848,6 +930,10 @@ export function CraftPrompt() {
   });
   const [dalleParams, setDalleParams] = useState<DalleParams>(EMPTY_DALLE);
   const [sdParams, setSDParams] = useState<SDParams>(EMPTY_SD);
+  // Real shot-by-shot editor state (audit doc 05 §12/§13) — shared by
+  // Seedance and Kling, previously "shot-by-shot" existed only as a
+  // formula-step label with no actual input anywhere.
+  const [shots, setShots] = useState<Shot[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof Fields, string>>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -951,6 +1037,12 @@ export function CraftPrompt() {
         relax: Boolean(pp.relax),
         exp:   Boolean(pp.exp),
       }));
+      // Restore DALL-E/SD params too (audit doc 05 §1) — previously only
+      // Midjourney params were restored, so reopening a DALL-E prompt reset
+      // its params to empty and the next autosave silently stripped the
+      // [size: ...] etc. suffixes baked into prompt_text by assembleDalle().
+      setDalleParams((prev) => ({ ...prev, ...restoreDalleParams(pp) }));
+      setSDParams((prev) => ({ ...prev, ...restoreSDParams(pp) }));
       setOriginalVersion(p.version ?? 1);
       // Restore builder state if available
       if (p.builder_state) {
@@ -964,6 +1056,7 @@ export function CraftPrompt() {
             motion?: string; duration?: string;
             narrative_format?: string; transitions?: string; audio?: string;
             text_graphics?: string; reference_role?: string;
+            continuity_notes?: string; scene_world?: string; shots?: Shot[];
             usedAvoidanceIds?: string[];
             fieldTokenIds?: Record<string, keyof Fields>;
             consistencyFactors?: string[];
@@ -989,6 +1082,7 @@ export function CraftPrompt() {
           if (bs.consistencyFactors?.length) {
             setConsistencyFactors(bs.consistencyFactors);
           }
+          setShots(bs.shots?.length ? bs.shots : []);
           // The formula is always saved with the prompt (doc 03 §1); only a
           // user-customized one overrides the provider default on reload, so
           // uncustomized prompts keep following improved provider defaults.
@@ -1016,11 +1110,14 @@ export function CraftPrompt() {
             audio: bs.audio ?? "",
             text_graphics: bs.text_graphics ?? "",
             reference_role: bs.reference_role ?? "",
+            continuity_notes: bs.continuity_notes ?? "",
+            scene_world: bs.scene_world ?? "",
           }));
         } catch { /* ignore corrupt builder state */ }
       } else {
         setMode("manual");
         setFormulaSteps(getFormulaForProvider(p.provider));
+        setShots([]);
       }
       hydratedRef.current = true;
     });
@@ -1210,7 +1307,7 @@ export function CraftPrompt() {
       case "midjourney": return assembleMJ(fields, mjParams) + extras;
       case "dalle": return assembleDalle(fields, dalleParams) + extras;
       case "stable_diffusion": return assembleSD(fields, sdParams) + extras;
-      default: return assembleGeneric(fields) + extras;
+      default: return assembleGeneric(fields, shots) + extras;
     }
   })();
 
@@ -1380,8 +1477,17 @@ export function CraftPrompt() {
     try {
       const result = await analyzePromptDraft({
         promptText: assembled,
-        // Brief context includes the project's saved Creative Director strategy (doc 04 §4).
-        brief: [projectContext?.brief_text, projectStrategyContext].filter(Boolean).join("\n\n") || undefined,
+        // Brief context includes the project's saved Creative Director strategy
+        // (doc 04 §4), the relevant image/video needs (audit doc 05 §7), and
+        // the shot-by-shot list as read-only context (audit doc 05 §12/§13) —
+        // shots are an ordered list, not a single field, so they inform advice
+        // rather than being an individually-improvable target field.
+        brief: [
+          projectContext?.brief_text,
+          isVideoProvider(fields.provider) ? projectContext?.video_needs : projectContext?.image_needs,
+          isVideoProvider(fields.provider) && shots.length ? `Shot list: ${formatShotsForAssembly(shots)}` : "",
+          projectStrategyContext,
+        ].filter(Boolean).join("\n\n") || undefined,
         provenTokens: tokenSequence.filter((t) => t.quality_score > 0.3).map((t) => t.text).slice(0, 5),
         fields: mode === "builder" ? {
           subject: fields.subject || undefined,
@@ -1401,6 +1507,10 @@ export function CraftPrompt() {
             motion: fields.motion || undefined,
             transitions: fields.transitions || undefined,
             audio: fields.audio || undefined,
+            continuity_notes: fields.continuity_notes || undefined,
+          } : {}),
+          ...(fields.provider === "kling" ? {
+            scene_world: fields.scene_world || undefined,
           } : {}),
         } : undefined,
         userDirection: focusDirection ?? (analyzeDirection || undefined),
@@ -1469,29 +1579,12 @@ export function CraftPrompt() {
     aspect_ratio:  fields.aspect_ratio    || undefined,
     model_version: mjParams.model_version || undefined,
     style_ref:     mjParams.sref_code     || undefined,
-    parameters: fields.provider === "midjourney" ? (() => {
-      const pp: Record<string, string | boolean> = {};
-      if (mjParams.profile)  pp.profile  = mjParams.profile;
-      if (mjParams.stylize)  pp.stylize  = mjParams.stylize;
-      if (mjParams.chaos)    pp.chaos    = mjParams.chaos;
-      if (mjParams.weird)    pp.weird    = mjParams.weird;
-      if (mjParams.quality)  pp.quality  = mjParams.quality;
-      if (mjParams.style)    pp.style    = mjParams.style;
-      if (mjParams.sw)       pp.sw       = mjParams.sw;
-      if (mjParams.sv)       pp.sv       = mjParams.sv;
-      if (mjParams.seed)     pp.seed     = mjParams.seed;
-      if (mjParams.zoom)     pp.zoom     = mjParams.zoom;
-      if (mjParams.stop)     pp.stop     = mjParams.stop;
-      if (mjParams.repeat)   pp.repeat   = mjParams.repeat;
-      if (mjParams.no_prompt) pp.no      = mjParams.no_prompt;
-      if (mjParams.raw)      pp.raw      = true;
-      if (mjParams.hd)       pp.hd       = true;
-      if (mjParams.tile)     pp.tile     = true;
-      if (mjParams.fast)     pp.fast     = true;
-      if (mjParams.relax)    pp.relax    = true;
-      if (mjParams.exp)      pp.exp      = true;
-      return Object.keys(pp).length ? pp : undefined;
-    })() : undefined,
+    // Persist provider-specific params for DALL-E and Stable Diffusion too
+    // (audit doc 05 §1) — previously only Midjourney params were ever
+    // written to the DB, so reopening any other provider's prompt lost its
+    // params entirely, and for DALL-E the next autosave then stripped the
+    // param suffixes already baked into prompt_text by assembleDalle().
+    parameters: buildProviderParameters(fields.provider, mjParams, dalleParams, sdParams),
     camera: fields.camera || undefined,
     lens: fields.lens || undefined,
     lighting: fields.lighting || undefined,
@@ -1521,6 +1614,9 @@ export function CraftPrompt() {
       audio: fields.audio,
       text_graphics: fields.text_graphics,
       reference_role: fields.reference_role,
+      continuity_notes: fields.continuity_notes,
+      scene_world: fields.scene_world,
+      shots,
       usedAvoidanceIds: Array.from(usedAvoidanceIds),
       fieldTokenIds,
       consistencyFactors,
@@ -1555,6 +1651,7 @@ export function CraftPrompt() {
     setMjParams({ ...EMPTY_MJ });
     setDalleParams(EMPTY_DALLE);
     setSDParams(EMPTY_SD);
+    setShots([]);
     setErrors({});
     setMode("builder");
     setOutputOverride(null);
@@ -1693,11 +1790,14 @@ export function CraftPrompt() {
     { key: "mood", label: "MOOD / BRAND TONE", placeholder: "documentary realism" },
   ];
 
+  // Audit doc 05 §6 — the subtitle used to read "PROJECT CRAFT - {title}"
+  // before the Section 6 Pre-Craft rename mechanically turned it into
+  // "PRE-CRAFT", mislabeling this page with the *other* section's name.
   return (
     <>
     <PageContainer
       title={isEdit ? "Edit Prompt" : "Prompt Craft"}
-      subtitle={projectContext ? `PRE-CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
+      subtitle={projectContext ? `PROMPT CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
@@ -1784,6 +1884,26 @@ export function CraftPrompt() {
                   <span className="system-label text-[10px] text-muted">DIRECTION</span>
                   <p className="font-mono text-[13px] text-readable leading-relaxed">
                     {projectContext.visual_direction || projectContext.creative_goals}
+                  </p>
+                </div>
+              )}
+              {/* Audit doc 05 §7 — image_needs/video_needs from Pre-Craft
+                  previously never reached Prompt Craft at all. Gated by
+                  provider type, matching the isVideoProvider pattern already
+                  used for builder fields. */}
+              {!isVideoProvider(fields.provider) && projectContext.image_needs && (
+                <div className="flex flex-col gap-1">
+                  <span className="system-label text-[10px] text-muted">IMAGE NEEDS</span>
+                  <p className="font-mono text-[13px] text-readable leading-relaxed">
+                    {projectContext.image_needs}
+                  </p>
+                </div>
+              )}
+              {isVideoProvider(fields.provider) && projectContext.video_needs && (
+                <div className="flex flex-col gap-1">
+                  <span className="system-label text-[10px] text-muted">VIDEO NEEDS</span>
+                  <p className="font-mono text-[13px] text-readable leading-relaxed">
+                    {projectContext.video_needs}
                   </p>
                 </div>
               )}
@@ -1982,6 +2102,19 @@ export function CraftPrompt() {
                         ))}
                       </select>
                     </div>
+                    {/* Kling-only — distinct from generic Environment (audit doc 05 §13) */}
+                    {fields.provider === "kling" && (
+                      <div className="flex flex-col gap-1.5">
+                        <label className="system-label text-[12px] text-muted">SCENE WORLD / SPATIAL LOGIC</label>
+                        <input
+                          value={fields.scene_world}
+                          onChange={(e) => setF("scene_world", e.target.value)}
+                          placeholder="cramped subway car, single overhead light source, tight blocking"
+                          className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                          style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                        />
+                      </div>
+                    )}
                     <div className="flex flex-col gap-1.5">
                       <label className="system-label text-[12px] text-muted">MOTION / CAMERA MOVEMENT</label>
                       <input
@@ -1992,12 +2125,24 @@ export function CraftPrompt() {
                         style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                       />
                     </div>
+                    {/* Real shot-by-shot editor, shared by Seedance and Kling (audit doc 05 §12/§13) */}
+                    <ShotListEditor shots={shots} onChange={setShots} />
                     <div className="flex flex-col gap-1.5">
                       <label className="system-label text-[12px] text-muted">TRANSITIONS</label>
                       <input
                         value={fields.transitions}
                         onChange={(e) => setF("transitions", e.target.value)}
                         placeholder="match cut on hands, dissolve to wide"
+                        className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
+                        style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="system-label text-[12px] text-muted">{fields.provider === "kling" ? "CONTINUITY LOCK" : "CONTINUITY RULES"}</label>
+                      <input
+                        value={fields.continuity_notes}
+                        onChange={(e) => setF("continuity_notes", e.target.value)}
+                        placeholder={fields.provider === "kling" ? "same character face, same outfit, same lighting" : "consistent character identity and wardrobe across shots"}
                         className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                         style={{ border: "1px solid rgba(255,255,255,0.16)" }}
                       />

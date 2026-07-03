@@ -10,6 +10,7 @@ import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { updateCoOccurrences } from "@/lib/tokenPatterns";
 import { fileToDataUrl, fileToPreviewUrl, validateImageFile } from "@/lib/imageUtils";
 import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
+import { addResultToProject, getProjectsForPrompt } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -220,6 +221,17 @@ export function ResultReview() {
           notes: notes || undefined,
         });
       }
+
+      // Link the new result into every project that owns this prompt (audit
+      // doc 05 §3/§11) — previously only the batch-import path and a manual
+      // global result picker populated project_results, so a result added
+      // here for a project-owned prompt never showed up in that project's
+      // "Prompts & Results" panel or campaign result counts. No FK on
+      // result_id in project_results, so this is safe even when queued.
+      // Fire-and-forget: linking is a convenience, not a save precondition.
+      getProjectsForPrompt(promptId)
+        .then((owners) => Promise.all(owners.map((project) => addResultToProject(project.id, resultId))))
+        .catch(() => {});
 
       // Update token quality scores and co-occurrence patterns (fire-and-forget — non-blocking)
       if (prompt?.prompt_text) {

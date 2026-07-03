@@ -44,7 +44,6 @@ const PROJECT_TYPE_OPTIONS = [
   { value: "research",        label: "Research" },
 ];
 
-const ASPECT_RATIO_OPTIONS   = ["1:1", "4:5", "9:16", "16:9", "3:2", "2:3"];
 const PROVIDER_TARGET_OPTIONS = ["midjourney", "nano banana", "gpt image", "seedance", "kling", "runway", "higgsfield"];
 
 // ─── Toggle pill — accent rule: stroke + transparent fill ─────
@@ -171,7 +170,6 @@ function ProjectCard({ project, view, onClick, onArchive, onDelete }: {
 function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose: () => void }) {
   const toast = useToastStore((s) => s.add);
   const [title,           setTitle]           = useState("");
-  const [client,          setClient]          = useState("");
   const [campaignId,      setCampaignId]      = useState("");
   const [campaignName,    setCampaignName]    = useState("");
   const [campaigns,       setCampaigns]       = useState<Campaign[]>([]);
@@ -182,7 +180,6 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
   const [visualDirection, setVisualDirection] = useState("");
   const [imageNeeds,      setImageNeeds]      = useState("");
   const [videoNeeds,      setVideoNeeds]      = useState("");
-  const [aspectRatios,    setAspectRatios]    = useState<string[]>(["16:9"]);
   const [providerTargets, setProviderTargets] = useState<string[]>(["midjourney"]);
   const [saving,          setSaving]          = useState(false);
 
@@ -199,7 +196,6 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
     try {
       const id = await createProject({
         title:           title.trim(),
-        client:          client.trim() || undefined,
         campaign:        campaignName || undefined,
         campaign_id:     campaignId   || undefined,
         status:          "draft",
@@ -207,7 +203,6 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
         intended_output: intendedOutput.trim()  || undefined,
         image_needs:     imageNeeds.trim()      || undefined,
         video_needs:     videoNeeds.trim()      || undefined,
-        aspect_ratios:   aspectRatios,
         provider_targets: providerTargets,
         brief_text:      briefText.trim()       || undefined,
         visual_direction: visualDirection.trim() || undefined,
@@ -269,19 +264,10 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
           </select>
         </div>
 
-        {/* Client */}
-        <div className="flex flex-col gap-1.5 xl:col-span-3">
-          <label className="system-label">CLIENT</label>
-          <input
-            value={client}
-            onChange={(e) => setClient(e.target.value)}
-            placeholder="Client name…"
-            className="h-10 px-3 font-mono text-[13px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
-            style={{ border: "1px solid rgba(255,255,255,0.16)" }}
-          />
-        </div>
-
-        {/* Campaign — dropdown of existing campaigns */}
+        {/* Campaign — dropdown of existing campaigns. Client is inherited from
+            the selected campaign, not collected here (audit doc 05 §4) — the
+            doc's decision is that a Project-level Client input is redundant
+            since Campaign already carries it. */}
         <div className="flex flex-col gap-1.5 xl:col-span-3">
           <label className="system-label">CAMPAIGN</label>
           <select
@@ -300,6 +286,11 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
               <option key={c.id} value={c.id} className="bg-panel text-white">{c.title}</option>
             ))}
           </select>
+          {campaignId && (
+            <span className="font-mono text-[11px] text-readable">
+              Client: {campaigns.find((c) => c.id === campaignId)?.client || "—"}
+            </span>
+          )}
         </div>
 
         {/* Intended output */}
@@ -326,21 +317,6 @@ function CreateForm({ onSave, onClose }: { onSave: (id: string) => void; onClose
             className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
-        </div>
-
-        {/* Aspect ratios */}
-        <div className="flex flex-col gap-2 xl:col-span-3">
-          <label className="system-label">ASPECT RATIOS</label>
-          <div className="flex flex-wrap gap-2">
-            {ASPECT_RATIO_OPTIONS.map((ratio) => (
-              <TogglePill
-                key={ratio}
-                label={ratio}
-                active={aspectRatios.includes(ratio)}
-                onClick={() => toggle(ratio, aspectRatios, setAspectRatios)}
-              />
-            ))}
-          </div>
         </div>
 
         {/* Provider targets */}

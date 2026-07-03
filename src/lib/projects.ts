@@ -2,6 +2,7 @@ import type { Project, ProjectStatus, ProjectFilters } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
 import { executeAtomically } from "./dbTransaction";
 import { buildCreateProjectStatements, buildProjectRelationshipStatements } from "./dbStatements";
+import { getPromptById } from "./db";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -57,6 +58,10 @@ function rowToProject(row: Record<string, unknown>): Project {
 
 // ─── In-memory dev store ──────────────────────────────────────
 const _devStore: Project[] = [];
+// project_prompts join, dev-mode only (audit doc 05 §8) — previously
+// addPromptToProject/getPromptsForProject were pure no-ops outside Tauri,
+// so a saved prompt never showed up under its project in dev/browser mode.
+const _devProjectPrompts: { project_id: string; prompt_id: string }[] = [];
 
 // ─── CRUD ─────────────────────────────────────────────────────
 
@@ -186,8 +191,10 @@ export async function searchProjects(query: string, filters?: ProjectFilters): P
 
   if (isTauri) {
     const db = await getDb();
+    // Match campaign-inherited client too (audit doc 05 §4) — previously
+    // only the raw, often-unset projects.client column was searched.
     const conditions: string[] = [
-      `(lower(p.title) LIKE $1 OR lower(p.client) LIKE $1 OR lower(p.campaign) LIKE $1 OR lower(p.tags) LIKE $1 OR lower(p.notes) LIKE $1)`,
+      `(lower(p.title) LIKE $1 OR lower(p.client) LIKE $1 OR lower(c.client) LIKE $1 OR lower(p.campaign) LIKE $1 OR lower(p.tags) LIKE $1 OR lower(p.notes) LIKE $1)`,
     ];
     const values: unknown[] = [`%${q}%`];
 
@@ -195,11 +202,13 @@ export async function searchProjects(query: string, filters?: ProjectFilters): P
     else if (filters?.excludeArchived) { conditions.push(`p.status != 'archived'`); }
 
     const rows = (await db.select(
-      `SELECT p.*,
+      `SELECT p.*, c.client AS campaign_client,
          (SELECT COUNT(*) FROM project_prompts pp WHERE pp.project_id = p.id) as prompt_count,
          (SELECT COUNT(*) FROM project_results pr WHERE pr.project_id = p.id) as result_count,
          (SELECT COUNT(*) FROM project_references pref WHERE pref.project_id = p.id) as reference_count
-       FROM projects p WHERE ${conditions.join(" AND ")} ORDER BY p.updated_at DESC`,
+       FROM projects p
+       LEFT JOIN campaigns c ON c.id = p.campaign_id
+       WHERE ${conditions.join(" AND ")} ORDER BY p.updated_at DESC`,
       values
     )) as Record<string, unknown>[];
     return rows.map(rowToProject);
@@ -209,6 +218,7 @@ export async function searchProjects(query: string, filters?: ProjectFilters): P
   return all.filter((p) =>
     p.title.toLowerCase().includes(q) ||
     p.client?.toLowerCase().includes(q) ||
+    p.campaign_client?.toLowerCase().includes(q) ||
     p.campaign?.toLowerCase().includes(q) ||
     p.tags?.some((t) => t.toLowerCase().includes(q))
   );
@@ -299,14 +309,23 @@ export async function deleteProject(id: string): Promise<void> {
 // ─── Link: Prompts ────────────────────────────────────────────
 
 export async function addPromptToProject(projectId: string, promptId: string): Promise<void> {
-  if (!isTauri) return;
+  if (!isTauri) {
+    if (!_devProjectPrompts.some((r) => r.project_id === projectId && r.prompt_id === promptId)) {
+      _devProjectPrompts.push({ project_id: projectId, prompt_id: promptId });
+    }
+    return;
+  }
   const db = await getDb();
   const ts = now();
   await executeAtomically(db, buildProjectRelationshipStatements("prompts", projectId, promptId, ts));
 }
 
 export async function removePromptFromProject(projectId: string, promptId: string): Promise<void> {
-  if (!isTauri) return;
+  if (!isTauri) {
+    const idx = _devProjectPrompts.findIndex((r) => r.project_id === projectId && r.prompt_id === promptId);
+    if (idx !== -1) _devProjectPrompts.splice(idx, 1);
+    return;
+  }
   const db = await getDb();
   await db.execute(
     "DELETE FROM project_prompts WHERE project_id = $1 AND prompt_id = $2",
@@ -317,13 +336,32 @@ export async function removePromptFromProject(projectId: string, promptId: strin
 
 export async function getPromptsForProject(projectId: string): Promise<{
   id: string; title: string; provider: string; rating: number; is_winner: boolean; is_failed: boolean;
-  version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string;
+  version: number; parent_id?: string; thumbnail_data?: string; variant_label?: string; prompt_text: string;
 }[]> {
-  if (!isTauri) return [];
+  if (!isTauri) {
+    const ids = _devProjectPrompts.filter((r) => r.project_id === projectId).map((r) => r.prompt_id);
+    const prompts = (await Promise.all(ids.map((id) => getPromptById(id))))
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+    return prompts
+      .sort((a, b) => b.rating - a.rating || b.created_at.localeCompare(a.created_at))
+      .map((p) => ({
+        id: p.id,
+        title: p.title,
+        provider: p.provider,
+        rating: p.rating ?? 0,
+        is_winner: Boolean(p.is_winner),
+        is_failed: Boolean(p.is_failed),
+        version: p.version ?? 1,
+        parent_id: p.parent_id,
+        thumbnail_data: p.thumbnail_data,
+        variant_label: p.variant_label,
+        prompt_text: p.prompt_text ?? "",
+      }));
+  }
   const db = await getDb();
   const rows = (await db.select(
     `SELECT p.id, p.title, p.provider, p.rating, p.is_winner, p.is_failed,
-            p.version, p.parent_id, p.thumbnail_data, p.variant_label
+            p.version, p.parent_id, p.thumbnail_data, p.variant_label, p.prompt_text
      FROM prompts p
      JOIN project_prompts pp ON p.id = pp.prompt_id
      WHERE pp.project_id = $1
@@ -341,6 +379,7 @@ export async function getPromptsForProject(projectId: string): Promise<{
     parent_id: r.parent_id as string | undefined,
     thumbnail_data: r.thumbnail_data as string | undefined,
     variant_label: r.variant_label as string | undefined,
+    prompt_text: (r.prompt_text as string) ?? "",
   }));
 }
 

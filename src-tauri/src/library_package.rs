@@ -3386,6 +3386,36 @@ mod tests {
     }
 
     #[test]
+    // Audit doc 05 §9 — migration 005 used to seed ~29 personal SREF codes
+    // and ~29 personal Profile codes into every newly created library
+    // unconditionally, contradicting "new library starts empty" for SREFs
+    // and Profiles specifically. Tokens are intentional starter content and
+    // must remain seeded.
+    fn fresh_library_has_no_seeded_srefs_or_profiles_but_keeps_starter_tokens() {
+        let root = test_root("fresh-library-no-sref-profile-seed");
+        let library = root.join("Fresh.framecraftlib");
+        let paths = create_library_package(library.to_str().unwrap(), true).unwrap();
+        let conn = open_portable_database(&paths.db_path).unwrap();
+
+        let sref_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM srefs", [], |row| row.get(0))
+            .unwrap();
+        let profile_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM profiles", [], |row| row.get(0))
+            .unwrap();
+        let token_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tokens", [], |row| row.get(0))
+            .unwrap();
+
+        assert_eq!(sref_count, 0, "fresh library must not inherit seeded SREFs");
+        assert_eq!(profile_count, 0, "fresh library must not inherit seeded Profiles");
+        assert!(token_count > 0, "fresh library should still get starter token vocabulary");
+
+        drop(conn);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn metadata_copy_failure_leaves_no_destination_or_staging_sibling() {
         let root = test_root("copy-metadata-failure");
         let source = root.join("Source.framecraftlib");

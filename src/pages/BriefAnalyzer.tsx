@@ -9,7 +9,8 @@ import type { AIModel } from "@/lib/aiConfig";
 import type { BriefResult, GeneratedPrompt, SuggestedRecipe } from "@/lib/aiResultParsers";
 import { analyzeBrief, type BriefContent } from "@/lib/analyzeBrief";
 import { buildBriefPromptAsset, buildBriefRecipeAsset } from "@/lib/analysisAssets";
-import { getProjects, createProject, addPromptToProject } from "@/lib/projects";
+import { getProjects, createProject, addPromptToProject, getProjectById } from "@/lib/projects";
+import { generateCreativeStrategy, saveCreativeStrategy } from "@/lib/creativeDirectorMode";
 import type { Project } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -219,6 +220,25 @@ export function BriefAnalyzer() {
       status: "active",
     });
     await handleImportToProject(projectId);
+    // Creative Director Mode (doc 04 §4) — seed a strategy from what the
+    // brief analysis already extracted, so the new project opens with
+    // strategic framing instead of a blank Creative Director panel. Uses
+    // the same model already selected for brief analysis. Best-effort: a
+    // failed/unavailable strategy call must never block the import itself.
+    try {
+      const project = await getProjectById(projectId);
+      if (project) {
+        const seed = [
+          result.creative_direction ? `Creative direction: ${result.creative_direction}` : "",
+          result.tone ? `Tone: ${result.tone}` : "",
+          result.key_elements.length ? `Key elements: ${result.key_elements.join(", ")}` : "",
+        ].filter(Boolean).join("\n");
+        const strategy = await generateCreativeStrategy(project, selectedModel, seed || undefined);
+        await saveCreativeStrategy(projectId, strategy);
+      }
+    } catch {
+      // Strategy is a bonus on top of the import — the brief and prompts are already saved.
+    }
     navigate(`/projects/${projectId}`);
   };
 

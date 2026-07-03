@@ -107,9 +107,14 @@ export const DEFAULT_FORMULAS: Record<Provider, string[]> = {
   kling: [
     "Scene",
     "Scene description",
+    // World / Setting = the real scene_world field (audit doc 05 §13) —
+    // reuses the same step name Seedance already uses for the same concept.
+    "World / Setting",
     "Subject",
     "Subject description",
     "Motion",
+    // Real shot-by-shot editor (audit doc 05 §13).
+    "Shots",
     "Camera language",
     "Transitions",
     "Light",

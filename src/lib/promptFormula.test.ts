@@ -66,6 +66,12 @@ describe("getFormulaForProvider", () => {
     }
   });
 
+  it("Kling's formula includes Shots and World / Setting now that real fields back them (audit doc 05 §13)", () => {
+    const formula = getFormulaForProvider("kling");
+    expect(formula).toContain("Shots");
+    expect(formula).toContain("World / Setting");
+  });
+
   it("returns a video-shaped formula for the remaining video providers", () => {
     for (const provider of ["runway", "higgsfield"] as const) {
       expect(getFormulaForProvider(provider)).toContain("Motion");

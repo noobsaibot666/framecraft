@@ -695,7 +695,11 @@ export function ProjectWorkspace() {
 
   const buildInput = (): CreateProjectInput => ({
     title: title.trim(),
-    client: client.trim() || undefined,
+    // Persist the effective (campaign-preferred) client, not the stale raw
+    // state — otherwise projects.client never catches up with campaign
+    // inheritance, and unlinking the campaign later would fall back to an
+    // empty/stale value instead of the last-known effective client.
+    client: effectiveClient.trim() || undefined,
     campaign: campaign.trim() || undefined,
     campaign_id: campaignId || undefined,
     status,

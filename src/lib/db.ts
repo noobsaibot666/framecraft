@@ -87,7 +87,7 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
 export const PROMPT_SUMMARY_COLUMNS = [
   "id", "title", "description", "provider", "category", "prompt_text", "aspect_ratio",
   "tags", "rating", "ai_look_risk", "is_recipe", "is_winner", "is_failed",
-  "parent_id", "thumbnail_data", "thumbnail_result_id", "variant_label", "created_at", "updated_at",
+  "parent_id", "thumbnail_data", "source_url", "thumbnail_result_id", "variant_label", "created_at", "updated_at",
 ].join(", ");
 
 // ─── Public API ──────────────────────────────────────────────

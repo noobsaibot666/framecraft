@@ -15,6 +15,7 @@ import { findSimilarPrompts } from "@/lib/memoryEngine";
 import {
   analyzeImportedPromptLearning,
   buildImportLearningNotes,
+  suggestPromptTags,
   type ImportLearningSignal,
 } from "@/lib/importLearning";
 import { detectFormulaOrder, getFormulaForProvider, learnFormulaFromImport, missingFormulaSteps } from "@/lib/promptFormula";
@@ -413,7 +414,6 @@ export function ManualImport() {
   const [detected, setDetected] = useState<DetectedParams>({});
   const [learning, setLearning] = useState<ImportLearningSignal | null>(null);
   const [analyzed, setAnalyzed] = useState(false);
-  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [duplicates, setDuplicates] = useState<ReturnType<typeof findSimilarPrompts>>([]);
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -440,6 +440,10 @@ export function ManualImport() {
     if (mjSource) setProvider("midjourney");
   }, [mjSource]);
 
+  // Live tag suggestions — recomputed from the prompt text as the user types,
+  // right next to the field where they're adding tags (no "Analyze" click needed).
+  const tagSuggestions = useMemo(() => suggestPromptTags(raw, tags), [raw, tags]);
+
   // Batch import state
   const [batchJson, setBatchJson] = useState("");
   const [batchParsed, setBatchParsed] = useState<BatchItem[]>([]);
@@ -456,12 +460,10 @@ export function ManualImport() {
     setLearning(nextLearning);
     setProvider(autoProvider);
     setAnalyzed(true);
-    const suggestions = nextLearning.tags.filter((t) => !tags.includes(t));
-    setSuggestedTags(suggestions);
     const dups = findSimilarPrompts(raw, allPrompts, 0.55);
     setDuplicates(dups);
     setDuplicatesDismissed(false);
-  }, [raw, tags, allPrompts]);
+  }, [raw, allPrompts]);
 
   const handleSave = async (asRecipe = false) => {
     if (!title.trim()) { setError("Title is required"); return; }
@@ -659,7 +661,7 @@ export function ManualImport() {
                     </Button>
                   )}
                 </div>
-                <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setLearning(null); setSuggestedTags([]); setDuplicates([]); }}
+                <Textarea value={raw} onChange={(e) => { setRaw(e.target.value); setAnalyzed(false); setDetected({}); setLearning(null); setDuplicates([]); }}
                   placeholder="Paste your full prompt here, including any --parameters flags…"
                   rows={8} mono />
               </div>
@@ -859,23 +861,6 @@ export function ManualImport() {
               </div>
             )}
 
-            {/* Tag suggestions */}
-            {suggestedTags.length > 0 && (
-              <div className="flex flex-col gap-2">
-                <span className="system-label text-[8px]">SUGGESTED TAGS</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestedTags.map((tag) => (
-                    <button key={tag} type="button"
-                      onClick={() => { setTags((prev) => [...new Set([...prev, tag])]); setSuggestedTags((prev) => prev.filter((t) => t !== tag)); }}
-                      className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-white transition-precise"
-                      style={{ border: "var(--border-dim)" }}>
-                      + {tag}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Clean preview */}
             {analyzed && raw.trim() && (
               <div className="flex flex-col gap-2">
@@ -926,6 +911,23 @@ export function ManualImport() {
                 )}
               </div>
               <TagInput tags={tags} onChange={setTags} />
+
+              {/* Live tag suggestions — recomputed from the prompt text as it changes */}
+              {tagSuggestions.length > 0 && (
+                <div className="flex flex-col gap-1.5 -mt-2">
+                  <span className="font-mono text-[8px] tracking-widest uppercase text-dim/50">Suggested from prompt</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tagSuggestions.map((tag) => (
+                      <button key={tag} type="button"
+                        onClick={() => setTags((prev) => [...new Set([...prev, tag])])}
+                        className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm text-dim hover:text-cyan hover:border-cyan/40 transition-precise"
+                        style={{ border: "var(--border-dim)" }}>
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Best use */}
               <div className="flex flex-col gap-1.5">

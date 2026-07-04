@@ -16,6 +16,48 @@ const TAG_KEYWORD_MAP: Record<string, string[]> = {
   cinematic: ["cinematic", "film", "dramatic", "rim light", "scene"],
 };
 
+// Broader creative vocabulary used only for the live tag-suggestion strip next
+// to the Tags field (suggestPromptTags) — kept separate from TAG_KEYWORD_MAP
+// so analyzeImportedPromptLearning's pinned "Learned tags" output never
+// changes. Covers the descriptive language that actually shows up in prompts
+// but isn't a project Category: lighting, mood/color, composition, style/era,
+// environment, material/texture.
+const DESCRIPTIVE_KEYWORD_MAP: Record<string, string[]> = {
+  "golden hour": ["golden hour"],
+  "neon": ["neon"],
+  "backlit": ["backlit", "backlighting"],
+  "moody": ["moody"],
+  "high-key": ["high-key", "high key"],
+  "low-key": ["low-key", "low key"],
+  "chiaroscuro": ["chiaroscuro"],
+  "natural light": ["natural light", "window light"],
+  "studio light": ["studio light", "softbox"],
+  "silhouette": ["silhouette"],
+  "close-up": ["close-up", "close up", "macro"],
+  "wide shot": ["wide shot", "wide-angle", "establishing shot"],
+  "aerial": ["aerial", "drone", "overhead"],
+  "symmetry": ["symmetry", "symmetrical"],
+  "minimalist": ["minimalist", "minimal"],
+  "surreal": ["surreal", "surrealist"],
+  "vintage": ["vintage", "retro"],
+  "futuristic": ["futuristic", "sci-fi", "cyberpunk"],
+  "hyperrealistic": ["hyperrealistic", "photorealistic"],
+  "painterly": ["painterly", "brushstroke"],
+  "monochrome": ["monochrome", "black and white"],
+  "vibrant": ["vibrant", "saturated"],
+  "pastel": ["pastel"],
+  "muted tones": ["muted", "desaturated"],
+  "high contrast": ["high contrast", "high-contrast"],
+  "urban": ["urban", "cityscape", "street"],
+  "nature": ["forest", "mountain", "ocean", "wilderness"],
+  "studio": ["studio background", "seamless backdrop"],
+  "underwater": ["underwater"],
+  "metallic": ["metallic", "chrome"],
+  "glossy": ["glossy", "glazed"],
+  "matte": ["matte"],
+  "textured": ["textured", "texture"],
+};
+
 const PARAM_PATTERNS: Array<[RegExp, string]> = [
   [/--ar\s+([\d:]+)/, "--ar"],
   [/--v(?:ersion)?\s+(\S+)/, "--v"],
@@ -79,6 +121,52 @@ export function analyzeImportedPromptLearning(text: string): ImportLearningSigna
     reusableTokens: extractReusableTokens(text),
     parameterLabels: extractParameterLabels(text),
   };
+}
+
+// Words that shouldn't stand alone as a suggested tag even when they land in
+// their own comma-separated clause (rare, but cheap to guard against).
+const STOPWORD_PHRASES = new Set([
+  "a", "an", "the", "and", "or", "with", "of", "in", "on", "at", "by", "for", "to", "from",
+  "no", "not", "very", "extremely", "highly", "super", "ultra",
+]);
+
+function extractPhraseCandidates(text: string): string[] {
+  return stripPromptParams(text)
+    .split(/[,;\n.]+/)
+    .map((part) => part.trim().toLowerCase().replace(/^[-–—•]+\s*/, ""))
+    .filter((part) => {
+      if (!part || STOPWORD_PHRASES.has(part)) return false;
+      if (/^\d+(\.\d+)?$/.test(part)) return false;
+      const words = part.split(/\s+/).filter(Boolean);
+      return words.length > 0 && words.length <= 4 && part.length <= 28;
+    });
+}
+
+/**
+ * Suggests tags for the live "add tags" UI — combines the existing category
+ * dictionary, a broader descriptive-vocabulary dictionary (lighting, mood,
+ * style, composition, texture), and short phrases pulled directly from the
+ * prompt's own comma/period-separated clauses, so suggestions are grounded in
+ * the exact words the user wrote rather than a fixed category list. Always
+ * excludes tags already added.
+ */
+export function suggestPromptTags(text: string, existingTags: string[] = [], limit = 12): string[] {
+  if (!text.trim()) return [];
+  const existing = new Set(existingTags.map((tag) => tag.trim().toLowerCase()));
+  const lower = stripPromptParams(text).toLowerCase();
+
+  const dictionaryTags = [
+    ...Object.entries(TAG_KEYWORD_MAP),
+    ...Object.entries(DESCRIPTIVE_KEYWORD_MAP),
+  ]
+    .filter(([, keywords]) => keywords.some((keyword) => lower.includes(keyword)))
+    .map(([tag]) => tag);
+
+  const phraseTags = extractPhraseCandidates(text);
+
+  return unique([...dictionaryTags, ...phraseTags])
+    .filter((tag) => !existing.has(tag))
+    .slice(0, limit);
 }
 
 export function buildImportLearningNotes(source: string | undefined, learning: ImportLearningSignal): string | undefined {

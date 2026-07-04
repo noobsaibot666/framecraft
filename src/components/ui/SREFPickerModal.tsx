@@ -57,7 +57,7 @@ export function SREFPickerModal({ onSelect, onClose }: Props) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="flex flex-col w-full max-w-2xl max-h-[80vh] rounded-card overflow-hidden"
-        style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+        style={{ background: "var(--color-panel)", border: "var(--border-default)" }}>
 
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 shrink-0"

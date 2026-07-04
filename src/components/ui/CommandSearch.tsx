@@ -149,7 +149,7 @@ export function CommandSearch({ onClose }: Props) {
         style={{
           top: "18vh",
           border: "var(--border-strong)",
-          background: "var(--surface-card)",
+          background: "var(--color-panel)",
           boxShadow: "0 24px 64px rgba(0,0,0,0.7)",
         }}
       >

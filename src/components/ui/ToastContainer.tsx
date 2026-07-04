@@ -19,7 +19,7 @@ function Toast({ item }: { item: ToastItem }) {
     <div
       role="status"
       className={`flex items-center gap-2.5 px-3 py-2.5 rounded-sm min-w-48 max-w-xs ${TYPE_STYLES[item.type]}`}
-      style={{ background: "var(--surface-card)", border: "1px solid", borderColor: "inherit" }}
+      style={{ background: "var(--color-panel)", border: "1px solid", borderColor: "inherit" }}
     >
       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${TYPE_DOT[item.type]}`} />
       <span className="font-mono text-[10px] flex-1 leading-relaxed">{item.message}</span>

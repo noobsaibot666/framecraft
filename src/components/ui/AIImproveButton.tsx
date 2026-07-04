@@ -78,7 +78,7 @@ export function AIImproveButton({ value, fieldName, projectTitle, projectContext
           onClick={(e) => { if (e.target === e.currentTarget && !improving) setOpen(false); }}
         >
           <div className="flex flex-col w-full max-w-md rounded-card overflow-hidden"
-            style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+            style={{ background: "var(--color-panel)", border: "var(--border-default)" }}>
             <div className="flex items-center justify-between gap-3 px-5 py-4" style={{ borderBottom: "var(--border-default)" }}>
               <span className="flex items-center gap-1.5 system-label text-soft-white">
                 <Sparkles size={11} className="text-cyan/70" /> Improve {fieldName}

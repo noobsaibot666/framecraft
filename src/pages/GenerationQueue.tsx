@@ -332,7 +332,7 @@ export function GenerationQueue() {
     >
       {showAdd && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-          <div className="w-[640px] max-h-[72vh] flex flex-col gap-4 p-6 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+          <div className="w-[640px] max-h-[72vh] flex flex-col gap-4 p-6 rounded-card" style={{ border: "var(--border-default)", background: "var(--color-panel)" }}>
             <div className="flex items-center justify-between">
               <span className="system-label">ADD PROMPTS</span>
               <button type="button" className="text-muted hover:text-white" onClick={() => setShowAdd(false)}><X size={14} /></button>

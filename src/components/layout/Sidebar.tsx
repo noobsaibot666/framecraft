@@ -16,7 +16,6 @@ import {
   Wand2,
 } from "lucide-react";
 import { getQueue } from "@/lib/queue";
-import { getActiveSharedIngestStatus } from "@/lib/librarySettings";
 import { cn } from "@/lib/utils";
 import { prefetchRoute } from "@/lib/routePrefetch";
 
@@ -124,15 +123,11 @@ function NavItem({
 
 export function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0);
-  const [ingestPending, setIngestPending] = useState(0);
 
   useEffect(() => {
     getQueue()
       .then((items) => setPendingCount(items.filter((item) => item.status === "pending").length))
       .catch(() => setPendingCount(0));
-    getActiveSharedIngestStatus()
-      .then((status) => setIngestPending(status?.pending ?? 0))
-      .catch(() => setIngestPending(0));
   }, []);
 
   return (
@@ -156,46 +151,6 @@ export function Sidebar() {
 
       {/* Divider */}
       <div className="mx-4 h-px bg-white/7" />
-
-      {/* Settings */}
-      <div className="py-2">
-        <NavLink
-          to="/settings"
-          onMouseEnter={() => prefetchRoute("/settings")}
-          onFocus={() => prefetchRoute("/settings")}
-          className={({ isActive }) =>
-            cn(
-              "relative flex min-h-10 items-center gap-3 px-4 py-2.5",
-              "transition-all duration-150",
-              isActive ? "bg-red/10 text-white" : "text-soft-white/75 hover:bg-cyan/6 hover:text-cyan"
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <span
-                className={cn(
-                  "absolute left-0 top-1/2 -translate-y-1/2",
-                  "w-px h-4 transition-all duration-150",
-                  isActive ? "bg-red" : "bg-transparent"
-                )}
-              />
-              <Settings
-                size={14}
-                className={cn("shrink-0", isActive ? "text-red" : "text-soft-white/55")}
-              />
-              <span className="font-sans text-[14px] font-semibold tracking-[0.04em] uppercase">
-                Settings
-              </span>
-              {ingestPending > 0 && (
-                <span className="ml-auto rounded-sm border border-amber/40 bg-amber/12 px-2 py-1 font-mono text-[10px] text-amber">
-                  {ingestPending}
-                </span>
-              )}
-            </>
-          )}
-        </NavLink>
-      </div>
 
       {/* Bottom identifier */}
       <div className="px-4 pb-3 pt-1">

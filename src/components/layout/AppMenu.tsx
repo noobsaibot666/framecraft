@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, Info, MonitorCog, MoreHorizontal, Settings, X, FolderPlus, Upload, Layers, Circle } from "lucide-react";
+import { Check, Info, MonitorCog, Settings, X, FolderPlus, Upload, Layers, Circle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   type AppMenuItemId,
@@ -262,7 +262,6 @@ export function AppMenu() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <MoreHorizontal size={14} />
         Menu
       </button>
 

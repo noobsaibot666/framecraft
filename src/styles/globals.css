@@ -189,6 +189,17 @@
        Tauri webview backends (WebKit on macOS/Linux, WebView2 on Windows). */
     zoom: 1.06;
   }
+
+  /* WebKit (the actual engine behind the packaged macOS/Linux app — Chromium
+     dev tooling doesn't reproduce this) fails to paint an opaque background
+     on `position: fixed` descendants of a `zoom`-scaled ancestor: toasts and
+     modals rendered see-through, bleeding whatever was underneath, even
+     though Chromium renders the exact same CSS solid. Forcing each fixed
+     element onto its own GPU compositing layer resolves it. Harmless
+     no-op everywhere else. */
+  .fixed {
+    transform: translateZ(0);
+  }
 }
 
 /* ─── Typography Utilities ───────────────────────────────── */

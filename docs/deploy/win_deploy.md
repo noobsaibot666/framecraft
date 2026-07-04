@@ -23,6 +23,22 @@ cargo --version
 
 ---
 
+## Pull latest and deploy (recommended)
+
+One command pulls the newest code, installs dependencies, runs the full test/typecheck/build gate, and produces the Windows installer:
+
+```powershell
+cd framecraft
+git pull origin main
+npm run windows:rc
+```
+
+`windows:rc` runs, in order: `npm ci` → `npm test` → `tsc --noEmit` → `npm run build` → `cargo check` → `cargo test` → `npm run tauri build`, then prints the path to every `.exe`/`.msi` produced under `src-tauri/target/release/bundle`. If any step fails, the script stops there — fix that step before retrying.
+
+Run the printed installer to deploy the new build; it overwrites the previous install. The SQLite database in `%APPDATA%\com.alan.framecraft\` is untouched.
+
+---
+
 ## Pull latest and run dev build
 
 ```powershell
@@ -82,10 +98,11 @@ Then run the new installer — it will overwrite the previous version. The SQLit
 
 | Task | Command |
 |------|---------|
+| Pull latest + full checked build + installer | `git pull origin main && npm run windows:rc` |
 | Pull latest | `git pull origin main` |
 | Install JS deps | `npm install` |
 | Dev mode (no build) | `npm run tauri dev` |
-| Production build | `npm run tauri:build` |
+| Production build (no test/typecheck gate) | `npm run tauri:build` |
 | Run tests | `npm test` |
 | Type check | `npx tsc --noEmit` |
 

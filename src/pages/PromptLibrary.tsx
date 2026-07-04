@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -100,18 +100,18 @@ function LibraryStat({ label, value, accent }: { label: string; value: string | 
 }
 
 function PromptCardThumb({ src }: { src: string }) {
-  const { src: displaySrc } = useImageDisplaySrc(src);
+  const { src: displaySrc, onError } = useImageDisplaySrc(src);
   if (!displaySrc) return null;
   return (
     <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
-      <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
+      <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
       <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
     </div>
   );
 }
 
 function CarouselMiniThumb({ src, onEnlarge }: { src: string; onEnlarge: (src: string) => void }) {
-  const { src: displaySrc } = useImageDisplaySrc(src);
+  const { src: displaySrc, onError } = useImageDisplaySrc(src);
   if (!displaySrc) return (
     <div className="w-9 h-9 rounded-sm shrink-0" style={{ background: "rgba(255,255,255,0.06)" }} />
   );
@@ -122,12 +122,45 @@ function CarouselMiniThumb({ src, onEnlarge }: { src: string; onEnlarge: (src: s
       className="w-9 h-9 rounded-sm shrink-0 overflow-hidden cursor-zoom-in transition-precise hover:ring-1 hover:ring-cyan/50"
       title="Click to enlarge"
     >
-      <img src={displaySrc} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+      <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover" />
     </button>
   );
 }
 
-function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCount, projectRelation, onCopy, onDelete, onQueue, onRate, onEnlargeResult, batchMode, selected, onSelect, index, pendingDelete }: {
+// Shown instead of the cover thumbnail when a prompt has a source URL (e.g. a
+// Midjourney CDN link) but the thumbnail fetch never resolved — usually a CDN
+// bot-protection block during import. Lets the user force a re-fetch without
+// waiting for the next app restart's background migration pass.
+function PendingThumbnail({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [retrying, setRetrying] = useState(false);
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={retrying}
+      title="Thumbnail failed to load — click to retry"
+      className="w-full h-32 rounded-sm mb-1 -mt-1 flex flex-col items-center justify-center gap-1.5 transition-precise hover:border-cyan/40"
+      style={{ border: "1px dashed rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.02)" }}
+    >
+      <RefreshCw size={13} className={cn("text-dim/50", retrying && "animate-spin")} />
+      <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">
+        {retrying ? "Retrying…" : "Thumbnail failed — retry"}
+      </span>
+    </button>
+  );
+}
+
+function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCount, projectRelation, onCopy, onDelete, onQueue, onRate, onEnlargeResult, onRetryThumbnail, batchMode, selected, onSelect, index, pendingDelete }: {
   prompt: Prompt;
   resultSummary?: { count: number; avg_score: number };
   coverImage?: string;
@@ -139,6 +172,7 @@ function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCo
   onQueue: (p: Prompt) => void;
   onRate: (p: Prompt, rating: number) => void;
   onEnlargeResult: (src: string) => void;
+  onRetryThumbnail: (p: Prompt) => Promise<void>;
   batchMode: boolean;
   selected: boolean;
   onSelect: (id: string, selected: boolean, index: number, shiftHeld: boolean) => void;
@@ -154,8 +188,12 @@ function PromptCard({ prompt, resultSummary, coverImage, resultThumbs, versionCo
       style={{ border: selected ? "1px solid rgba(56,183,200,0.70)" : "var(--border-default)", background: selected ? "rgba(56,183,200,0.08)" : "var(--surface-card)" }}
       onClick={() => { if (!batchMode) navigate(`/library/${prompt.id}`); }}
     >
-      {/* Cover thumbnail */}
-      {coverImage && <PromptCardThumb src={coverImage} />}
+      {/* Cover thumbnail — falls back to a manual retry affordance when a
+          source URL exists but the thumbnail fetch never resolved (e.g. a
+          CDN bot-protection block during import) */}
+      {coverImage
+        ? <PromptCardThumb src={coverImage} />
+        : prompt.source_url && <PendingThumbnail onRetry={() => onRetryThumbnail(prompt)} />}
 
       {/* Result carousel — additional thumbnails beyond the hero cover */}
       {carouselThumbs.length > 0 && (
@@ -450,6 +488,17 @@ export function PromptLibrary() {
     }
   }, [remove]); // remove is stable; confirmDeleteRef is a ref, not a dep
 
+  const handleRetryThumbnail = useCallback(async (prompt: Prompt) => {
+    if (!prompt.source_url) return;
+    try {
+      const { fetchImageAsDataUrl } = await import("@/lib/fetchImageUrl");
+      const dataUrl = await fetchImageAsDataUrl(prompt.source_url);
+      await update(prompt.id, { thumbnail_data: dataUrl });
+    } catch {
+      toast.error("Thumbnail still unreachable — the source link may be blocked or expired");
+    }
+  }, [update]);
+
   const handleQueue = useCallback(async (prompt: Prompt) => {
     try {
       await addToQueue(prompt.id);
@@ -737,28 +786,28 @@ export function PromptLibrary() {
         {(uniqueTags.length > 0 || noResultsOnly || originalsOnly) && (
           <div className="flex flex-wrap gap-1.5">
             <button type="button" onClick={() => setOriginalsOnly(!originalsOnly)}
-              className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+              className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
                 originalsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
               style={{ border: originalsOnly ? "1px solid rgba(255,255,255,0.30)" : "var(--border-dim)" }}>
               Originals
             </button>
             <button type="button" onClick={() => setNoResultsOnly(!noResultsOnly)}
-              className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+              className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
                 noResultsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
               style={{ border: noResultsOnly ? "1px solid rgba(215,25,33,0.40)" : "var(--border-dim)" }}>
-              <ImageOff size={8} /> No Results
+              <ImageOff size={10} /> No Results
             </button>
             {tagFilter && (
               <button type="button" onClick={() => setTagFilter("")}
-                className="flex items-center gap-1 font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"
+                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"
                 style={{ border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)" }}>
-                <X size={8} /> Clear
+                <X size={10} /> Clear
               </button>
             )}
             {uniqueTags.map((tag) => (
               <button key={tag} type="button"
                 onClick={() => setTagFilter(tag === tagFilter ? "" : tag)}
-                className={cn("font-mono text-[8px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
+                className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
                   tagFilter === tag ? "text-white" : "text-dim/60 hover:text-muted")}
                 style={{ border: tagFilter === tag ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)" }}>
                 {tag}
@@ -909,6 +958,7 @@ export function PromptLibrary() {
                   onQueue={handleQueue}
                   onRate={handleRate}
                   onEnlargeResult={setEnlargedSrc}
+                  onRetryThumbnail={handleRetryThumbnail}
                   batchMode={batchMode}
                   selected={selectedIds.has(p.id)}
                   onSelect={handleSelect}
@@ -938,7 +988,7 @@ export function PromptLibrary() {
                       style={{ border: "1px solid rgba(255,255,255,0.08)" }}>copy</span>
                   )}
                   {(p.tags ?? []).slice(0, 3).map((tag) => (
-                    <span key={tag} className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-dim/50 shrink-0 hidden md:inline"
+                    <span key={tag} className="font-mono text-[10px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm text-dim/50 shrink-0 hidden md:inline"
                       style={{ border: "var(--border-dim)" }}>{tag}</span>
                   ))}
                   {resultMap[p.id]?.count > 0 ? (

@@ -237,7 +237,7 @@ function showCleanupError(
 
 function LockScreen({ title, message, action }: { title: string; message: string; action?: ReactNode }) {
   return (
-    <div className="min-h-screen bg-void flex items-center justify-center p-6">
+    <div className="min-h-full bg-void flex items-center justify-center p-6">
       <div className="max-w-md w-full flex flex-col gap-4 p-5 rounded-card"
         style={{ border: "1px solid rgba(215,25,33,0.35)", background: "rgba(12,12,12,0.96)" }}>
         <div className="flex items-start gap-3">

@@ -29,6 +29,7 @@ import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { BatchImportZone } from "@/components/ui/BatchImportZone";
 import { DirectionStudio } from "@/components/projects/DirectionStudio";
 import { CreativeDirectorPanel } from "@/components/projects/CreativeDirectorPanel";
+import { VisualReferenceBoard } from "@/components/projects/VisualReferenceBoard";
 import { getProjectShots } from "@/lib/shotSequence";
 import { accentColorForVariantLabel } from "@/lib/storytelling";
 import { getCampaigns } from "@/lib/campaigns";
@@ -596,6 +597,9 @@ export function ProjectWorkspace() {
   // Creative Director strategy JSON — read-only here; the panel persists it
   // directly, this copy keeps Direction Studio's generation context current.
   const [creativeStrategyRaw, setCreativeStrategyRaw] = useState("");
+  // Visual Reference board lives in the right column; its built context is
+  // lifted here so Direction Studio (left column) can use it for generation.
+  const [visualRefContext, setVisualRefContext] = useState("");
 
   const hasImageProvider = providerTargets.length === 0 || providerTargets.some((p) => !isVideoProvider(p));
   const hasVideoProvider = providerTargets.length === 0 || providerTargets.some((p) => isVideoProvider(p));
@@ -959,24 +963,27 @@ export function ProjectWorkspace() {
             </div>
             <div className="flex flex-wrap gap-2">
               {providerTargets.slice(0, 5).map((provider) => (
-                <span key={provider} className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm"
-                  style={{ border: "1px solid rgba(72, 229, 232, 0.28)", background: "rgba(72, 229, 232, 0.06)" }}>
+                <span key={provider} className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm border border-cyan/28 bg-cyan/6">
                   {provider}
                 </span>
               ))}
               {aspectRatios.slice(0, 5).map((ratio) => (
-                <span key={ratio} className="font-mono text-[10px] tracking-widest uppercase text-readable px-2 py-1 rounded-sm"
-                  style={{ border: "var(--border-dim)" }}>
+                <span key={ratio} className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm border border-cyan/28 bg-cyan/6">
                   {ratio}
                 </span>
               ))}
-              {!providerTargets.length && !aspectRatios.length && (
-                <span className="font-mono text-[12px] text-readable">Add provider targets in Setup. Aspect ratio is set per prompt in Prompt Craft.</span>
+              {intendedOutput && (
+                <span className="font-mono text-[10px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm border border-cyan/28 bg-cyan/6">
+                  {intendedOutput}
+                </span>
+              )}
+              {!providerTargets.length && !aspectRatios.length && !intendedOutput && (
+                <span className="font-mono text-[12px] text-readable">Add provider targets and intended output in Setup. Aspect ratio is set per prompt in Prompt Craft.</span>
               )}
             </div>
-            {(intendedOutput || creativeGoals) && (
+            {!intendedOutput && creativeGoals && (
               <p className="font-mono text-[13px] leading-relaxed text-readable max-w-4xl">
-                {intendedOutput || creativeGoals}
+                {creativeGoals}
               </p>
             )}
           </div>
@@ -1011,39 +1018,37 @@ export function ProjectWorkspace() {
             <StatChip label="Failed" value={failedCount} alert />
           </div>
 
-          {/* Title + Client + Campaign */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_180px_220px] gap-4">
-            <div className="flex flex-col gap-1.5">
-              <FieldLabel>TITLE</FieldLabel>
-              <FieldInput value={title} onChange={setTitle} placeholder="Project name…" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <FieldLabel>CAMPAIGN</FieldLabel>
-              {allCampaigns.length > 0 ? (
-                <select
-                  value={campaignId}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    const found = allCampaigns.find((c) => c.id === newId);
-                    setCampaignId(newId);
-                    setCampaign(found?.title ?? "");
-                  }}
-                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
-                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
-                >
-                  <option value="">— no campaign —</option>
-                  {allCampaigns.map((c) => (
-                    <option key={c.id} value={c.id}>{c.title}</option>
-                  ))}
-                </select>
-              ) : (
-                <FieldInput value={campaign} onChange={setCampaign} placeholder="Campaign…" mono />
-              )}
-            </div>
-          </div>
-
-          {/* Setup */}
+          {/* Setup — Title + Campaign live here too, since they're project-setup data */}
           <Panel title="SETUP">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_220px] gap-4">
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>TITLE</FieldLabel>
+                <FieldInput value={title} onChange={setTitle} placeholder="Project name…" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <FieldLabel>CAMPAIGN</FieldLabel>
+                {allCampaigns.length > 0 ? (
+                  <select
+                    value={campaignId}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      const found = allCampaigns.find((c) => c.id === newId);
+                      setCampaignId(newId);
+                      setCampaign(found?.title ?? "");
+                    }}
+                    className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none"
+                    style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                  >
+                    <option value="">— no campaign —</option>
+                    {allCampaigns.map((c) => (
+                      <option key={c.id} value={c.id}>{c.title}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <FieldInput value={campaign} onChange={setCampaign} placeholder="Campaign…" mono />
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="flex flex-col gap-1.5">
                 <FieldLabel ai>PROJECT TYPE</FieldLabel>
@@ -1153,6 +1158,7 @@ export function ProjectWorkspace() {
               if (fields.creative_goals !== undefined) setCreativeGoals(fields.creative_goals);
               if (fields.constraints !== undefined) setConstraints(fields.constraints);
             }}
+            visualRefContext={visualRefContext}
           />
 
           <Panel
@@ -1466,6 +1472,8 @@ export function ProjectWorkspace() {
             className="w-full justify-center">
             <Plus size={10} /> New Prompt for Project
           </Button>
+
+          <VisualReferenceBoard projectId={id!} onContextChange={setVisualRefContext} />
         </div>
       </div>
     </PageContainer>

@@ -30,7 +30,7 @@ export function AppShell() {
   useShortcut("cmd+/", () => setShortcutsOpen((v) => !v));
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-black">
+    <div className="flex flex-col h-full overflow-hidden bg-black">
       <TopBar onSearchOpen={() => setSearchOpen(true)} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />

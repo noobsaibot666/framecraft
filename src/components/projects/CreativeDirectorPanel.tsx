@@ -137,9 +137,7 @@ export function CreativeDirectorPanel({ project, onApplyToSetup, onStrategyChang
 
       {!saved && !draft && (
         <p className="font-mono text-[10px] text-readable leading-relaxed">
-          Define the early project strategy before crafting: campaign idea, concepts, directions, aesthetics,
-          brand connection, message, audience and execution. The saved strategy grounds Direction Studio,
-          Prompt Craft analysis and the assistant.
+          Set the strategy before you craft. Save it once, and Direction Studio, Prompt Craft, and the assistant all use it.
         </p>
       )}
 

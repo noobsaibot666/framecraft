@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ImagePlus, Plus, ScanEye, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
 import { getSessions } from "@/lib/comparisons";
@@ -15,19 +15,7 @@ import {
   generateCreativeDirections,
   improveCreativeDirections,
 } from "@/lib/creativeDirectionGeneration";
-import {
-  addVisualReference,
-  analyzeVisualReference,
-  buildVisualReferenceContext,
-  getVisualReferences,
-  MAX_VISUAL_REFERENCE_NOTE,
-  MAX_VISUAL_REFERENCES,
-  removeVisualReference,
-  updateVisualReferenceNote,
-  type VisualReference,
-} from "@/lib/visualReferences";
 import { updateProject } from "@/lib/projects";
-import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
 import type { CreativeDirection, Project } from "@/types";
 import { StorytellingPanel } from "./StorytellingPanel";
@@ -35,112 +23,42 @@ import { StorytellingPanel } from "./StorytellingPanel";
 interface DirectionStudioProps {
   project: Project;
   onApplied: (fields: { visual_direction?: string; creative_goals?: string; constraints?: string }) => void;
+  /** Built from the project's Visual Reference board (rendered elsewhere on the page) — feeds generation/improve. */
+  visualRefContext?: string;
 }
 
 const MAX_DIRECTIONS = 3;
 
-// Result fields sized slightly taller (V2 §3) while every card keeps the same
-// row counts, so the three cards stay visually aligned.
-const DIRECTION_FIELDS: { key: keyof CreativeDirection; label: string; rows: number }[] = [
-  { key: "campaign_idea", label: "Campaign idea", rows: 4 },
-  { key: "rationale", label: "Rationale", rows: 4 },
-  { key: "visual_aesthetic", label: "Visual aesthetic", rows: 5 },
-  { key: "brand_connection", label: "Brand connection", rows: 4 },
-  { key: "product_message", label: "Product message", rows: 3 },
-  { key: "tone", label: "Tone", rows: 2 },
-  { key: "prompt_direction", label: "Prompt direction", rows: 5 },
+// Fields grouped into a readable sequence — strategy first, then aesthetic/voice,
+// then the execution brief that actually drives Prompt Craft.
+const DIRECTION_SECTIONS: { label: string; fields: { key: keyof CreativeDirection; label: string; rows: number }[] }[] = [
+  {
+    label: "Strategy",
+    fields: [
+      { key: "campaign_idea", label: "Campaign idea", rows: 3 },
+      { key: "rationale", label: "Rationale", rows: 3 },
+    ],
+  },
+  {
+    label: "Aesthetic & voice",
+    fields: [
+      { key: "visual_aesthetic", label: "Visual aesthetic", rows: 4 },
+      { key: "brand_connection", label: "Brand connection", rows: 3 },
+      { key: "product_message", label: "Product message", rows: 2 },
+      { key: "tone", label: "Tone", rows: 1 },
+    ],
+  },
+  {
+    label: "Execution",
+    fields: [
+      { key: "prompt_direction", label: "Prompt direction", rows: 4 },
+    ],
+  },
 ];
 
-function VisualRefThumb({ src }: { src?: string }) {
-  const image = useImageDisplaySrc(src ?? "");
-  if (!image.src) {
-    return (
-      <div className="w-full h-full flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
-        <span className="font-mono text-[8px] text-dim/40">REF</span>
-      </div>
-    );
-  }
-  return <img src={image.src} onError={image.onError} className="w-full h-full object-cover" />;
-}
+const ALL_DIRECTION_FIELDS = DIRECTION_SECTIONS.flatMap((section) => section.fields);
 
-function VisualReferenceCard({
-  refItem,
-  onNoteSaved,
-  onRemove,
-  onAnalyzed,
-}: {
-  refItem: VisualReference;
-  onNoteSaved: (id: string, note: string) => void;
-  onRemove: (id: string) => void;
-  onAnalyzed: (id: string, analysis: string) => void;
-}) {
-  const [note, setNote] = useState(refItem.note);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
-
-  const handleAnalyze = async () => {
-    setAnalyzing(true);
-    setAnalysisError("");
-    try {
-      const analysis = await analyzeVisualReference(refItem);
-      onAnalyzed(refItem.id, analysis);
-    } catch (caught) {
-      setAnalysisError(caught instanceof Error ? caught.message : "Analysis failed.");
-    } finally {
-      setAnalyzing(false);
-    }
-  };
-
-  return (
-    <div className="flex gap-2.5 p-2 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.02)" }}>
-      <div className="w-14 h-14 rounded-sm overflow-hidden shrink-0" style={{ border: "var(--border-dim)" }}>
-        <VisualRefThumb src={refItem.thumbnail_data} />
-      </div>
-      <div className="flex-1 min-w-0 flex flex-col gap-1">
-        <div className="flex items-start justify-between gap-1">
-          <span className="font-mono text-[10px] text-soft-white/80 truncate">{refItem.title}</span>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={handleAnalyze}
-              disabled={analyzing || !refItem.thumbnail_data}
-              className="text-dim/50 hover:text-cyan disabled:opacity-40 transition-precise"
-              title={refItem.analysis ? "Re-run AI image analysis" : "Analyze this image with AI"}
-            >
-              <ScanEye size={11} className={analyzing ? "animate-pulse text-cyan" : undefined} />
-            </button>
-            <button
-              type="button"
-              onClick={() => onRemove(refItem.id)}
-              className="text-dim/50 hover:text-red transition-precise"
-              title="Remove visual reference"
-            >
-              <X size={11} />
-            </button>
-          </div>
-        </div>
-        <input
-          value={note}
-          maxLength={MAX_VISUAL_REFERENCE_NOTE}
-          onChange={(event) => setNote(event.target.value)}
-          onBlur={() => { if (note !== refItem.note) onNoteSaved(refItem.id, note); }}
-          placeholder="What is this a reference for? (e.g. clothing reference)"
-          className="w-full h-7 px-2 rounded-sm bg-black/25 font-mono text-[10px] text-soft-white placeholder:text-dim focus:outline-none"
-          style={{ border: "var(--border-dim)" }}
-        />
-        <span className="font-mono text-[8px] text-dim/50 self-end">{note.length}/{MAX_VISUAL_REFERENCE_NOTE}</span>
-        {analysisError && (
-          <span className="font-mono text-[8.5px] text-red/80 leading-relaxed">{analysisError}</span>
-        )}
-        {refItem.analysis && (
-          <p className="font-mono text-[8.5px] text-cyan/60 leading-relaxed">{refItem.analysis}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
+export function DirectionStudio({ project, onApplied, visualRefContext = "" }: DirectionStudioProps) {
   const [directions, setDirections] = useState<CreativeDirection[]>([]);
   const [modelId, setModelId] = useState(() => {
     return AI_MODELS.find((model) => Boolean(getApiKey(model.provider)))?.id ?? AI_MODELS[0].id;
@@ -152,9 +70,6 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
   const [userContext, setUserContext] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [visualRefs, setVisualRefs] = useState<VisualReference[]>([]);
-  const [uploadingRef, setUploadingRef] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const model = useMemo(
     () => AI_MODELS.find((candidate) => candidate.id === modelId) ?? AI_MODELS[0],
@@ -165,19 +80,9 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
     setDirections(await getCreativeDirections(project.id));
   }, [project.id]);
 
-  const reloadVisualRefs = useCallback(async () => {
-    try {
-      setVisualRefs(await getVisualReferences(project.id));
-    } catch {
-      setVisualRefs([]);
-    }
-  }, [project.id]);
-
   useEffect(() => { reload(); }, [reload]);
-  useEffect(() => { reloadVisualRefs(); }, [reloadVisualRefs]);
 
   const atCap = directions.length >= MAX_DIRECTIONS;
-  const visualRefContext = useMemo(() => buildVisualReferenceContext(visualRefs), [visualRefs]);
 
   const updateLocal = (id: string, field: keyof CreativeDirection, value: string) => {
     setDirections((current) => current.map((direction) => (
@@ -290,42 +195,6 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
     await reload();
   };
 
-  const handleUploadFiles = async (files: FileList | null) => {
-    if (!files?.length) return;
-    setUploadingRef(true);
-    setError("");
-    try {
-      const slots = MAX_VISUAL_REFERENCES - visualRefs.length;
-      for (const file of Array.from(files).slice(0, slots)) {
-        await addVisualReference(project.id, file);
-      }
-      await reloadVisualRefs();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setUploadingRef(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleNoteSaved = async (id: string, note: string) => {
-    try {
-      await updateVisualReferenceNote(id, note);
-      setVisualRefs((current) => current.map((ref) => ref.id === id ? { ...ref, note } : ref));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  };
-
-  const handleRemoveRef = async (id: string) => {
-    try {
-      await removeVisualReference(project.id, id);
-      setVisualRefs((current) => current.filter((ref) => ref.id !== id));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    }
-  };
-
   return (
     <section className="flex flex-col gap-4 py-6 border-y border-white/10">
       {/* Header */}
@@ -337,111 +206,120 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
-        {/* ── Left: directions ─────────────────────────────── */}
-        <div className="flex flex-col gap-4 min-w-0">
-          {/* Controls row — wraps instead of overflowing into the visual reference column */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={userContext}
-              onChange={(event) => setUserContext(event.target.value)}
-              placeholder={directions.length ? "Add input to improve the directions…" : "Add focus or constraints before generating…"}
-              className="flex-1 min-w-40 h-9 px-3 rounded-sm bg-black/20 font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
-              style={{ border: "var(--border-default)" }}
-            />
-            <select
-              value={modelId}
-              onChange={(event) => setModelId(event.target.value)}
-              className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none shrink-0"
-              style={{ border: "var(--border-default)" }}
-              aria-label="Creative Director model"
-            >
-              {AI_MODELS.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
-              ))}
-            </select>
-            {directions.length === 0 ? (
-              <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()} className="shrink-0">
-                <Sparkles size={11} /> {generating ? "Developing…" : "Generate 3"}
-              </Button>
-            ) : (
-              <Button variant="primary" size="sm" onClick={handleImprove} disabled={improving || generating} className="shrink-0"
-                title="Rework the existing directions using your input">
-                <Wand2 size={11} /> {improving ? "Improving…" : "Improve"}
-              </Button>
-            )}
-            {directions.length > 0 && !atCap && (
-              <Button variant="ghost" size="sm" onClick={handleGenerate} disabled={generating || improving} className="shrink-0"
-                title={`Fill the remaining ${MAX_DIRECTIONS - directions.length} slot${MAX_DIRECTIONS - directions.length === 1 ? "" : "s"}`}>
-                <Sparkles size={11} /> {generating ? "Developing…" : "Fill"}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleNew}
-              disabled={atCap}
-              className="shrink-0"
-              title={atCap ? "Maximum 3 directions — delete one to add a new direction" : "Add an empty direction"}
-            >
-              <Plus size={11} /> New Direction
-            </Button>
-          </div>
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={userContext}
+          onChange={(event) => setUserContext(event.target.value)}
+          placeholder={directions.length ? "Add input to improve the directions…" : "Add focus or constraints before generating…"}
+          className="flex-1 min-w-40 h-9 px-3 rounded-sm bg-black/20 font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
+          style={{ border: "var(--border-default)" }}
+        />
+        <select
+          value={modelId}
+          onChange={(event) => setModelId(event.target.value)}
+          className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none shrink-0"
+          style={{ border: "var(--border-default)" }}
+          aria-label="Creative Director model"
+        >
+          {AI_MODELS.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
+          ))}
+        </select>
+        {directions.length === 0 ? (
+          <Button variant="primary" size="sm" onClick={handleGenerate} disabled={generating || !project.title.trim()} className="shrink-0">
+            <Sparkles size={11} /> {generating ? "Developing…" : "Generate 3"}
+          </Button>
+        ) : (
+          <Button variant="primary" size="sm" onClick={handleImprove} disabled={improving || generating} className="shrink-0"
+            title="Rework the existing directions using your input">
+            <Wand2 size={11} /> {improving ? "Improving…" : "Improve"}
+          </Button>
+        )}
+        {directions.length > 0 && !atCap && (
+          <Button variant="ghost" size="sm" onClick={handleGenerate} disabled={generating || improving} className="shrink-0"
+            title={`Fill the remaining ${MAX_DIRECTIONS - directions.length} slot${MAX_DIRECTIONS - directions.length === 1 ? "" : "s"}`}>
+            <Sparkles size={11} /> {generating ? "Developing…" : "Fill"}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleNew}
+          disabled={atCap}
+          className="shrink-0"
+          title={atCap ? "Maximum 3 directions — delete one to add a new direction" : "Add an empty direction"}
+        >
+          <Plus size={11} /> New Direction
+        </Button>
+      </div>
 
-          {error && (
-            <button
-              type="button"
-              onClick={() => navigator.clipboard?.writeText(error)}
-              className="w-full px-4 py-3 text-left rounded-sm font-mono text-[12px] leading-relaxed text-red hover:bg-red/5"
-              style={{ border: "1px solid rgba(215,25,33,0.30)" }}
-              title="Click to copy error"
-            >
-              {error}
-            </button>
-          )}
-          {notice && <span className="font-mono text-[12px] text-cyan">{notice}</span>}
+      {error && (
+        <button
+          type="button"
+          onClick={() => navigator.clipboard?.writeText(error)}
+          className="w-full px-4 py-3 text-left rounded-sm font-mono text-[12px] leading-relaxed text-red hover:bg-red/5"
+          style={{ border: "1px solid rgba(215,25,33,0.30)" }}
+          title="Click to copy error"
+        >
+          {error}
+        </button>
+      )}
+      {notice && <span className="font-mono text-[12px] text-cyan">{notice}</span>}
 
-          {directions.length === 0 ? (
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={generating}
-              className="flex flex-col items-center justify-center gap-2 min-h-40 border border-dashed border-cyan/30 hover:bg-cyan/5 transition-precise disabled:opacity-50"
-            >
-              <Sparkles size={18} className="text-cyan" />
-              <span className="font-sans text-[15px] font-semibold text-soft-white">Develop the first three directions</span>
-              <span className="font-mono text-[10px] text-readable">Uses the current project brief, goals, constraints, visual references, and review decisions.</span>
-            </button>
-          ) : (
-            <div className="grid grid-cols-1 2xl:grid-cols-3 gap-5 items-start">
-              {directions.slice(0, MAX_DIRECTIONS).map((direction) => (
-                <article key={direction.id}
-                  className={cn(
-                    "flex flex-col gap-4 p-5 rounded-card min-w-0 transition-colors duration-500",
-                    direction.is_selected && "ring-1 ring-cyan/50",
-                    appliedId === direction.id && "bg-cyan/5"
-                  )}
-                  style={{ border: direction.is_selected ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)", background: appliedId === direction.id ? "rgba(56,183,200,0.06)" : "var(--surface-card)" }}>
-                  <div className="flex items-start gap-3">
-                    <input
-                      value={direction.title}
-                      onChange={(event) => updateLocal(direction.id, "title", event.target.value)}
-                      onBlur={(event) => persistField(direction.id, "title", event.target.value)}
-                      className="flex-1 min-w-0 bg-transparent font-sans text-[17px] font-semibold text-white focus:outline-none"
-                      aria-label="Direction title"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(direction.id)}
-                      className="p-1.5 text-muted hover:text-red transition-precise"
-                      title="Delete direction"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+      {directions.length === 0 ? (
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex flex-col items-center justify-center gap-2 min-h-40 border border-dashed border-cyan/30 hover:bg-cyan/5 transition-precise disabled:opacity-50"
+        >
+          <Sparkles size={18} className="text-cyan" />
+          <span className="font-sans text-[15px] font-semibold text-soft-white">Develop the first three directions</span>
+          <span className="font-mono text-[10px] text-readable">Uses the current project brief, goals, constraints, visual references, and review decisions.</span>
+        </button>
+      ) : (
+        <div className="flex flex-wrap gap-5 items-start">
+          {directions.slice(0, MAX_DIRECTIONS).map((direction, index) => (
+            <article key={direction.id}
+              className={cn(
+                "flex flex-col gap-5 p-6 rounded-card min-w-0 flex-1 basis-85 transition-colors duration-500",
+                direction.is_selected && "ring-1 ring-cyan/50",
+                appliedId === direction.id && "bg-cyan/5"
+              )}
+              style={{ border: direction.is_selected ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)", background: appliedId === direction.id ? "rgba(56,183,200,0.06)" : "var(--surface-card)" }}>
 
-                  {DIRECTION_FIELDS.map((field) => (
+              {/* Header */}
+              <div className="flex items-start gap-3">
+                <span className="font-mono text-[10px] text-dim/50 shrink-0 pt-1.5">{String(index + 1).padStart(2, "0")}</span>
+                <input
+                  value={direction.title}
+                  onChange={(event) => updateLocal(direction.id, "title", event.target.value)}
+                  onBlur={(event) => persistField(direction.id, "title", event.target.value)}
+                  className="flex-1 min-w-0 bg-transparent font-sans text-[18px] font-semibold text-white focus:outline-none"
+                  aria-label="Direction title"
+                />
+                {direction.is_selected && (
+                  <span className="font-mono text-[8px] tracking-widest uppercase text-cyan px-2 py-1 rounded-sm border border-cyan/30 bg-cyan/8 shrink-0">
+                    Selected
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(direction.id)}
+                  className="p-1.5 text-muted hover:text-red transition-precise shrink-0"
+                  title="Delete direction"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+
+              {/* Field sections — strategy → aesthetic/voice → execution */}
+              {DIRECTION_SECTIONS.map((section, sectionIndex) => (
+                <div key={section.label} className={cn("flex flex-col gap-3", sectionIndex > 0 && "pt-5 border-t border-white/8")}>
+                  <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-cyan/60">{section.label}</span>
+                  {section.fields.map((field) => (
                     <label key={field.key} className="flex flex-col gap-1.5">
                       <span className="font-mono text-[10px] tracking-widest uppercase text-readable">{field.label}</span>
                       <textarea
@@ -449,90 +327,46 @@ export function DirectionStudio({ project, onApplied }: DirectionStudioProps) {
                         onChange={(event) => updateLocal(direction.id, field.key, event.target.value)}
                         onBlur={(event) => persistField(direction.id, field.key, event.target.value)}
                         rows={field.rows}
-                        className="w-full px-3 py-2.5 rounded-sm bg-black/20 font-mono text-[12px] leading-relaxed text-soft-white resize-y focus:outline-none"
+                        className="w-full px-3 py-2.5 rounded-sm bg-black/20 font-mono text-[12px] leading-relaxed text-soft-white resize-y focus:outline-none focus:border-cyan/45 transition-precise"
                         style={{ border: "var(--border-default)" }}
                       />
                     </label>
                   ))}
-
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Button
-                      variant={direction.is_selected ? "primary" : "ghost"}
-                      size="sm"
-                      onClick={() => handleSelect(direction.id)}
-                    >
-                      <Check size={10} /> {direction.is_selected ? "Selected" : "Select"}
-                    </Button>
-                    {direction.is_selected && (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleApply(direction)}
-                        disabled={
-                          applyingId === direction.id ||
-                          !direction.title.trim() ||
-                          DIRECTION_FIELDS.some((field) => !String(direction[field.key] ?? "").trim())
-                        }
-                      >
-                        {applyingId === direction.id ? "Applying…" : appliedId === direction.id ? "Applied ✓" : "Apply to Project"}
-                      </Button>
-                    )}
-                  </div>
-
-                  {direction.is_selected && (
-                    <StorytellingPanel project={project} direction={direction} visualRefContext={visualRefContext || undefined} />
-                  )}
-                </article>
+                </div>
               ))}
-            </div>
-          )}
-        </div>
 
-        {/* ── Right: Visual Reference board (V2 §4) ────────── */}
-        <aside className="flex flex-col gap-3 p-4 rounded-card"
-          style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-          <div className="flex items-center justify-between">
-            <span className="system-label text-soft-white">VISUAL REFERENCE</span>
-            <span className="font-mono text-[9px] text-muted">{visualRefs.length}/{MAX_VISUAL_REFERENCES}</span>
-          </div>
-          <p className="font-mono text-[10px] leading-relaxed text-readable">
-            Up to {MAX_VISUAL_REFERENCES} images that guide the directions — aesthetics, mood, clothing, product, lighting. The note tells the Director what each image is a reference for. Applied directions carry these to the Prompt Craft reference board without changing prompt text.
-          </p>
+              {/* Actionable sequence — select, then apply */}
+              <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-white/8">
+                <Button
+                  variant={direction.is_selected ? "primary" : "ghost"}
+                  size="sm"
+                  onClick={() => handleSelect(direction.id)}
+                >
+                  <Check size={10} /> {direction.is_selected ? "Selected" : "1 · Select"}
+                </Button>
+                {direction.is_selected && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleApply(direction)}
+                    disabled={
+                      applyingId === direction.id ||
+                      !direction.title.trim() ||
+                      ALL_DIRECTION_FIELDS.some((field) => !String(direction[field.key] ?? "").trim())
+                    }
+                  >
+                    {applyingId === direction.id ? "Applying…" : appliedId === direction.id ? "Applied ✓" : "2 · Apply to Project"}
+                  </Button>
+                )}
+              </div>
 
-          {visualRefs.map((refItem) => (
-            <VisualReferenceCard
-              key={refItem.id}
-              refItem={refItem}
-              onNoteSaved={handleNoteSaved}
-              onRemove={handleRemoveRef}
-              onAnalyzed={(id, analysis) =>
-                setVisualRefs((current) => current.map((r) => (r.id === id ? { ...r, analysis } : r)))}
-            />
+              {direction.is_selected && (
+                <StorytellingPanel project={project} direction={direction} visualRefContext={visualRefContext || undefined} />
+              )}
+            </article>
           ))}
-
-          {visualRefs.length < MAX_VISUAL_REFERENCES && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(event) => handleUploadFiles(event.target.files)}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadingRef}
-                className="flex items-center justify-center gap-2 min-h-12 rounded-sm border border-dashed border-cyan/30 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan hover:bg-cyan/5 transition-precise disabled:opacity-50"
-              >
-                <ImagePlus size={12} />
-                {uploadingRef ? "Uploading…" : "Add reference image"}
-              </button>
-            </>
-          )}
-        </aside>
-      </div>
+        </div>
+      )}
     </section>
   );
 }

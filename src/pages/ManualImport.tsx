@@ -19,7 +19,7 @@ import {
 } from "@/lib/importLearning";
 import { detectFormulaOrder, getFormulaForProvider, learnFormulaFromImport, missingFormulaSteps } from "@/lib/promptFormula";
 import { cn } from "@/lib/utils";
-import { fetchImageAsDataUrl, isDirectImageUrl, isMidjourneyUrl } from "@/lib/fetchImageUrl";
+import { fetchImageAsDataUrl, looksLikeThumbnailUrl } from "@/lib/fetchImageUrl";
 
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import type { Provider, Project } from "@/types";
@@ -252,7 +252,7 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     if (urlCommitTimer.current) clearTimeout(urlCommitTimer.current);
     urlCommitTimer.current = setTimeout(async () => {
       if (!url || thumbnailData) return; // don't overwrite an uploaded file
-      if (!isDirectImageUrl(url) && !isMidjourneyUrl(url)) return;
+      if (!looksLikeThumbnailUrl(url)) return;
       setFetching(true);
       try {
         const parsed = parseMJSourceUrl(url);
@@ -331,9 +331,7 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
 
       {!fetching && !previewUrl && isUrl && (
         <p className="font-mono text-[8px] text-dim/35 mt-0.5">
-          {(isDirectImageUrl(sourceUrl) || isMidjourneyUrl(sourceUrl))
-            ? "Thumbnail will be fetched automatically on save"
-            : "Upload a custom thumbnail below or leave blank"}
+          Thumbnail will be fetched automatically on save
         </p>
       )}
 
@@ -510,7 +508,7 @@ export function ManualImport() {
       let resolvedThumb: string | undefined = thumbnailData || undefined;
       if (!resolvedThumb) {
         const mj = parseMJSourceUrl(source);
-        const fetchUrl = mj?.cdnUrl ?? (isDirectImageUrl(source) || isMidjourneyUrl(source) ? source : null);
+        const fetchUrl = mj?.cdnUrl ?? (looksLikeThumbnailUrl(source) ? source : null);
         if (fetchUrl) {
           resolvedThumb = await fetchImageAsDataUrl(fetchUrl).catch(() => undefined);
         }

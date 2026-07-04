@@ -84,23 +84,20 @@ class ImageDecodeError extends Error {
   }
 }
 
-/** Returns true if the URL looks like a direct image URL */
-export function isDirectImageUrl(url: string): boolean {
-  if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
-  return /\.(png|jpe?g|webp|gif|avif|bmp|tiff?)(\?.*)?$/i.test(url);
-}
-
-/** Returns true if this looks like a Midjourney CDN or job URL */
-export function isMidjourneyUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    return u.hostname.endsWith("midjourney.com") || u.hostname.endsWith("discordapp.com");
-  } catch {
-    return false;
-  }
-}
-
-/** Returns true if a URL is worth attempting to fetch as a thumbnail */
+/**
+ * Returns true if a URL is worth attempting to fetch as a thumbnail.
+ *
+ * Deliberately permissive: most real-world CDN links (Nano Banana, Seedance,
+ * Kling, Runway, S3/CDN presigned URLs, etc.) don't end in a recognizable
+ * image extension or live on a known domain, so gating the attempt on either
+ * of those silently skipped the fetch for the large majority of source URLs
+ * — the prompt would save with source_url set but thumbnail_data forever
+ * empty, showing "Thumbnail failed — retry" in the Library with no failed
+ * fetch ever having happened. fetchImageAsDataUrl's own tiered fallback plus
+ * Rust-side image decoding already reject anything that isn't really an
+ * image, so the only cost of trying every http(s) URL is one wasted request
+ * on the rare non-image link.
+ */
 export function looksLikeThumbnailUrl(url: string): boolean {
-  return isDirectImageUrl(url) || isMidjourneyUrl(url);
+  return /^https?:\/\//i.test(url);
 }

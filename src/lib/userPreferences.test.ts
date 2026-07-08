@@ -3,6 +3,7 @@ import {
   DEFAULT_PREFERENCES,
   getPreferences,
   resetPreferences,
+  setDefaultAiModelId,
   setDefaultAspectRatio,
   setDefaultCategory,
   setDefaultProvider,
@@ -58,10 +59,20 @@ describe("userPreferences", () => {
     setDefaultProvider("flux");
     setDefaultAspectRatio("9:16");
     setDefaultCategory("fashion");
+    setDefaultAiModelId("deepseek-chat");
     resetPreferences();
     const prefs = getPreferences();
     expect(prefs.defaultProvider).toBe(DEFAULT_PREFERENCES.defaultProvider);
     expect(prefs.defaultAspectRatio).toBe("");
     expect(prefs.defaultCategory).toBe("");
+    expect(prefs.defaultAiModelId).toBe("");
+  });
+
+  it("persists the standard AI model preference", () => {
+    expect(getPreferences().defaultAiModelId).toBe("");
+    setDefaultAiModelId("deepseek-chat");
+    expect(getPreferences().defaultAiModelId).toBe("deepseek-chat");
+    setDefaultAiModelId("");
+    expect(getPreferences().defaultAiModelId).toBe("");
   });
 });

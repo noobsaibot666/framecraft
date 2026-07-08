@@ -57,8 +57,8 @@ export async function analyzeBrief(content: BriefContent, model: AIModel): Promi
   const contentValidation = validateBriefContent(content);
   if (!contentValidation.valid) throw new Error(contentValidation.message);
 
-  if (content.type === "pdf" && model.provider === "openai") {
-    throw new Error("PDF upload requires an Anthropic model. Paste the brief as text to use OpenAI.");
+  if (content.type === "pdf" && model.provider !== "anthropic") {
+    throw new Error(`PDF upload requires an Anthropic model. Paste the brief as text to use ${model.provider === "openai" ? "OpenAI" : "DeepSeek"}.`);
   }
 
   const apiKey = getApiKey(model.provider);
@@ -96,9 +96,11 @@ export async function analyzeBrief(content: BriefContent, model: AIModel): Promi
     rawText = data.content.find((c) => c.type === "text")?.text ?? "";
   } else {
     const text = content.type === "text" ? content.text : "";
+    // OpenAI and DeepSeek both expose an OpenAI-compatible chat completions endpoint.
+    const baseUrl = model.provider === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
     const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
       model.provider,
-      "https://api.openai.com/v1/chat/completions",
+      baseUrl,
       {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },

@@ -128,7 +128,7 @@ export async function generateComparisonDecision(opts: {
   if (!isTauri) return EMPTY_DECISION;
   if (opts.slots.length < 2) throw new Error("Fill at least two comparison slots first.");
   const model = pickAvailableModel();
-  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
+  if (!model) throw new Error("Add an OpenAI, Anthropic, or DeepSeek API key in Settings.");
 
   const raw = await chatComplete(model, {
     system: DECISION_SYSTEM,

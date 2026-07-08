@@ -4,6 +4,7 @@ import type { AIModel } from "./aiConfig";
 
 const anthropicModel: AIModel = { id: "claude-test", label: "Claude Test", provider: "anthropic", tier: "fast" };
 const openAiModel: AIModel = { id: "gpt-test", label: "GPT Test", provider: "openai", tier: "fast" };
+const deepseekModel: AIModel = { id: "deepseek-test", label: "DeepSeek Test", provider: "deepseek", tier: "fast" };
 
 const briefPayload = {
   summary: "Launch a premium product campaign.",
@@ -85,5 +86,26 @@ describe("analyzeBrief", () => {
 
     expect(result.summary).toBe("Launch a premium product campaign.");
     expect(result.prompts[0].title).toBe("Premium Hero");
+  });
+
+  it("rejects DeepSeek PDF analysis before making a provider request", async () => {
+    localStorage.setItem("fc_deepseek_key", "sk-test");
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+
+    await expect(analyzeBrief({ type: "pdf", base64: "abc" }, deepseekModel)).rejects.toThrow(
+      "PDF upload requires an Anthropic model"
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("routes DeepSeek text analysis to the DeepSeek API, not OpenAI", async () => {
+    localStorage.setItem("fc_deepseek_key", "sk-test");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(briefPayload) } }] }), { status: 200 })
+    );
+
+    await analyzeBrief({ type: "text", text: "Brief text" }, deepseekModel);
+
+    expect(fetchMock).toHaveBeenCalledWith("https://api.deepseek.com/chat/completions", expect.anything());
   });
 });

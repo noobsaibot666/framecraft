@@ -4,7 +4,7 @@ import { FileText, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Upload, X,
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getApiKey, pickAvailableModel } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import type { BriefResult, GeneratedPrompt, SuggestedRecipe } from "@/lib/aiResultParsers";
 import { analyzeBrief, type BriefContent } from "@/lib/analyzeBrief";
@@ -97,7 +97,7 @@ export function BriefAnalyzer() {
   const navigate = useNavigate();
   const { create } = usePromptStore();
 
-  const [selectedModel, setSelectedModel] = useState<AIModel>(AI_MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState<AIModel>(() => pickAvailableModel() ?? AI_MODELS[0]);
   const apiKey = getApiKey(selectedModel.provider);
 
   // Input state
@@ -300,7 +300,7 @@ export function BriefAnalyzer() {
           <div className="flex flex-col gap-1.5">
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">MODEL</span>
             <div className="flex flex-col gap-2">
-              {(["anthropic", "openai"] as const).map((provider) => (
+              {(["anthropic", "openai", "deepseek"] as const).map((provider) => (
                 <div key={provider} className="flex flex-col gap-1">
                   <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{provider}</span>
                   {AI_MODELS.filter((m) => m.provider === provider).map((m) => (
@@ -317,6 +317,11 @@ export function BriefAnalyzer() {
                 </div>
               ))}
             </div>
+            {attachedFile && selectedModel.provider !== "anthropic" && (
+              <span className="font-mono text-[10px] text-amber/80 leading-relaxed">
+                PDF upload needs an Anthropic model — switch above, or paste the brief as text instead.
+              </span>
+            )}
           </div>
 
           <Button variant="primary" size="md" onClick={handleAnalyze}

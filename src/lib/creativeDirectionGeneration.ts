@@ -207,9 +207,11 @@ export async function callDirectionModel(model: AIModel, prompt: string): Promis
     return response.content.find((item) => item.type === "text")?.text ?? "";
   }
 
+  // OpenAI and DeepSeek both expose an OpenAI-compatible chat completions endpoint.
+  const baseUrl = model.provider === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
   const response = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(
     model.provider,
-    "https://api.openai.com/v1/chat/completions",
+    baseUrl,
     {
       method: "POST",
       headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },

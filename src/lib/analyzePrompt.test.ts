@@ -22,7 +22,7 @@ describe("validatePromptForAnalysis", () => {
     const v = validatePromptForAnalysis("a".repeat(25));
     // In test env there's no localStorage → no model available → invalid
     expect(v.valid).toBe(false);
-    expect(v.message).toContain("OpenAI or Anthropic");
+    expect(v.message).toContain("OpenAI, Anthropic, or DeepSeek");
   });
 });
 

@@ -19,7 +19,7 @@ import {
 } from "@/lib/assistant";
 import { createPrompt } from "@/lib/db";
 import { addPromptToProject, updateProject } from "@/lib/projects";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getApiKey, pickAvailableModel } from "@/lib/aiConfig";
 import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { cn } from "@/lib/utils";
 import type {
@@ -251,10 +251,7 @@ export function ProjectAssistant() {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState("");
-  const [modelId, setModelId] = useState(() => {
-    const first = AI_MODELS.find((m) => !!getApiKey(m.provider));
-    return first?.id ?? AI_MODELS[0].id;
-  });
+  const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/Button";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
 import { exportPromptTransfer, parsePromptTransfer, importPromptTransfer } from "@/lib/promptTransfer";
-import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_KEY_DEEPSEEK, validateApiKey, type AIProvider } from "@/lib/aiConfig";
+import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_KEY_DEEPSEEK, validateApiKey, getConnectedModels, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import {
   backupActiveLibrary,
@@ -57,6 +57,7 @@ import {
   setDefaultProvider,
   setAutoAnalyzeDraft,
   setLibraryPageSize,
+  setDefaultAiModelId,
   type UserPreferences,
 } from "@/lib/userPreferences";
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
@@ -118,9 +119,10 @@ function CopyableError({ message }: { message: string }) {
 
 // ─── API Key Sub-component ────────────────────────────────────
 
-function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
+function ApiKeyField({ label, provider, storageKey, placeholder, mask, onSaved }: {
   label: string; provider: AIProvider; storageKey: string; placeholder: string;
   mask: (v: string) => string;
+  onSaved?: () => void;
 }) {
   const [value, setValue] = useState(() => localStorage.getItem(storageKey) ?? "");
   const [show, setShow] = useState(false);
@@ -134,6 +136,7 @@ function ApiKeyField({ label, provider, storageKey, placeholder, mask }: {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     toast.success(`${label} saved`);
+    onSaved?.();
   };
 
   return (
@@ -198,7 +201,9 @@ export function Settings() {
   const [orphanScan, setOrphanScan] = useState<OrphanScanResult | null>(null);
   const [orphanBusy, setOrphanBusy] = useState(false);
   const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [keysVersion, setKeysVersion] = useState(0);
   const navigate = useNavigate();
+  const connectedModels = useMemo(() => getConnectedModels(), [keysVersion]);
 
   const canRepairLibraryPackage =
     libraryState?.selection.mode === "portable" &&
@@ -435,6 +440,7 @@ export function Settings() {
     setDefaultCategory(next.defaultCategory);
     setAutoAnalyzeDraft(next.autoAnalyzeDraft);
     setLibraryPageSize(next.libraryPageSize);
+    setDefaultAiModelId(next.defaultAiModelId);
     setPrefs(next);
     setPrefsSaved(true);
     setTimeout(() => setPrefsSaved(false), 2000);
@@ -932,6 +938,7 @@ export function Settings() {
               storageKey={AI_KEY_ANTHROPIC}
               placeholder="sk-ant-api03-…"
               mask={(v) => v.length > 8 ? `sk-ant-${"·".repeat(14)}${v.slice(-4)}` : v}
+              onSaved={() => setKeysVersion((v) => v + 1)}
             />
             <ApiKeyField
               label="OpenAI"
@@ -939,6 +946,7 @@ export function Settings() {
               storageKey={AI_KEY_OPENAI}
               placeholder="sk-proj-…"
               mask={(v) => v.length > 8 ? `sk-proj-${"·".repeat(12)}${v.slice(-4)}` : v}
+              onSaved={() => setKeysVersion((v) => v + 1)}
             />
             <ApiKeyField
               label="DeepSeek"
@@ -946,8 +954,43 @@ export function Settings() {
               storageKey={AI_KEY_DEEPSEEK}
               placeholder="sk-…"
               mask={(v) => v.length > 8 ? `sk-${"·".repeat(14)}${v.slice(-4)}` : v}
+              onSaved={() => setKeysVersion((v) => v + 1)}
             />
 
+            <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "var(--border-dim)", paddingTop: "1.25rem" }}>
+              <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Standard Model</span>
+              <p className="font-mono text-[11px] text-dim/60 leading-relaxed -mt-0.5">
+                The model every AI feature uses by default. Only models whose key is saved above are listed —
+                add a key and it shows up here automatically.
+              </p>
+              {connectedModels.length === 0 ? (
+                <div className="flex items-center gap-2 h-10 px-3 rounded-sm font-mono text-[12px] text-dim/50"
+                  style={{ border: "1px dashed rgba(255,255,255,0.16)" }}>
+                  <AlertTriangle size={11} className="text-amber/70" />
+                  Add an API key above to choose a standard model.
+                </div>
+              ) : (
+                <select
+                  value={connectedModels.some((m) => m.id === prefs.defaultAiModelId) ? prefs.defaultAiModelId : ""}
+                  onChange={(e) => savePrefs({ ...prefs, defaultAiModelId: e.target.value })}
+                  className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none w-full max-w-sm"
+                  style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+                >
+                  <option value="">Auto (first connected model)</option>
+                  {(["anthropic", "openai", "deepseek"] as const).map((provider) => {
+                    const models = connectedModels.filter((m) => m.provider === provider);
+                    if (!models.length) return null;
+                    return (
+                      <optgroup key={provider} label={provider.toUpperCase()}>
+                        {models.map((m) => (
+                          <option key={m.id} value={m.id}>{m.label} ({m.tier})</option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                </select>
+              )}
+            </div>
           </div>
         </Section>
 

@@ -1,3 +1,5 @@
+import { getPreferences } from "./userPreferences";
+
 export const AI_KEY_ANTHROPIC = "fc_anthropic_key";
 export const AI_KEY_OPENAI    = "fc_openai_key";
 export const AI_KEY_DEEPSEEK  = "fc_deepseek_key";
@@ -66,12 +68,29 @@ export function getConnectedModels(): AIModel[] {
   return AI_MODELS.filter((m) => validateApiKey(m.provider, getApiKey(m.provider)).valid);
 }
 
+function isModelConnected(model: AIModel): boolean {
+  return validateApiKey(model.provider, getApiKey(model.provider)).valid;
+}
+
+/** The user's chosen "standard model" from Settings, if set and still connected. */
+function preferredConnectedModel(): AIModel | undefined {
+  const id = getPreferences().defaultAiModelId;
+  if (!id) return undefined;
+  const model = AI_MODELS.find((m) => m.id === id);
+  return model && isModelConnected(model) ? model : undefined;
+}
+
 /**
- * Auto-select a model when the caller hasn't chosen one. Prefers the cheapest
- * connected OpenAI model (per default-model policy), falling back to Anthropic,
- * then DeepSeek. Returns undefined if nothing is configured.
+ * Auto-select a model when the caller hasn't chosen one. Honors the user's
+ * Settings > AI Integration > Standard Model preference when it's set and its
+ * key is still connected; otherwise prefers the cheapest connected OpenAI
+ * model (per default-model policy), falling back to Anthropic, then DeepSeek.
+ * Returns undefined if nothing is configured.
  */
 export function pickAvailableModel(): AIModel | undefined {
+  const preferred = preferredConnectedModel();
+  if (preferred) return preferred;
+
   for (const provider of ["openai", "anthropic", "deepseek"] as const) {
     if (validateApiKey(provider, getApiKey(provider)).valid) {
       return AI_MODELS.find((m) => m.provider === provider && m.tier === "fast")
@@ -83,6 +102,9 @@ export function pickAvailableModel(): AIModel | undefined {
 
 /** Like pickAvailableModel, but only providers whose models accept image input (DeepSeek has no vision endpoint). */
 export function pickVisionModel(): AIModel | undefined {
+  const preferred = preferredConnectedModel();
+  if (preferred && preferred.provider !== "deepseek") return preferred;
+
   for (const provider of ["openai", "anthropic"] as const) {
     if (validateApiKey(provider, getApiKey(provider)).valid) {
       return AI_MODELS.find((m) => m.provider === provider && m.tier === "fast")

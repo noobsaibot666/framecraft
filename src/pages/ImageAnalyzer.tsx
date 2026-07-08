@@ -5,7 +5,7 @@ import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, Sh
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getApiKey, pickVisionModel } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
@@ -83,7 +83,7 @@ export function ImageAnalyzer() {
   const navigate = useNavigate();
   const { create } = usePromptStore();
 
-  const [selectedModel, setSelectedModel] = useState<AIModel>(AI_MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState<AIModel>(() => pickVisionModel() ?? AI_MODELS[0]);
   const apiKey = getApiKey(selectedModel.provider);
 
   const [imageFile, setImageFile] = useState<File | null>(null);

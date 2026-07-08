@@ -277,8 +277,9 @@ export async function askAssistant(
     return data.content.find((c) => c.type === "text")?.text ?? "";
   }
 
-  // OpenAI
-  const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(model.provider, "https://api.openai.com/v1/chat/completions", {
+  // OpenAI and DeepSeek both expose an OpenAI-compatible chat completions endpoint.
+  const baseUrl = model.provider === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
+  const data = await fetchProviderJson<{ choices: { message: { content: string } }[] }>(model.provider, baseUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

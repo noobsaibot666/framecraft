@@ -3,6 +3,7 @@ const KEY_ASPECT_RATIO = "fc_pref_default_aspect_ratio";
 const KEY_CATEGORY = "fc_pref_default_category";
 const KEY_AUTO_ANALYZE = "fc_pref_auto_analyze";
 const KEY_LIBRARY_PAGE_SIZE = "fc_pref_library_page_size";
+const KEY_AI_MODEL = "fc_pref_default_ai_model";
 
 export const PREF_ASPECT_RATIOS = [
   { value: "", label: "No default" },
@@ -42,6 +43,10 @@ export interface UserPreferences {
   defaultCategory: string;
   autoAnalyzeDraft: boolean;
   libraryPageSize: number;
+  /** AIModel id (see aiConfig.ts) — the standard AI model used app-wide whenever a
+   * feature doesn't have its own explicit model picker. Empty string means "auto"
+   * (pick the first connected provider). */
+  defaultAiModelId: string;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -50,6 +55,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultCategory: "",
   autoAnalyzeDraft: false,
   libraryPageSize: 50,
+  defaultAiModelId: "",
 };
 
 function safeGet(key: string): string {
@@ -72,6 +78,7 @@ export function getPreferences(): UserPreferences {
     defaultCategory: safeGet(KEY_CATEGORY),
     autoAnalyzeDraft: safeGet(KEY_AUTO_ANALYZE) === "true",
     libraryPageSize: validSizes.includes(pageSizeRaw) ? pageSizeRaw : DEFAULT_PREFERENCES.libraryPageSize,
+    defaultAiModelId: safeGet(KEY_AI_MODEL),
   };
 }
 
@@ -95,10 +102,15 @@ export function setLibraryPageSize(value: number): void {
   safeSet(KEY_LIBRARY_PAGE_SIZE, String(value));
 }
 
+export function setDefaultAiModelId(value: string): void {
+  safeSet(KEY_AI_MODEL, value);
+}
+
 export function resetPreferences(): void {
   safeSet(KEY_PROVIDER, "");
   safeSet(KEY_ASPECT_RATIO, "");
   safeSet(KEY_CATEGORY, "");
   safeSet(KEY_AUTO_ANALYZE, "");
   safeSet(KEY_LIBRARY_PAGE_SIZE, "");
+  safeSet(KEY_AI_MODEL, "");
 }

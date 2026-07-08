@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendProjectNote,
+  askAssistant,
   generateSuggestions,
   serializePackToSystem,
   createThread,
@@ -10,6 +11,7 @@ import {
   addMessage,
   getMessages,
 } from "./assistant";
+import { AI_KEY_DEEPSEEK } from "./aiConfig";
 import type { ProjectContextPack } from "@/types";
 
 // isTauri is false in Vitest — all calls use in-memory stores
@@ -209,5 +211,39 @@ describe("assistant message CRUD", () => {
 
   it("getMessages returns empty for unknown thread", async () => {
     expect(await getMessages("nonexistent-thread-xyz")).toHaveLength(0);
+  });
+});
+
+// ─── Provider routing ─────────────────────────────────────────
+
+describe("askAssistant provider routing", () => {
+  const store = new Map<string, string>();
+
+  beforeEach(() => {
+    store.clear();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+        removeItem: (key: string) => store.delete(key),
+        clear: () => store.clear(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("routes DeepSeek models to the DeepSeek API, not OpenAI", async () => {
+    localStorage.setItem(AI_KEY_DEEPSEEK, "sk-test-deepseek-key");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 })
+    );
+
+    await askAssistant(makePack(), [{ role: "user", content: "hi" }], "deepseek-chat");
+
+    expect(fetchMock).toHaveBeenCalledWith("https://api.deepseek.com/chat/completions", expect.anything());
   });
 });

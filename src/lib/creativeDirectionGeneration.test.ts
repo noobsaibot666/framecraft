@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildDirectionProjectFields,
+  callDirectionModel,
   parseCreativeDirections,
 } from "./creativeDirectionGeneration";
+import { AI_KEY_DEEPSEEK, AI_MODELS } from "./aiConfig";
 import type { CreativeDirection } from "@/types";
 
 const validDirection = {
@@ -66,5 +68,38 @@ describe("buildDirectionProjectFields", () => {
     expect(fields.creative_goals).toContain("Reveal quality through tactile details.");
     expect(fields.creative_goals).toContain("Built with intention.");
     expect(Object.keys(fields)).toEqual(["visual_direction", "creative_goals", "constraints"]);
+  });
+});
+
+describe("callDirectionModel provider routing", () => {
+  const store = new Map<string, string>();
+
+  beforeEach(() => {
+    store.clear();
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => store.set(key, value),
+        removeItem: (key: string) => store.delete(key),
+        clear: () => store.clear(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("routes DeepSeek models to the DeepSeek API, not OpenAI", async () => {
+    localStorage.setItem(AI_KEY_DEEPSEEK, "sk-test-deepseek-key");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 })
+    );
+
+    const deepseekModel = AI_MODELS.find((m) => m.provider === "deepseek")!;
+    await callDirectionModel(deepseekModel, "prompt");
+
+    expect(fetchMock).toHaveBeenCalledWith("https://api.deepseek.com/chat/completions", expect.anything());
   });
 });

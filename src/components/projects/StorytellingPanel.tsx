@@ -15,7 +15,7 @@ import {
   saveStoryboard,
   toggleShotApproval,
 } from "@/lib/storytelling";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
 import { cn } from "@/lib/utils";
 import type { CreativeDirection, DirectionStoryboard, Project } from "@/types";
 
@@ -33,7 +33,7 @@ export function StorytellingPanel({ project, direction, visualRefContext }: Stor
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
 
-  const model = AI_MODELS.find((candidate) => Boolean(getApiKey(candidate.provider))) ?? AI_MODELS[0];
+  const model = pickAvailableModel() ?? AI_MODELS[0];
 
   const reload = useCallback(async () => {
     setShots(await getStoryboard(direction.id));

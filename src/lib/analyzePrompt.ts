@@ -94,7 +94,7 @@ export function validatePromptForAnalysis(promptText: string): { valid: boolean;
   }
   const model = typeof localStorage !== "undefined" ? pickAvailableModel() : undefined;
   if (!model) {
-    return { valid: false, message: "Add an OpenAI or Anthropic API key in Settings to use Prompt Advisor." };
+    return { valid: false, message: "Add an OpenAI, Anthropic, or DeepSeek API key in Settings to use Prompt Advisor." };
   }
   return { valid: true };
 }
@@ -135,7 +135,7 @@ export async function generatePromptVariations(opts: { promptText: string }): Pr
   if (!isTauri) return EMPTY_VARIATIONS;
 
   const model = pickAvailableModel();
-  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
+  if (!model) throw new Error("Add an OpenAI, Anthropic, or DeepSeek API key in Settings.");
 
   const rawText = await chatComplete(model, {
     system: VARIATIONS_SYSTEM,
@@ -167,7 +167,7 @@ export async function generateTagSuggestions(opts: {
   if (!isTauri) return { tags: [] };
 
   const model = pickAvailableModel();
-  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
+  if (!model) throw new Error("Add an OpenAI, Anthropic, or DeepSeek API key in Settings.");
 
   const context = opts.existingTags?.length
     ? `Existing tags (do not repeat): ${opts.existingTags.join(", ")}\n`
@@ -207,7 +207,7 @@ export async function analyzePromptDraft(opts: {
   if (!isTauri) return EMPTY_ADVICE;
 
   const model = pickAvailableModel();
-  if (!model) throw new Error("Add an OpenAI or Anthropic API key in Settings.");
+  if (!model) throw new Error("Add an OpenAI, Anthropic, or DeepSeek API key in Settings.");
 
   const systemPrompt = buildSystemPrompt(opts.brief, opts.provenTokens, opts.formulaContext, opts.consistencyFactors);
 

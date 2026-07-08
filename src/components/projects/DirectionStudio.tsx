@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getConnectedModels, pickAvailableModel } from "@/lib/aiConfig";
 import { getSessions } from "@/lib/comparisons";
 import {
   createCreativeDirection,
@@ -60,9 +60,7 @@ const ALL_DIRECTION_FIELDS = DIRECTION_SECTIONS.flatMap((section) => section.fie
 
 export function DirectionStudio({ project, onApplied, visualRefContext = "" }: DirectionStudioProps) {
   const [directions, setDirections] = useState<CreativeDirection[]>([]);
-  const [modelId, setModelId] = useState(() => {
-    return AI_MODELS.find((model) => Boolean(getApiKey(model.provider)))?.id ?? AI_MODELS[0].id;
-  });
+  const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
   const [generating, setGenerating] = useState(false);
   const [improving, setImproving] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -223,7 +221,7 @@ export function DirectionStudio({ project, onApplied, visualRefContext = "" }: D
           style={{ border: "var(--border-default)" }}
           aria-label="Creative Director model"
         >
-          {AI_MODELS.map((candidate) => (
+          {getConnectedModels().map((candidate) => (
             <option key={candidate.id} value={candidate.id}>{candidate.label}</option>
           ))}
         </select>

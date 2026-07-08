@@ -44,8 +44,15 @@ function rowToReference(row: Record<string, unknown>): Reference {
   };
 }
 
+// file_data (the full-resolution original) and thumbnail_data (still a
+// sizable inline base64 blob) are deliberately excluded — selecting both for
+// every row on every library load/filter/search keystroke is what made large
+// reference libraries slow and memory-hungry, mirroring the same bug fixed
+// for prompts (see PROMPT_SUMMARY_COLUMNS in db.ts). The Reference grid fetches
+// them separately, batched and only for the cards actually on screen — see
+// getReferenceThumbnailMap below.
 export const REFERENCE_SUMMARY_COLUMNS = [
-  "id", "title", "kind", "file_data", "thumbnail_data", "provider", "category",
+  "id", "title", "kind", "provider", "category",
   "tags", "rating", "best_use", "risk_notes", "created_at", "updated_at",
 ].join(", ");
 
@@ -192,6 +199,37 @@ export async function getReferenceSummaries(filters?: ReferenceFilters): Promise
     `SELECT ${REFERENCE_SUMMARY_COLUMNS} FROM "references" ${where} ORDER BY created_at DESC`, values
   ) as Record<string, unknown>[];
   return rows.map(rowToReference);
+}
+
+/**
+ * Batched thumbnail lookup for the Reference grid. Call with only the ids of
+ * cards actually on screen — this must never be called with "all references",
+ * or it reintroduces the same full-library blob load REFERENCE_SUMMARY_COLUMNS
+ * was trimmed to avoid. Mirrors the display fallback (thumbnail_data, else
+ * the full-res file_data) so cards render exactly as before.
+ */
+export async function getReferenceThumbnailMap(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  if (!isTauri) {
+    const idSet = new Set(ids);
+    return Object.fromEntries(
+      _devStore
+        .filter((r) => idSet.has(r.id) && (r.thumbnail_data || r.file_data))
+        .map((r) => [r.id, (r.thumbnail_data ?? r.file_data) as string])
+    );
+  }
+  const db = await getDb();
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await db.select(
+    `SELECT id, thumbnail_data, file_data FROM "references" WHERE id IN (${placeholders})`,
+    ids
+  ) as Record<string, unknown>[];
+  const map: Record<string, string> = {};
+  for (const row of rows) {
+    const thumb = (row.thumbnail_data ?? row.file_data) as string | undefined;
+    if (thumb) map[row.id as string] = thumb;
+  }
+  return map;
 }
 
 export async function getReferenceById(id: string): Promise<Reference | null> {

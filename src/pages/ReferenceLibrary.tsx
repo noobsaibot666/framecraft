@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Star, Trash2, ChevronDown, Image, AlertTriangle, ExternalLink, Upload, Trophy } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { getReferenceSummaries, searchReferenceSummaries, deleteReference } from "@/lib/references";
+import { getReferenceSummaries, searchReferenceSummaries, getReferenceThumbnailMap, deleteReference } from "@/lib/references";
 import { getHighImpactReferences } from "@/lib/referenceImpact";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { importReferenceImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
+import { getPreferences } from "@/lib/userPreferences";
 import { cn } from "@/lib/utils";
 import type { Reference, ReferenceKind, ReferenceFilters } from "@/types";
 
@@ -82,13 +83,16 @@ function Thumbnail({ src, title }: { src?: string; title: string }) {
   return (
     <img src={resolved.src} alt={title}
       onError={resolved.onError}
+      loading="lazy"
+      decoding="async"
       className="w-full aspect-[4/3] object-cover rounded-sm"
       style={{ background: "rgba(255,255,255,0.04)" }} />
   );
 }
 
-function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
+function ReferenceCard({ ref: r, thumb, wins, onDelete, onClick }: {
   ref: Reference;
+  thumb?: string;
   wins: number;
   onDelete: (id: string) => void;
   onClick: (id: string) => void;
@@ -109,7 +113,7 @@ function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
     >
       {/* Thumbnail */}
       <div className="relative">
-        <Thumbnail src={r.thumbnail_data ?? r.file_data} title={r.title} />
+        <Thumbnail src={thumb} title={r.title} />
         {/* Kind badge */}
         <span className="absolute top-2 left-2 font-mono text-[9px] tracking-widest uppercase px-2 py-1 rounded-sm"
           style={{ background: "rgba(0,0,0,0.68)", color: "rgba(244,244,240,0.9)", backdropFilter: "blur(4px)" }}>
@@ -190,6 +194,7 @@ function ReferenceCard({ ref: r, wins, onDelete, onClick }: {
 
 export function ReferenceLibrary() {
   const navigate = useNavigate();
+  const PAGE_SIZE = getPreferences().libraryPageSize;
   const [refs, setRefs] = useState<Reference[]>([]);
   const [loading, setLoading] = useState(true);
   const [impactMap, setImpactMap] = useState<Map<string, number>>(new Map());
@@ -199,6 +204,11 @@ export function ReferenceLibrary() {
   const [dropping, setDropping] = useState(false);
   const [dropImporting, setDropImporting] = useState(false);
   const [dropError, setDropError] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  // Thumbnail (thumbnail_data, falling back to file_data) for cards actually
+  // on screen — fetched in small batches, never for the whole library (see
+  // getReferenceThumbnailMap).
+  const [thumbMap, setThumbMap] = useState<Record<string, string>>({});
   const dropRef = useRef<HTMLDivElement>(null);
 
   const buildFilters = (): ReferenceFilters => {
@@ -210,16 +220,17 @@ export function ReferenceLibrary() {
     return f;
   };
 
-  const load = async () => {
+  const load = async (q: string) => {
     setLoading(true);
     try {
       const filters = buildFilters();
-      const results = search.trim()
-        ? await searchReferenceSummaries(search.trim(), filters)
+      const results = q.trim()
+        ? await searchReferenceSummaries(q.trim(), filters)
         : await getReferenceSummaries(filters);
 
       const filtered = ratingFilter === "unrated" ? results.filter((r) => r.rating === 0) : results;
       setRefs(filtered);
+      setVisibleCount(PAGE_SIZE);
 
       getHighImpactReferences(500).then((scores) => {
         setImpactMap(new Map(scores.map((s) => [s.id, s.result_win_count + s.project_winner_count])));
@@ -229,7 +240,28 @@ export function ReferenceLibrary() {
     }
   };
 
-  useEffect(() => { load(); }, [search, kindFilter, ratingFilter]);
+  // Debounced — search used to fire a full unindexed scan on every keystroke.
+  useEffect(() => {
+    const timer = window.setTimeout(() => load(search), search ? 300 : 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, kindFilter, ratingFilter]);
+
+  const visibleRefs = refs.slice(0, visibleCount);
+  const hasMoreVisible = visibleCount < refs.length;
+
+  const missingThumbIds = useMemo(
+    () => visibleRefs.filter((r) => !thumbMap[r.id]).map((r) => r.id),
+    [visibleRefs, thumbMap]
+  );
+  const missingThumbKey = missingThumbIds.join(",");
+  useEffect(() => {
+    if (!missingThumbIds.length) return;
+    getReferenceThumbnailMap(missingThumbIds).then((map) => {
+      if (Object.keys(map).length) setThumbMap((prev) => ({ ...prev, ...map }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingThumbKey]);
 
   const handleDelete = async (id: string) => {
     await deleteReference(id);
@@ -257,7 +289,7 @@ export function ReferenceLibrary() {
           },
         });
         if (!result.queued) navigate(`/references/${result.id}`);
-        else await load();
+        else await load(search);
         return; // navigate to first dropped file for confirmation
       }
     } catch (error) {
@@ -334,16 +366,24 @@ export function ReferenceLibrary() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-          {refs.map((r) => (
-            <ReferenceCard
-              key={r.id}
-              ref={r}
-              wins={impactMap.get(r.id) ?? 0}
-              onDelete={handleDelete}
-              onClick={(id) => navigate(`/references/${id}`)}
-            />
-          ))}
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+            {visibleRefs.map((r) => (
+              <ReferenceCard
+                key={r.id}
+                ref={r}
+                thumb={thumbMap[r.id]}
+                wins={impactMap.get(r.id) ?? 0}
+                onDelete={handleDelete}
+                onClick={(id) => navigate(`/references/${id}`)}
+              />
+            ))}
+          </div>
+          {hasMoreVisible && (
+            <Button variant="ghost" size="sm" onClick={() => setVisibleCount((c) => c + PAGE_SIZE)} className="self-center">
+              Load more ({refs.length - visibleCount} remaining)
+            </Button>
+          )}
         </div>
       )}
     </PageContainer>

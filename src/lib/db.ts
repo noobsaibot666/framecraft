@@ -84,10 +84,17 @@ function rowToPrompt(row: Record<string, unknown>): Prompt {
   };
 }
 
+// thumbnail_data (an inline base64 image blob, tens of KB per row) is
+// deliberately excluded — it used to be pulled for every single prompt on
+// every library load/search keystroke regardless of how many were actually
+// visible, which is what made large libraries slow and memory-hungry. The
+// Library grid fetches it separately, batched and only for the prompts
+// actually on screen that lack a result-based cover (see
+// getPromptThumbnailFallbackMap below).
 export const PROMPT_SUMMARY_COLUMNS = [
   "id", "title", "description", "provider", "category", "prompt_text", "aspect_ratio",
   "tags", "rating", "ai_look_risk", "is_recipe", "is_winner", "is_failed",
-  "parent_id", "thumbnail_data", "source_url", "thumbnail_result_id", "variant_label", "created_at", "updated_at",
+  "parent_id", "source_url", "thumbnail_result_id", "variant_label", "created_at", "updated_at",
 ].join(", ");
 
 // ─── Public API ──────────────────────────────────────────────
@@ -149,6 +156,32 @@ export async function getPromptSummaries(): Promise<Prompt[]> {
   const db = await getDb();
   const rows = await db.select(`SELECT ${PROMPT_SUMMARY_COLUMNS} FROM prompts ORDER BY created_at DESC`) as Record<string, unknown>[];
   return rows.map(rowToPrompt);
+}
+
+/**
+ * Batched fallback-thumbnail lookup for the Library grid. Call with only the
+ * ids of prompts actually on screen that don't already have a result-based
+ * cover (getResultCoverMap) — this must never be called with "all prompts",
+ * or it reintroduces the same full-library blob load PROMPT_SUMMARY_COLUMNS
+ * was trimmed to avoid.
+ */
+export async function getPromptThumbnailFallbackMap(ids: string[]): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  if (!isTauri) {
+    const idSet = new Set(ids);
+    return Object.fromEntries(
+      loadMemStore().prompts
+        .filter((p) => idSet.has(p.id) && p.thumbnail_data)
+        .map((p) => [p.id, p.thumbnail_data as string])
+    );
+  }
+  const db = await getDb();
+  const placeholders = ids.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await db.select(
+    `SELECT id, thumbnail_data FROM prompts WHERE id IN (${placeholders}) AND thumbnail_data IS NOT NULL AND thumbnail_data != ''`,
+    ids
+  ) as Record<string, unknown>[];
+  return Object.fromEntries(rows.map((r) => [r.id as string, r.thumbnail_data as string]));
 }
 
 export async function getRecipePrompts(): Promise<Prompt[]> {

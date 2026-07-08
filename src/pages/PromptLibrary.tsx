@@ -1,13 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw, Upload } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { getResultSummaryMap, getResultCoverMap, getResultThumbsMap, getVersionCountMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { getResultSummaryMap, getResultCoverMap, getResultThumbsMap, getVersionCountMap, getPromptThumbnailFallbackMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
 import { isVideoPath } from "@/lib/fileStore";
 import { getPromptProjectMap } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -107,7 +107,7 @@ function PromptCardThumb({ src }: { src: string }) {
     <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
       {isVideoPath(src)
         ? <video src={displaySrc} muted playsInline preload="metadata" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
-        : <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />}
+        : <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} loading="lazy" decoding="async" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />}
       <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
     </div>
   );
@@ -125,7 +125,7 @@ function CarouselMiniThumb({ src, onEnlarge }: { src: string; onEnlarge: (src: s
       className="w-9 h-9 rounded-sm shrink-0 overflow-hidden cursor-zoom-in transition-precise hover:ring-1 hover:ring-cyan/50"
       title="Click to enlarge"
     >
-      <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover" />
+      <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} loading="lazy" decoding="async" className="w-full h-full object-cover" />
     </button>
   );
 }
@@ -396,6 +396,10 @@ export function PromptLibrary() {
   const confirmDeleteRef = useRef<string | null>(null);
   const [resultMap, setResultMap] = useState<Record<string, { count: number; avg_score: number }>>({});
   const [coverMap, setCoverMap] = useState<Record<string, string>>({});
+  // Fallback thumbnail (prompt.thumbnail_data) for cards with no result-based
+  // cover — fetched in small batches for only the prompts on screen, never
+  // for the whole library (see getPromptThumbnailFallbackMap).
+  const [thumbFallbackMap, setThumbFallbackMap] = useState<Record<string, string>>({});
   const [enlargedSrc, setEnlargedSrc] = useState<string | null>(null);
   const [thumbsMap, setThumbsMap] = useState<Record<string, string[]>>({});
   const [versionCountMap, setVersionCountMap] = useState<Record<string, number>>({});
@@ -406,17 +410,23 @@ export function PromptLibrary() {
   const [batchWorking, setBatchWorking] = useState(false);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [tagFilter, setTagFilter] = useState<string>(searchParams.get("tag") ?? "");
+  // Collapsed by default — the tag list can run long — but starts open when a
+  // tag filter is already active (e.g. arrived via a ?tag= link) so the
+  // active selection isn't hidden behind a fold.
+  const [tagsExpanded, setTagsExpanded] = useState(() => !!searchParams.get("tag"));
   const [noResultsOnly, setNoResultsOnly] = useState(false);
   const [originalsOnly, setOriginalsOnly] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
   useEffect(() => { fetchPrompts(); }, [fetchPrompts]);
 
-  // Listen for background thumbnail migrations and patch the store live
+  // Listen for background thumbnail migrations and patch both the store and
+  // the on-screen fallback map (cards render from the latter) live.
   useEffect(() => {
     const handleThumbUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<{ id: string; thumbnail_data: string }>;
       patch(customEvent.detail.id, { thumbnail_data: customEvent.detail.thumbnail_data });
+      setThumbFallbackMap((prev) => ({ ...prev, [customEvent.detail.id]: customEvent.detail.thumbnail_data }));
     };
     window.addEventListener(THUMBNAIL_UPDATED_EVENT, handleThumbUpdate);
     return () => window.removeEventListener(THUMBNAIL_UPDATED_EVENT, handleThumbUpdate);
@@ -439,17 +449,27 @@ export function PromptLibrary() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Debounced — each keystroke used to fire a full unindexed LIKE scan across
+  // the whole library immediately, which got very slow once there were
+  // thousands of prompts. Clearing the search (empty string) still runs
+  // immediately since that's a deliberate single action, not rapid typing.
+  const searchDebounceRef = useRef<number | undefined>(undefined);
   const handleSearch = useCallback(
     (q: string) => {
       setSearchVal(q);
-      if (q.trim()) {
-        search(q);
-      } else {
+      if (searchDebounceRef.current !== undefined) window.clearTimeout(searchDebounceRef.current);
+      if (!q.trim()) {
         fetchPrompts();
+        return;
       }
+      searchDebounceRef.current = window.setTimeout(() => search(q), 300);
     },
     [search, fetchPrompts]
   );
+
+  useEffect(() => () => {
+    if (searchDebounceRef.current !== undefined) window.clearTimeout(searchDebounceRef.current);
+  }, []);
 
   const handleClearAllFilters = useCallback(() => {
     handleSearch("");
@@ -497,6 +517,9 @@ export function PromptLibrary() {
       const { fetchImageAsDataUrl } = await import("@/lib/fetchImageUrl");
       const dataUrl = await fetchImageAsDataUrl(prompt.source_url);
       await update(prompt.id, { thumbnail_data: dataUrl });
+      // The card renders from thumbFallbackMap (batched, on-screen-only lookup),
+      // not the store's copy — patch it directly so the retry shows up immediately.
+      setThumbFallbackMap((prev) => ({ ...prev, [prompt.id]: dataUrl }));
     } catch {
       toast.error("Thumbnail still unreachable — the source link may be blocked or expired");
     }
@@ -677,6 +700,21 @@ export function PromptLibrary() {
   const metrics = getPromptLibraryMetrics(allPrompts, resultMap);
   const statusFilter = filters.isWinner ? "winner" : filters.isFailed ? "failed" : "";
 
+  // Batch-fetch fallback thumbnails only for cards actually on screen that
+  // have no result-based cover — bounded by visibleCount, not library size.
+  const missingThumbIds = useMemo(
+    () => prompts.filter((p) => !coverMap[p.id] && !thumbFallbackMap[p.id]).map((p) => p.id),
+    [prompts, coverMap, thumbFallbackMap]
+  );
+  const missingThumbKey = missingThumbIds.join(",");
+  useEffect(() => {
+    if (!missingThumbIds.length) return;
+    getPromptThumbnailFallbackMap(missingThumbIds).then((map) => {
+      if (Object.keys(map).length) setThumbFallbackMap((prev) => ({ ...prev, ...map }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missingThumbKey]);
+
   return (
     <>
     {enlargedSrc && (
@@ -791,35 +829,50 @@ export function PromptLibrary() {
 
         {/* Tag filter chips */}
         {(uniqueTags.length > 0 || noResultsOnly || originalsOnly) && (
-          <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => setOriginalsOnly(!originalsOnly)}
-              className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
-                originalsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
-              style={{ border: originalsOnly ? "1px solid rgba(255,255,255,0.30)" : "var(--border-dim)" }}>
-              Originals
-            </button>
-            <button type="button" onClick={() => setNoResultsOnly(!noResultsOnly)}
-              className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
-                noResultsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
-              style={{ border: noResultsOnly ? "1px solid rgba(215,25,33,0.40)" : "var(--border-dim)" }}>
-              <ImageOff size={10} /> No Results
-            </button>
-            {tagFilter && (
-              <button type="button" onClick={() => setTagFilter("")}
-                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"
-                style={{ border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)" }}>
-                <X size={10} /> Clear
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button type="button" onClick={() => setOriginalsOnly(!originalsOnly)}
+                className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+                  originalsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
+                style={{ border: originalsOnly ? "1px solid rgba(255,255,255,0.30)" : "var(--border-dim)" }}>
+                Originals
               </button>
+              <button type="button" onClick={() => setNoResultsOnly(!noResultsOnly)}
+                className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
+                  noResultsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
+                style={{ border: noResultsOnly ? "1px solid rgba(215,25,33,0.40)" : "var(--border-dim)" }}>
+                <ImageOff size={10} /> No Results
+              </button>
+              {uniqueTags.length > 0 && (
+                <button type="button" onClick={() => setTagsExpanded((v) => !v)}
+                  className={cn("flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
+                    tagFilter ? "text-white" : "text-dim/60 hover:text-muted")}
+                  style={{ border: tagFilter ? "1px solid rgba(255,255,255,0.30)" : "var(--border-dim)" }}>
+                  {tagsExpanded ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                  Tags ({uniqueTags.length}){tagFilter && ` · #${tagFilter}`}
+                </button>
+              )}
+            </div>
+            {tagsExpanded && uniqueTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {tagFilter && (
+                  <button type="button" onClick={() => setTagFilter("")}
+                    className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm text-white transition-precise"
+                    style={{ border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)" }}>
+                    <X size={10} /> Clear
+                  </button>
+                )}
+                {uniqueTags.map((tag) => (
+                  <button key={tag} type="button"
+                    onClick={() => setTagFilter(tag === tagFilter ? "" : tag)}
+                    className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
+                      tagFilter === tag ? "text-white" : "text-dim/60 hover:text-muted")}
+                    style={{ border: tagFilter === tag ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)" }}>
+                    {tag}
+                  </button>
+                ))}
+              </div>
             )}
-            {uniqueTags.map((tag) => (
-              <button key={tag} type="button"
-                onClick={() => setTagFilter(tag === tagFilter ? "" : tag)}
-                className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise",
-                  tagFilter === tag ? "text-white" : "text-dim/60 hover:text-muted")}
-                style={{ border: tagFilter === tag ? "1px solid rgba(255,255,255,0.35)" : "var(--border-dim)" }}>
-                {tag}
-              </button>
-            ))}
           </div>
         )}
       </div>
@@ -956,7 +1009,7 @@ export function PromptLibrary() {
                   key={p.id}
                   prompt={p}
                   resultSummary={resultMap[p.id]}
-                  coverImage={coverMap[p.id] ?? p.thumbnail_data}
+                  coverImage={coverMap[p.id] ?? thumbFallbackMap[p.id]}
                   resultThumbs={thumbsMap[p.id]}
                   versionCount={versionCountMap[p.id]}
                   projectRelation={projectMap[p.id]}

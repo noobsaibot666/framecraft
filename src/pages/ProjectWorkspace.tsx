@@ -22,7 +22,7 @@ import {
   resetProjectContent,
   type CreateProjectInput,
 } from "@/lib/projects";
-import { getPrompts, getRecentResults, searchPrompts, getResultCoverMap } from "@/lib/db";
+import { getPromptSummaries, getRecentResults, searchPromptSummaries, getResultCoverMap } from "@/lib/db";
 import { getReferences, searchReferences } from "@/lib/references";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
@@ -378,12 +378,14 @@ function PromptPicker({ projectId, onAdd, onClose }: {
   const [items, setItems] = useState<Prompt[]>([]);
   const [added, setAdded] = useState<Set<string>>(new Set());
 
+  // Debounced — this used to load every prompt in the library (thumbnails and
+  // all) on every keystroke just to show 20 title/provider rows.
   useEffect(() => {
-    const load = async () => {
-      const results = search.trim() ? await searchPrompts(search.trim()) : await getPrompts();
+    const timer = window.setTimeout(async () => {
+      const results = search.trim() ? await searchPromptSummaries(search.trim()) : await getPromptSummaries();
       setItems(results.slice(0, 20));
-    };
-    load();
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [search]);
 
   const handleAdd = async (id: string) => {

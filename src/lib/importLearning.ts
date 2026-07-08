@@ -169,6 +169,46 @@ export function suggestPromptTags(text: string, existingTags: string[] = [], lim
     .slice(0, limit);
 }
 
+const MAX_SUGGESTED_TITLE_LENGTH = 48;
+
+function titleCaseWord(word: string): string {
+  if (!word) return word;
+  // Leave acronyms/codes as-is ("AI", "3D", "8K") instead of forcing Title-case.
+  if (word === word.toUpperCase() && /[A-Z]/.test(word)) return word;
+  return word[0].toUpperCase() + word.slice(1);
+}
+
+function truncateAtWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const cut = text.slice(0, maxLength);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > 12 ? cut.slice(0, lastSpace) : cut).trim();
+}
+
+/**
+ * Derives a short, human-scannable title from raw pasted prompt text, so the
+ * required Title field can be pre-filled on import instead of forcing the user
+ * to hand-type one for every paste. Takes the prompt's leading clause (pulling
+ * in a second short clause when the first is too terse to be descriptive on
+ * its own), title-cases it, and truncates to a card-friendly length.
+ */
+export function suggestPromptTitle(text: string): string {
+  const stripped = stripPromptParams(text).trim();
+  if (!stripped) return "";
+
+  const clauses = stripped
+    .split(/[,;\n]+/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+
+  let lead = clauses[0] ?? "";
+  if (lead.length < 12 && clauses[1]) lead = `${lead} ${clauses[1]}`;
+
+  const words = lead.split(/\s+/).filter(Boolean).slice(0, 8).map(titleCaseWord);
+  const title = truncateAtWordBoundary(words.join(" "), MAX_SUGGESTED_TITLE_LENGTH);
+  return title || truncateAtWordBoundary(stripped, MAX_SUGGESTED_TITLE_LENGTH);
+}
+
 export function buildImportLearningNotes(source: string | undefined, learning: ImportLearningSignal): string | undefined {
   const lines = [
     source?.trim() ? `Source: ${source.trim()}` : "",

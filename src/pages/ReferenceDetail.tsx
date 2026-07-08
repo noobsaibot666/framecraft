@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Save, Trash2, Star, AlertTriangle, Upload, Link2, ChevronDown, Check, Trophy } from "lucide-react";
-import { saveReferenceImage } from "@/lib/fileStore";
+import { saveReferenceImage, thumbnailFromDataUrl, isVideoPath } from "@/lib/fileStore";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
+import { fileToDataUrl } from "@/lib/imageUtils";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import {
@@ -134,62 +135,82 @@ function ImageDropZone({ src, onFile }: {
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const image = useImageDisplaySrc(src);
+  const [dragging, setDragging] = useState(false);
 
-  const processFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const full = e.target?.result as string;
-      // Generate thumbnail via canvas
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 400;
-        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
-        const w = Math.round(img.width * scale);
-        const h = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-        onFile(full, canvas.toDataURL("image/jpeg", 0.75));
-      };
-      img.src = full;
-    };
-    reader.readAsDataURL(file);
+  const processFile = async (file: File) => {
+    const full = await fileToDataUrl(file);
+    const thumb = await thumbnailFromDataUrl(full, 400);
+    onFile(full, thumb);
   };
+
+  const isVideoSrc = isVideoPath(src);
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setDragging(false);
     const file = e.dataTransfer.files[0];
-    if (file?.type.startsWith("image/")) processFile(file);
+    if (file && (file.type.startsWith("image/") || file.type.startsWith("video/"))) processFile(file);
   };
 
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center justify-center rounded-card overflow-hidden bg-black/25",
-        "border-2 border-dashed transition-colors",
-        src ? "aspect-video" : "aspect-video"
+        "relative flex flex-col items-center justify-center rounded-card overflow-hidden aspect-video",
+        "border-2 border-dashed transition-precise",
+        dragging ? "border-cyan/60" : "border-white/28 hover:border-white/45"
       )}
-      style={{ borderColor: "rgba(255,255,255,0.18)" }}
-      onDragOver={(e) => e.preventDefault()}
+      style={{ background: dragging ? "rgba(56,183,200,0.06)" : "rgba(255,255,255,0.04)" }}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
       onDrop={handleDrop}
       onClick={() => inputRef.current?.click()}
     >
       {image.src ? (
         <>
-          <img src={image.src} alt="reference" className="w-full h-full object-contain" onError={image.onError} />
+          {isVideoSrc
+            ? <video src={image.src} muted playsInline controls className="w-full h-full object-contain" />
+            : <img src={image.src} alt="reference" className="w-full h-full object-contain" onError={image.onError} />}
           <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
             style={{ background: "rgba(0,0,0,0.6)" }}>
-            <span className="font-mono text-[12px] text-white tracking-widest uppercase">Replace image</span>
+            <span className="font-mono text-[12px] text-white tracking-widest uppercase">Replace {isVideoSrc ? "video" : "image"}</span>
           </div>
         </>
       ) : (
         <div className="flex flex-col items-center gap-2 cursor-pointer">
           <Upload size={24} className="text-muted" />
-          <span className="font-mono text-[12px] text-readable tracking-widest uppercase">Drop image or click</span>
+          <span className="font-mono text-[12px] text-readable tracking-widest uppercase">Drop image or video, or click</span>
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" className="hidden"
+      <input ref={inputRef} type="file" accept="image/*,video/*" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
+    </div>
+  );
+}
+
+function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) => void }) {
+  const [input, setInput] = useState("");
+  const commit = (raw: string) => {
+    const parts = raw.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean);
+    onChange([...new Set([...tags, ...parts])]);
+    setInput("");
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5 p-2 rounded-sm min-h-9"
+      style={{ border: "1px solid rgba(255,255,255,0.10)", background: "var(--color-dark)" }}>
+      {tags.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-1 font-mono text-[9px] tracking-widest uppercase px-1.5 py-0.5 rounded border border-white/10 text-dim">
+          {tag}
+          <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))} className="text-dim/50 hover:text-red leading-none">×</button>
+        </span>
+      ))}
+      <input value={input} onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); if (input.trim()) commit(input); }
+          else if (e.key === "Backspace" && !input && tags.length) onChange(tags.slice(0, -1));
+        }}
+        onBlur={() => { if (input.trim()) commit(input); }}
+        placeholder={tags.length ? "" : "Type tag + Enter…"}
+        className="flex-1 min-w-16 bg-transparent font-mono text-[10px] text-soft-white placeholder:text-dim/40 outline-none" />
     </div>
   );
 }
@@ -240,7 +261,7 @@ export function ReferenceDetail() {
   const [provider, setProvider] = useState("");
   const [category, setCategory] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
-  const [tags, setTags] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [rating, setRating] = useState(0);
   const [bestUse, setBestUse] = useState("");
   const [riskNotes, setRiskNotes] = useState("");
@@ -274,7 +295,7 @@ export function ReferenceDetail() {
       setProvider(ref.provider ?? "");
       setCategory(ref.category ?? "");
       setSourceUrl(ref.source_url ?? "");
-      setTags((ref.tags ?? []).join(", "));
+      setTags(ref.tags ?? []);
       setRating(ref.rating);
       setBestUse(ref.best_use ?? "");
       setRiskNotes(ref.risk_notes ?? "");
@@ -298,7 +319,7 @@ export function ReferenceDetail() {
     provider: (provider || undefined) as Reference["provider"] | undefined,
     category: (category || undefined) as Reference["category"] | undefined,
     source_url: sourceUrl.trim() || undefined,
-    tags: tags.trim() ? tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
+    tags: tags.length ? tags : undefined,
     rating,
     best_use: bestUse.trim() || undefined,
     risk_notes: riskNotes.trim() || undefined,
@@ -503,8 +524,7 @@ export function ReferenceDetail() {
 
             <div className="flex flex-col gap-1.5">
               <FieldLabel>TAGS</FieldLabel>
-              <FieldInput value={tags} onChange={setTags} placeholder="tag1, tag2, tag3" mono />
-              <span className="font-mono text-[10px] text-muted">Comma-separated</span>
+              <TagInput tags={tags} onChange={setTags} />
             </div>
           </div>
 

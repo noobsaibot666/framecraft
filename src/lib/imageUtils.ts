@@ -7,6 +7,13 @@ export interface ImageValidationOptions {
 type DimensionReader = (file: File) => Promise<{ width: number; height: number }>;
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const SUPPORTED_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm", "video/x-m4v"]);
+
+export function isVideoFile(file: File): boolean {
+  if (SUPPORTED_VIDEO_TYPES.has(file.type)) return true;
+  if (file.type.startsWith("image/")) return false;
+  return /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+}
 
 async function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
   if (typeof createImageBitmap === "function") {
@@ -63,6 +70,49 @@ export async function validateImageFile(
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   return `${Math.round(bytes / 1024 / 1024)} MiB`;
+}
+
+async function readVideoDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: video.videoWidth, height: video.videoHeight });
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("The selected file could not be decoded as a video."));
+    };
+    video.src = url;
+  });
+}
+
+export interface MediaValidationResult {
+  width: number;
+  height: number;
+  kind: "image" | "video";
+}
+
+/** Like validateImageFile, but also accepts MP4/MOV/WebM video for fields where a
+ * result or reference can be either a still image or a generated video clip. */
+export async function validateMediaFile(
+  file: File,
+  options: ImageValidationOptions = {}
+): Promise<MediaValidationResult> {
+  if (isVideoFile(file)) {
+    const maxBytes = options.maxBytes ?? 300 * 1024 * 1024;
+    if (file.size === 0) throw new Error("The selected video is empty.");
+    if (file.size > maxBytes) throw new Error(`The selected video exceeds ${formatBytes(maxBytes)}.`);
+    // Dimensions are informational here — an unreadable duration/metadata track
+    // shouldn't block the upload the way a corrupt image would.
+    let dims = { width: 0, height: 0 };
+    try { dims = await readVideoDimensions(file); } catch { /* tolerate missing metadata */ }
+    return { ...dims, kind: "video" };
+  }
+  const dims = await validateImageFile(file, options);
+  return { ...dims, kind: "image" };
 }
 
 export function generateThumbnail(file: File, maxSize = 400): Promise<string> {

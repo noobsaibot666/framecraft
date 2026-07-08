@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { getReferenceSummaries, searchReferenceSummaries, deleteReference } from "@/lib/references";
 import { getHighImpactReferences } from "@/lib/referenceImpact";
-import { fileToDataUrl, validateImageFile } from "@/lib/imageUtils";
+import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { importReferenceImage } from "@/lib/sharedImport";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -237,13 +237,13 @@ export function ReferenceLibrary() {
   };
 
   const handleDropFiles = async (files: FileList) => {
-    const imageFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (!imageFiles.length) return;
+    const mediaFiles = Array.from(files).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!mediaFiles.length) return;
     setDropImporting(true);
     setDropError("");
     try {
-      for (const file of imageFiles) {
-        await validateImageFile(file);
+      for (const file of mediaFiles) {
+        await validateMediaFile(file);
         const refId = crypto.randomUUID().replace(/-/g, "");
         const dataUrl = await fileToDataUrl(file);
         const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
@@ -304,13 +304,13 @@ export function ReferenceLibrary() {
           "flex items-center justify-center gap-3 h-16 rounded-card mb-6 transition-precise cursor-default",
           dropping
             ? "border-cyan/55 bg-cyan/8"
-            : "border-white/16 hover:border-cyan/45"
+            : "border-white/28 hover:border-cyan/45"
         )}
-        style={{ border: "2px dashed" }}
+        style={{ border: "2px dashed", background: dropping ? undefined : "rgba(255,255,255,0.035)" }}
       >
         <Upload size={14} className={cn("shrink-0", dropping ? "text-cyan" : "text-muted")} />
         <span className={cn("font-mono text-[12px] tracking-widest uppercase", dropping ? "text-cyan" : "text-readable")}>
-          {dropImporting ? "Importing..." : "Drop images to add as references"}
+          {dropImporting ? "Importing..." : "Drop images or videos to add as references"}
         </span>
       </div>
       {dropError && <p className="font-mono text-[10px] text-red/80 mb-4">{dropError}</p>}

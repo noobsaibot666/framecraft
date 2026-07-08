@@ -114,6 +114,7 @@ export function VisualReferenceBoard({ projectId, onContextChange }: VisualRefer
   const [visualRefs, setVisualRefs] = useState<VisualReference[]>([]);
   const [uploadingRef, setUploadingRef] = useState(false);
   const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
@@ -201,11 +202,20 @@ export function VisualReferenceBoard({ projectId, onContextChange }: VisualRefer
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              handleUploadFiles(event.dataTransfer.files);
+            }}
             disabled={uploadingRef}
-            className="flex items-center justify-center gap-2 min-h-11 rounded-sm border border-dashed border-cyan/30 font-mono text-[10px] tracking-widest uppercase text-readable hover:text-cyan hover:bg-cyan/5 transition-precise disabled:opacity-50"
+            className={`flex items-center justify-center gap-2 min-h-11 rounded-sm border border-dashed font-mono text-[10px] tracking-widest uppercase transition-precise disabled:opacity-50 ${
+              dragging ? "border-cyan/70 bg-cyan/8 text-cyan" : "border-cyan/45 text-readable hover:text-cyan hover:bg-cyan/6"
+            }`}
           >
             <ImagePlus size={12} />
-            {uploadingRef ? "Uploading…" : "Add reference image"}
+            {uploadingRef ? "Uploading…" : dragging ? "Drop to add" : "Drop or click to add reference image"}
           </button>
         </>
       )}

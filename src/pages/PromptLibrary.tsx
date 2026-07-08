@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw } from "lucide-react";
+import { Plus, Search, Copy, Star, Trash2, ChevronDown, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -8,6 +8,7 @@ import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { getResultSummaryMap, getResultCoverMap, getResultThumbsMap, getVersionCountMap, batchUpdatePrompts, deletePrompt } from "@/lib/db";
+import { isVideoPath } from "@/lib/fileStore";
 import { getPromptProjectMap } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { getPromptLibraryMetrics } from "@/lib/libraryMetrics";
@@ -104,7 +105,9 @@ function PromptCardThumb({ src }: { src: string }) {
   if (!displaySrc) return null;
   return (
     <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
-      <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
+      {isVideoPath(src)
+        ? <video src={displaySrc} muted playsInline preload="metadata" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
+        : <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />}
       <div className="absolute inset-0 bg-linear-to-t from-black/70 to-transparent" />
     </div>
   );
@@ -702,6 +705,10 @@ export function PromptLibrary() {
           </button>
           <Button variant="ghost" size="md" onClick={() => { batchMode ? exitBatch() : setBatchMode(true); }}>
             <CheckSquare size={11} /> {batchMode ? "Exit Select" : "Select"}
+          </Button>
+          <Button variant="ghost" size="md" onClick={() => navigate("/import")}>
+            <Upload size={12} />
+            Import
           </Button>
           <Button variant="primary" size="md" onClick={() => navigate("/craft")}>
             <Plus size={12} />

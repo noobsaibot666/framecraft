@@ -45,12 +45,33 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
 function extFromDataUrl(dataUrl: string): string {
   if (dataUrl.startsWith("data:image/png")) return "png";
   if (dataUrl.startsWith("data:image/webp")) return "webp";
+  if (dataUrl.startsWith("data:video/quicktime")) return "mov";
+  if (dataUrl.startsWith("data:video/webm")) return "webm";
+  if (dataUrl.startsWith("data:video/")) return "mp4";
   return "jpg";
+}
+
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "m4v"]);
+
+/** True for a stored path, asset URL, or data URL that points at a video clip
+ * rather than a still image — callers use this to pick <video> vs <img>. */
+export function isVideoPath(src: string | undefined): boolean {
+  if (!src) return false;
+  if (src.startsWith("data:video/")) return true;
+  if (src.startsWith("data:")) return false;
+  const clean = src.split("?")[0].split("#")[0];
+  const ext = clean.split(".").pop()?.toLowerCase();
+  return !!ext && VIDEO_EXTENSIONS.has(ext);
 }
 
 // ─── Public API ───────────────────────────────────────────────
 
-export async function thumbnailFromDataUrl(dataUrl: string, maxWidth = 320): Promise<string> {
+// 0.92 rather than the browser-canvas default (~0.92 too, but we were
+// explicitly passing 0.8) — thumbnails were visibly over-compressed/blocky
+// at the smaller card sizes they're displayed at.
+const THUMBNAIL_JPEG_QUALITY = 0.92;
+
+function imageThumbnailFromDataUrl(dataUrl: string, maxWidth: number): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -63,11 +84,56 @@ export async function thumbnailFromDataUrl(dataUrl: string, maxWidth = 320): Pro
       const ctx = canvas.getContext("2d");
       if (!ctx) { resolve(dataUrl); return; }
       ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", 0.8));
+      resolve(canvas.toDataURL("image/jpeg", THUMBNAIL_JPEG_QUALITY));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
+}
+
+// Grabs a single frame (just past the first keyframe) from a video data URL
+// and encodes it as a JPEG data URL — used as the thumbnail for video results
+// so every existing <img>-based thumbnail/cover renderer keeps working
+// unmodified even when the underlying result is a video clip.
+function videoThumbnailFromDataUrl(dataUrl: string, maxWidth: number): Promise<string> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    const cleanup = () => { video.removeAttribute("src"); video.load(); };
+    const capture = () => {
+      try {
+        const sourceWidth = video.videoWidth || maxWidth;
+        const sourceHeight = video.videoHeight || maxWidth;
+        const ratio = Math.min(maxWidth / sourceWidth, 1);
+        const w = Math.max(1, Math.round(sourceWidth * ratio));
+        const h = Math.max(1, Math.round(sourceHeight * ratio));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Canvas context unavailable");
+        ctx.drawImage(video, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", THUMBNAIL_JPEG_QUALITY));
+      } catch {
+        resolve(dataUrl);
+      } finally {
+        cleanup();
+      }
+    };
+    video.onloadedmetadata = () => {
+      try { video.currentTime = Math.min(0.1, (video.duration || 1) / 2); } catch { capture(); }
+    };
+    video.onseeked = capture;
+    video.onerror = () => resolve(dataUrl);
+    video.src = dataUrl;
+  });
+}
+
+export async function thumbnailFromDataUrl(dataUrl: string, maxWidth = 320): Promise<string> {
+  if (dataUrl.startsWith("data:video/")) return videoThumbnailFromDataUrl(dataUrl, maxWidth);
+  return imageThumbnailFromDataUrl(dataUrl, maxWidth);
 }
 
 export async function saveResultImage(
@@ -128,9 +194,18 @@ export async function readImageAsDataUrl(filePath: string): Promise<string> {
   return bytesToDataUrl(bytes, resolvedPath);
 }
 
+const EXT_TO_MIME: Record<string, string> = {
+  png: "image/png",
+  webp: "image/webp",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  m4v: "video/x-m4v",
+};
+
 function bytesToDataUrl(bytes: Uint8Array, filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? "jpg";
-  const mime = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+  const mime = EXT_TO_MIME[ext] ?? "image/jpeg";
   const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
   return `data:${mime};base64,${btoa(binary)}`;
 }

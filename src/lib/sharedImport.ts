@@ -1,5 +1,6 @@
 import type { CreateResultInput } from "./db";
 import { createResult, deleteResult } from "./db";
+import { getFramecraftDb } from "./dbConnection";
 import {
   cleanupStagedMedia,
   publishStagedMedia,
@@ -7,6 +8,7 @@ import {
   stageManagedImage,
   thumbnailFromDataUrl,
 } from "./fileStore";
+import type { LibraryPaths } from "./libraryConfig";
 import {
   createTauriSharedIngestFileSystem,
   getLibrarySettingsState,
@@ -19,7 +21,9 @@ import {
   createProjectResultLinkJob,
   createReferenceImportJob,
   createResultImportJob,
+  processSharedIngestInbox,
   publishSharedIngestJob,
+  type ProcessSharedIngestResult,
   type SharedIngestFileSystem,
   type SharedIngestIdentity,
   type SharedIngestJob,
@@ -35,6 +39,7 @@ export interface SharedImportDeps {
   getIdentity: () => Promise<SharedIngestIdentity>;
   createFs: () => Promise<SharedIngestFileSystem>;
   publishSharedIngestJob: typeof publishSharedIngestJob;
+  processInbox: (paths: LibraryPaths, fs: SharedIngestFileSystem) => Promise<ProcessSharedIngestResult>;
   stageManagedImage: typeof stageManagedImage;
   publishStagedMedia: typeof publishStagedMedia;
   cleanupStagedMedia: typeof cleanupStagedMedia;
@@ -74,6 +79,7 @@ const defaultDeps: SharedImportDeps = {
   getIdentity: async () => getLibraryLockIdentityNative(),
   createFs: createTauriSharedIngestFileSystem,
   publishSharedIngestJob,
+  processInbox: defaultProcessInbox,
   stageManagedImage,
   publishStagedMedia,
   cleanupStagedMedia,
@@ -107,6 +113,7 @@ export async function importReferenceImage(
       reference: input.reference,
     });
     await publishJob(input.dataUrl, job, state, deps);
+    await applyQueuedJobBestEffort(state, deps);
     return { id: input.referenceId, queued: true };
   }
 
@@ -152,6 +159,7 @@ export async function importResultImage(
       result: input.result,
     });
     await publishJob(input.dataUrl, job, state, deps);
+    await applyQueuedJobBestEffort(state, deps);
     return { id: input.resultId, queued: true };
   }
 
@@ -217,6 +225,7 @@ export async function importProjectResultImage(
       originalBytes: new Uint8Array(),
       thumbnailBytes: new Uint8Array(),
     });
+    await applyQueuedJobBestEffort(state, deps);
     return { id: input.resultId, queued: true };
   }
 
@@ -278,6 +287,25 @@ async function publishJob(
     originalBytes: dataUrlToBytes(dataUrl),
     thumbnailBytes: dataUrlToBytes(thumbnail),
   });
+}
+
+// Best-effort immediate apply of the job(s) just queued, so the result/reference
+// shows up in the library right away instead of waiting on a manual "Process
+// shared ingest" click in Settings. Safe to retry: processSharedIngestInbox is
+// idempotent (idempotency-key + applied markers), so if this fails or another
+// writer processes the same inbox concurrently, nothing is double-applied —
+// the job just falls back to the failed dir or stays queued for manual retry.
+async function applyQueuedJobBestEffort(state: LibrarySettingsState, deps: SharedImportDeps): Promise<void> {
+  try {
+    await deps.processInbox(state.paths, await deps.createFs());
+  } catch {
+    // Leave it queued — Settings → "Process shared ingest" / "Retry failed" recovers it.
+  }
+}
+
+async function defaultProcessInbox(paths: LibraryPaths, fs: SharedIngestFileSystem): Promise<ProcessSharedIngestResult> {
+  const db = await getFramecraftDb();
+  return processSharedIngestInbox({ paths, fs, db });
 }
 
 function extensionFromNameOrDataUrl(name: string | undefined, dataUrl: string): string {

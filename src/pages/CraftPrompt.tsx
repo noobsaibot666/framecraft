@@ -42,6 +42,8 @@ import type { DescribeElements } from "@/lib/aiResultParsers";
 import { buildFormulaRows, formatFormulaRows, FORMULA_STEP_NOT_INFERABLE, type FormulaRow } from "@/lib/describeFormula";
 import { PROVIDER_GUIDANCE } from "@/lib/promptFormula";
 import { fileToDataUrl, computeAspectRatioLabel } from "@/lib/imageUtils";
+import { thumbnailFromDataUrl } from "@/lib/fileStore";
+import { fetchImageAsDataUrl } from "@/lib/fetchImageUrl";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
@@ -744,6 +746,7 @@ interface Fields {
   // labeled CONTINUITY RULES for Seedance / CONTINUITY LOCK for Kling; scene
   // world/spatial logic is Kling-only, distinct from generic Environment.
   continuity_notes: string; scene_world: string;
+  thumbnail_data: string; source_url: string;
 }
 
 const EMPTY: Fields = {
@@ -761,6 +764,7 @@ const EMPTY: Fields = {
   narrative_format: "", transitions: "", audio: "",
   text_graphics: "", reference_role: "",
   continuity_notes: "", scene_world: "",
+  thumbnail_data: "", source_url: "",
 };
 
 // Token category → builder field routing (V2 §7). Categories without a
@@ -1021,6 +1025,105 @@ function CollapsibleCard({
   );
 }
 
+// ─── Prompt thumbnail / source field ───────────────────────────
+// Lets a prompt's cover image (the same one shown on its Library card and
+// PromptDetail's hero) be set or replaced directly from the edit form — not
+// just at import time. Previously this was only settable by importing with a
+// source image attached, or by picking an existing saved result after the
+// fact; skipping it during import left no way to add one later.
+
+function PromptThumbnailField({
+  thumbnailData,
+  sourceUrl,
+  onThumbnailChange,
+  onSourceUrlChange,
+}: {
+  thumbnailData: string;
+  sourceUrl: string;
+  onThumbnailChange: (dataUrl: string) => void;
+  onSourceUrlChange: (url: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const image = useImageDisplaySrc(thumbnailData || undefined);
+
+  const processFile = async (file: File) => {
+    const full = await fileToDataUrl(file);
+    const thumb = await thumbnailFromDataUrl(full, 480);
+    onThumbnailChange(thumb);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file?.type.startsWith("image/")) processFile(file);
+  };
+
+  const handleFetchFromUrl = async () => {
+    if (!sourceUrl.trim() || thumbnailData || fetching) return;
+    setFetching(true);
+    setFetchError(false);
+    try {
+      const full = await fetchImageAsDataUrl(sourceUrl.trim());
+      const thumb = await thumbnailFromDataUrl(full, 480);
+      onThumbnailChange(thumb);
+    } catch {
+      setFetchError(true);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 w-40 shrink-0">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        className={cn(
+          "relative flex flex-col items-center justify-center gap-1.5 aspect-video rounded-card cursor-pointer transition-precise overflow-hidden text-center px-2",
+          dragging ? "border-cyan/60" : "border-white/28 hover:border-white/45"
+        )}
+        style={{ border: "2px dashed", background: dragging ? "rgba(56,183,200,0.06)" : "rgba(255,255,255,0.035)" }}
+      >
+        {image.src ? (
+          <img src={image.src} alt="Prompt thumbnail" className="w-full h-full object-cover" onError={image.onError} />
+        ) : (
+          <>
+            <Upload size={16} className="text-dim/40" />
+            <span className="font-mono text-[9px] text-dim tracking-widest uppercase leading-tight">
+              {fetching ? "Fetching…" : "Drop or click"}
+            </span>
+          </>
+        )}
+        <input ref={inputRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) processFile(f); }} />
+      </div>
+      {thumbnailData ? (
+        <button type="button" onClick={() => onThumbnailChange("")}
+          className="font-mono text-[9px] text-dim/50 hover:text-red transition-precise text-left">
+          × Remove thumbnail
+        </button>
+      ) : (
+        <input
+          value={sourceUrl}
+          onChange={(e) => { setFetchError(false); onSourceUrlChange(e.target.value); }}
+          onBlur={handleFetchFromUrl}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleFetchFromUrl(); } }}
+          placeholder="or paste source URL…"
+          className="w-full h-7 px-2 font-mono text-[9px] text-soft-white placeholder:text-dim/40 bg-dark rounded-sm focus:outline-none"
+          style={{ border: fetchError ? "1px solid rgba(215,25,33,0.5)" : "1px solid rgba(255,255,255,0.10)" }}
+        />
+      )}
+      {fetchError && <span className="font-mono text-[8px] text-red/70 leading-relaxed">Couldn't fetch that URL.</span>}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────
 
 export function CraftPrompt() {
@@ -1059,6 +1162,7 @@ export function CraftPrompt() {
   const [copied, setCopied] = useState(false);
   const [mode, setMode] = useState<"builder" | "manual">("builder");
   const [originalVersion, setOriginalVersion] = useState(1);
+  const [parentId, setParentId] = useState<string | null>(null);
   const [projectContext, setProjectContext] = useState<Project | null>(null);
   const [appliedRecipeId, setAppliedRecipeId] = useState<string | undefined>(prefillState?.prefillRecipeId);
 
@@ -1153,7 +1257,9 @@ export function CraftPrompt() {
         rating: p.rating, ai_look_risk: p.ai_look_risk,
         tags: p.tags ?? [], notes: p.notes ?? "",
         is_winner: p.is_winner, is_failed: p.is_failed,
+        thumbnail_data: p.thumbnail_data ?? "", source_url: p.source_url ?? "",
       });
+      setParentId(p.parent_id ?? null);
       const pp = p.parameters ?? {};
       setMjParams((prev) => ({
         ...prev,
@@ -1749,6 +1855,8 @@ export function CraftPrompt() {
     is_recipe: asRecipe,
     parent_id: !isEdit ? appliedRecipeId ?? prefillState?.prefillRecipeId : undefined,
     notes: fields.notes || undefined,
+    thumbnail_data: fields.thumbnail_data || undefined,
+    source_url: fields.source_url || undefined,
     builder_state: JSON.stringify({
       mode,
       tokens: tokenSequence.map((t) => ({ id: t.id, text: tokenOverrides[t.id] ?? t.text, quality_score: t.quality_score })),
@@ -2278,6 +2386,50 @@ export function CraftPrompt() {
             </div>
           </div>
 
+          {/* Thumbnail & Version */}
+          <div>
+            <SectionHeader label="THUMBNAIL & VERSION" />
+            <div className="flex gap-4">
+              <PromptThumbnailField
+                thumbnailData={fields.thumbnail_data}
+                sourceUrl={fields.source_url}
+                onThumbnailChange={(v) => setF("thumbnail_data", v)}
+                onSourceUrlChange={(v) => setF("source_url", v)}
+              />
+              <div className="flex flex-col gap-2 flex-1 min-w-0 justify-center">
+                {isEdit ? (
+                  <>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-[11px] text-soft-white">Version {originalVersion}</span>
+                      {parentId && (
+                        <button type="button" onClick={() => navigate(`/craft/${parentId}`)}
+                          className="font-mono text-[9px] text-dim/50 hover:text-cyan transition-precise">
+                          ↑ view the version this was forked from
+                        </button>
+                      )}
+                    </div>
+                    <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                      Testing a change? Save it as a new version to keep this one intact and compare results side by side.
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSaveNewVersion}
+                      disabled={saving || savingNewVersion}
+                      className="w-fit"
+                    >
+                      <Save size={10} /> {savingNewVersion ? "Saving…" : `+ Add Version v${originalVersion + 1}`}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                    Version history and the "Add Version" fork become available once this prompt is saved.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Prompt */}
           <div>
             <SectionHeader label="PROMPT" />
@@ -2620,22 +2772,23 @@ export function CraftPrompt() {
           )}
 
           {/* Avoidance */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3 flex-1">
-                <span className="system-label text-[13px] text-soft-white">AI-LOOK AVOIDANCE</span>
-                <div className="flex-1 h-px bg-white/16" />
-              </div>
-              <AIImproveButton
-                value={fields.avoidance_text}
-                fieldName="AI-look avoidance list"
-                projectTitle={fields.title || "this prompt"}
-                projectContext={assembled}
-                disabled={!assembled.trim()}
-                fallbackValue="No avoidance text yet — generate a comprehensive list"
-                onImproved={(v) => setF("avoidance_text", v)}
-              />
-            </div>
+          <CollapsibleCard
+            title="AI-LOOK AVOIDANCE"
+            defaultOpen={!!fields.avoidance_text.trim()}
+            headerExtra={
+              <span onClick={(e) => e.stopPropagation()}>
+                <AIImproveButton
+                  value={fields.avoidance_text}
+                  fieldName="AI-look avoidance list"
+                  projectTitle={fields.title || "this prompt"}
+                  projectContext={assembled}
+                  disabled={!assembled.trim()}
+                  fallbackValue="No avoidance text yet — generate a comprehensive list"
+                  onImproved={(v) => setF("avoidance_text", v)}
+                />
+              </span>
+            }
+          >
             <div className="flex flex-col gap-3">
               <AvoidancePanel
                 promptText={deferredAssembled}
@@ -2656,7 +2809,7 @@ export function CraftPrompt() {
                 mono
               />
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Consistency Factor (V2 §2) — elements held stable across variations */}
           <div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeImportedPromptLearning, buildImportLearningNotes, suggestPromptTags } from "./importLearning";
+import { analyzeImportedPromptLearning, buildImportLearningNotes, suggestPromptTags, suggestPromptTitle } from "./importLearning";
 
 describe("importLearning", () => {
   it("extracts reusable learning signals from an imported prompt", () => {
@@ -52,5 +52,22 @@ describe("importLearning", () => {
     expect(suggestions).toContain("neon");
 
     expect(suggestPromptTags("   ")).toEqual([]);
+  });
+
+  it("derives a short title from the prompt's leading clause", () => {
+    expect(suggestPromptTitle("Luxury product campaign, glass perfume bottle on black marble --ar 4:5"))
+      .toBe("Luxury Product Campaign");
+    // A terse leading clause pulls in the next one for enough context.
+    expect(suggestPromptTitle("Portrait, editorial fashion shoot with dramatic rim light --ar 3:4"))
+      .toBe("Portrait Editorial Fashion Shoot With Dramatic");
+    expect(suggestPromptTitle("   ")).toBe("");
+  });
+
+  it("truncates a long leading clause at a word boundary", () => {
+    const title = suggestPromptTitle(
+      "A sweeping cinematic wide-angle establishing shot of a neon-drenched cyberpunk megacity at night, rain-slicked streets"
+    );
+    expect(title.length).toBeLessThanOrEqual(48);
+    expect(title.endsWith(" ")).toBe(false);
   });
 });

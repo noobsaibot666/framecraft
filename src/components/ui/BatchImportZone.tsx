@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Upload, X, Check, AlertCircle, Image } from "lucide-react";
-import { fileToDataUrl } from "@/lib/imageUtils";
+import { fileToDataUrl, isVideoFile } from "@/lib/imageUtils";
 import { importProjectResultImage } from "@/lib/sharedImport";
 import { recomputePromptResultSummary } from "@/lib/db";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,9 @@ function FileThumb({ item }: { item: BatchImportFile }) {
       <div className="relative w-full aspect-square rounded-sm overflow-hidden"
         style={{ background: "rgba(255,255,255,0.04)", border: "var(--border-dim)" }}>
         {item.preview ? (
-          <img src={item.preview} alt={item.file.name} className="w-full h-full object-cover" />
+          isVideoFile(item.file)
+            ? <video src={item.preview} muted playsInline className="w-full h-full object-cover" />
+            : <img src={item.preview} alt={item.file.name} className="w-full h-full object-cover" />
         ) : (
           <div className="flex items-center justify-center w-full h-full">
             <Image size={14} className="text-white/20" />
@@ -69,9 +71,9 @@ export function BatchImportZone({ projectId, promptId, promptProvider, onComplet
   const [doneCount, setDoneCount] = useState(0);
 
   const addFiles = async (incoming: File[]) => {
-    const images = incoming.filter((f) => f.type.startsWith("image/"));
-    if (!images.length) return;
-    const withPreviews = await Promise.all(images.map(async (f) => {
+    const media = incoming.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!media.length) return;
+    const withPreviews = await Promise.all(media.map(async (f) => {
       let preview: string | undefined;
       try { preview = await fileToDataUrl(f); } catch {}
       return { file: f, preview, status: "pending" as const };
@@ -142,16 +144,16 @@ export function BatchImportZone({ projectId, promptId, promptProvider, onComplet
         onClick={() => inputRef.current?.click()}
         className={cn(
           "flex flex-col items-center justify-center gap-2 py-8 rounded-sm cursor-pointer transition-precise",
-          dragging ? "border-cyan/60 bg-cyan/5" : "hover:border-white/25"
+          dragging ? "border-cyan/60 bg-cyan/6" : "border-white/28 hover:border-white/45"
         )}
-        style={{ border: dragging ? "1px solid" : "1px dashed rgba(255,255,255,0.16)" }}
+        style={{ border: dragging ? "1px solid" : "1px dashed", background: dragging ? undefined : "rgba(255,255,255,0.035)" }}
       >
-        <Upload size={16} className={dragging ? "text-cyan" : "text-white/30"} />
+        <Upload size={16} className={dragging ? "text-cyan" : "text-white/40"} />
         <span className="font-mono text-[12px] text-readable">
-          {dragging ? "Drop images here" : "Drop images or click to select"}
+          {dragging ? "Drop here" : "Drop images or videos, or click to select"}
         </span>
-        <span className="font-mono text-[9px] text-dim/50">PNG, JPG, WEBP · multiple files supported</span>
-        <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileInput} />
+        <span className="font-mono text-[9px] text-dim/50">PNG, JPG, WEBP, MP4, MOV, WEBM · multiple files supported</span>
+        <input ref={inputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileInput} />
       </div>
 
       {/* File grid */}
@@ -187,7 +189,7 @@ export function BatchImportZone({ projectId, promptId, promptProvider, onComplet
         </Button>
         {hasFiles && !running && (
           <Button variant="primary" size="sm" onClick={handleImportAll} disabled={pendingCount === 0}>
-            <Upload size={10} /> Import {pendingCount > 0 ? pendingCount : files.length} Image{pendingCount !== 1 ? "s" : ""}
+            <Upload size={10} /> Import {pendingCount > 0 ? pendingCount : files.length} File{pendingCount !== 1 ? "s" : ""}
           </Button>
         )}
       </div>

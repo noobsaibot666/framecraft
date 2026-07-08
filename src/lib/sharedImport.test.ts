@@ -45,6 +45,7 @@ function deps(mode: "portable" | "appData", valid = true): SharedImportDeps {
       removeFile: vi.fn(),
     })),
     publishSharedIngestJob: vi.fn(async () => undefined),
+    processInbox: vi.fn(async () => ({ applied: 0, failed: 0, skipped: 0 })),
     stageManagedImage: vi.fn(async (_kind, id) =>
       id.startsWith("ref") ? STAGED_REF : STAGED_RESULT
     ),
@@ -77,6 +78,7 @@ describe("sharedImport", () => {
     expect(result).toEqual({ id: "ref-a", queued: true });
     expect(d.publishSharedIngestJob).toHaveBeenCalledOnce();
     expect(d.createReference).not.toHaveBeenCalled();
+    expect(d.processInbox).toHaveBeenCalledOnce();
   });
 
   it("stages, inserts, then publishes for local app-data reference imports", async () => {
@@ -148,6 +150,22 @@ describe("sharedImport", () => {
     expect(result).toEqual({ id: "result-a", queued: true });
     expect(d.publishSharedIngestJob).toHaveBeenCalledOnce();
     expect(d.createResult).not.toHaveBeenCalled();
+    expect(d.processInbox).toHaveBeenCalledOnce();
+  });
+
+  it("still resolves queued when the immediate best-effort apply fails", async () => {
+    const d = deps("portable");
+    d.processInbox = vi.fn().mockRejectedValue(new Error("db locked"));
+
+    const result = await importResultImage({
+      resultId: "result-a",
+      promptId: "prompt-a",
+      dataUrl: PNG_DATA_URL,
+      result: { provider: "midjourney", score_overall: 4 },
+      originalName: "result.png",
+    }, d);
+
+    expect(result).toEqual({ id: "result-a", queued: true });
   });
 
   it("cleans up staged files when result DB insertion fails", async () => {
@@ -197,6 +215,7 @@ describe("sharedImport", () => {
     expect(result).toEqual({ id: "result-a", queued: true });
     expect(d.publishSharedIngestJob).toHaveBeenCalledTimes(2);
     expect(d.addResultToProject).not.toHaveBeenCalled();
+    expect(d.processInbox).toHaveBeenCalledOnce();
   });
 
   it("stages, inserts, links, then publishes for local project result imports", async () => {

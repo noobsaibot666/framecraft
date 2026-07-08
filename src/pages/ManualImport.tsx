@@ -16,6 +16,7 @@ import {
   analyzeImportedPromptLearning,
   buildImportLearningNotes,
   suggestPromptTags,
+  suggestPromptTitle,
   type ImportLearningSignal,
 } from "@/lib/importLearning";
 import { detectFormulaOrder, getFormulaForProvider, learnFormulaFromImport, missingFormulaSteps } from "@/lib/promptFormula";
@@ -153,7 +154,7 @@ function parseBatchJson(raw: string): { items: BatchItem[]; error?: string } {
     for (const item of parsed) {
       if (typeof item !== "object" || !item.prompt_text) continue;
       items.push({
-        title: item.title || `Imported prompt ${items.length + 1}`,
+        title: item.title || suggestPromptTitle(item.prompt_text) || `Imported prompt ${items.length + 1}`,
         prompt_text: item.prompt_text,
         provider: item.provider,
         tags: Array.isArray(item.tags) ? item.tags : [],
@@ -281,7 +282,7 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
     const reader = new FileReader();
     reader.onload = async () => {
       const dataUrl = reader.result as string;
-      const thumb = await thumbnailFromDataUrl(dataUrl, 400);
+      const thumb = await thumbnailFromDataUrl(dataUrl, 640);
       onThumbnailData(thumb);
     };
     reader.readAsDataURL(file);
@@ -443,6 +444,14 @@ export function ManualImport() {
   // Live tag suggestions — recomputed from the prompt text as the user types,
   // right next to the field where they're adding tags (no "Analyze" click needed).
   const tagSuggestions = useMemo(() => suggestPromptTags(raw, tags), [raw, tags]);
+
+  // Title is required to save, so pre-fill it from the pasted prompt text as
+  // soon as there's enough to work with — only while the field is still empty,
+  // so it never overwrites a title the user typed or edited themselves.
+  useEffect(() => {
+    if (!raw.trim()) return;
+    setTitle((prev) => (prev.trim() ? prev : suggestPromptTitle(raw)));
+  }, [raw]);
 
   // Batch import state
   const [batchJson, setBatchJson] = useState("");

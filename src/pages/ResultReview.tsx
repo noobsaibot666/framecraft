@@ -8,9 +8,10 @@ import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
 import { updateCoOccurrences } from "@/lib/tokenPatterns";
-import { fileToDataUrl, fileToPreviewUrl, validateImageFile } from "@/lib/imageUtils";
+import { fileToDataUrl, fileToPreviewUrl, isVideoFile, validateMediaFile } from "@/lib/imageUtils";
 import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
 import { addResultToProject, getProjectsForPrompt } from "@/lib/projects";
+import { formatLibraryActionError } from "@/lib/librarySettings";
 import { cn } from "@/lib/utils";
 import type { Prompt } from "@/types";
 
@@ -123,7 +124,7 @@ export function ResultReview() {
 
   const handleFile = useCallback(async (f: File) => {
     try {
-      await validateImageFile(f);
+      await validateMediaFile(f);
       setUploadError("");
       setFile(f);
       setPreviewUrl((current) => {
@@ -157,32 +158,36 @@ export function ResultReview() {
 
   const handleSaveAsRef = async () => {
     if (!file || !prompt) return;
-    const dataUrl = await fileToDataUrl(file);
-    const refId = crypto.randomUUID().replace(/-/g, "");
-    await importReferenceImage({
-      referenceId: refId,
-      dataUrl,
-      originalName: file.name,
-      reference: {
-        title: `${prompt.title} — result`,
-        kind: "result",
-        provider: prompt.provider,
-        category: prompt.category,
-        tags: prompt.tags,
-      },
-    });
-    setSavedAsRef(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const refId = crypto.randomUUID().replace(/-/g, "");
+      await importReferenceImage({
+        referenceId: refId,
+        dataUrl,
+        originalName: file.name,
+        reference: {
+          title: `${prompt.title} — result`,
+          kind: "result",
+          provider: prompt.provider,
+          category: prompt.category,
+          tags: prompt.tags,
+        },
+      });
+      setSavedAsRef(true);
+    } catch (error) {
+      setUploadError(formatLibraryActionError(error));
+    }
   };
 
   const handleSave = async () => {
     if (!promptId) return;
     setSaving(true);
+    setUploadError("");
     try {
       const resultId = crypto.randomUUID().replace(/-/g, "");
-      let queued = false;
       if (file) {
         const dataUrl = await fileToDataUrl(file);
-        const result = await importResultImage({
+        await importResultImage({
           resultId,
           promptId,
           dataUrl,
@@ -202,7 +207,6 @@ export function ResultReview() {
             notes: notes || undefined,
           },
         });
-        queued = result.queued;
       } else {
         await createResult({
           id: resultId,
@@ -240,9 +244,14 @@ export function ResultReview() {
         updateCoOccurrences(prompt.prompt_text, scores.overall).catch(() => {});
       }
 
-      if (!queued) await recomputePromptResultSummary(promptId);
+      // importResultImage applies queued (portable-library) jobs immediately on
+      // a best-effort basis, so the summary may already reflect this result —
+      // recomputing unconditionally is cheap and just re-reads current state.
+      await recomputePromptResultSummary(promptId);
 
       navigate(`/library/${promptId}`, { state: { newResultId: resultId } });
+    } catch (error) {
+      setUploadError(formatLibraryActionError(error));
     } finally {
       setSaving(false);
     }
@@ -276,17 +285,27 @@ export function ResultReview() {
         {/* ── Left: Image + Checklist + Notes ── */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
 
-          {/* Drop zone / Image preview */}
+          {/* Drop zone / Result preview */}
           <div className="flex flex-col gap-3">
-            <span className="system-label">RESULT IMAGE</span>
+            <span className="system-label">RESULT IMAGE OR VIDEO</span>
             {previewUrl ? (
               <div className="relative group">
-                <img
-                  src={previewUrl}
-                  alt="Result preview"
-                  className="w-full rounded-card object-contain max-h-[480px]"
-                  style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
-                />
+                {file && isVideoFile(file) ? (
+                  <video
+                    src={previewUrl}
+                    controls
+                    playsInline
+                    className="w-full rounded-card max-h-[480px]"
+                    style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
+                  />
+                ) : (
+                  <img
+                    src={previewUrl}
+                    alt="Result preview"
+                    className="w-full rounded-card object-contain max-h-[480px]"
+                    style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
+                  />
+                )}
                 <button
                   type="button"
                   onClick={() => { setFile(null); setPreviewUrl(null); }}
@@ -304,16 +323,16 @@ export function ResultReview() {
                 onClick={() => inputRef.current?.click()}
                 className={cn(
                   "flex flex-col items-center justify-center gap-3 h-64 rounded-card cursor-pointer transition-precise",
-                  dragging ? "border-white/40" : "border-white/10 hover:border-white/20"
+                  dragging ? "border-cyan/60" : "border-white/25 hover:border-white/45"
                 )}
-                style={{ border: "2px dashed", background: dragging ? "rgba(255,255,255,0.03)" : "var(--surface-base)" }}
+                style={{ border: "2px dashed", background: dragging ? "rgba(56,183,200,0.06)" : "rgba(255,255,255,0.035)" }}
               >
                 <Upload size={20} className="text-dim/40" />
                 <div className="flex flex-col items-center gap-1">
-                  <span className="font-mono text-[12px] text-dim">Drop image here or click to browse</span>
-                  <span className="font-mono text-[9px] text-dim/50">JPEG, PNG, WEBP — up to 25 MiB</span>
+                  <span className="font-mono text-[12px] text-dim">Drop an image or video here, or click to browse</span>
+                  <span className="font-mono text-[9px] text-dim/50">JPEG, PNG, WEBP up to 25 MiB — MP4, MOV, WEBM up to 300 MiB</span>
                 </div>
-                <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={onInputChange} />
+                <input ref={inputRef} type="file" accept="image/*,video/*" className="hidden" onChange={onInputChange} />
               </div>
             )}
             {uploadError && <p className="font-mono text-[10px] text-red/80">{uploadError}</p>}

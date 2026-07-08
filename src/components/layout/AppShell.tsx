@@ -19,8 +19,11 @@ registerShortcutLabel("cmd+/", "Show keyboard shortcuts");
 // colliding with bare Ctrl+P/F/N (print/find/new) browser accelerators.
 registerShortcutLabel("cmd+shift+d", "Go to Dashboard");
 registerShortcutLabel("cmd+shift+p", "Go to Prompt Craft");
-registerShortcutLabel("cmd+shift+i", "Go to Library");
+registerShortcutLabel("cmd+shift+l", "Go to Library");
+registerShortcutLabel("cmd+shift+i", "Go to Import");
 registerShortcutLabel("cmd+shift+t", "Go to Tokens");
+registerShortcutLabel("cmd+shift+c", "Go to Campaigns");
+registerShortcutLabel("cmd+shift+n", "New Prompt");
 // Plain cmd+, (no Shift) — Shift+comma types "<", not ",", so
 // "cmd+shift+," could never match a real keypress. cmd+, is also the
 // universal cross-app "Preferences" convention and isn't a reserved
@@ -48,8 +51,11 @@ export function AppShell() {
   // Global page-navigation shortcuts (available everywhere, AppShell wraps every route).
   useShortcut("cmd+shift+d", () => navigate("/"));
   useShortcut("cmd+shift+p", () => navigate("/craft"));
-  useShortcut("cmd+shift+i", () => navigate("/library"));
+  useShortcut("cmd+shift+l", () => navigate("/library"));
+  useShortcut("cmd+shift+i", () => navigate("/import"));
   useShortcut("cmd+shift+t", () => navigate("/tokens"));
+  useShortcut("cmd+shift+c", () => navigate("/campaigns"));
+  useShortcut("cmd+shift+n", () => navigate("/craft"));
   useShortcut("cmd+,", () => navigate("/settings"));
 
   return (

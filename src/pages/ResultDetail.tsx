@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/Input";
 import { getResultById, updateResult, deleteResult, recomputePromptResultSummary, getPromptById, setPromptThumbnail } from "@/lib/db";
 import { getProjectsForPrompt } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
+import { isVideoPath } from "@/lib/fileStore";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
@@ -81,6 +82,17 @@ function ResultImage({ src }: { src?: string }) {
       <span className="font-mono text-[12px] text-dim/40">No image stored</span>
     </div>
   );
+  if (isVideoPath(src)) {
+    return (
+      <video
+        src={image.src}
+        controls
+        playsInline
+        className="w-full rounded-card max-h-[480px]"
+        style={{ border: "var(--border-default)", background: "var(--surface-base)" }}
+      />
+    );
+  }
   return (
     <img
       src={image.src}

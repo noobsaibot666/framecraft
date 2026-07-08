@@ -42,7 +42,7 @@ import {
 } from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
 import { saveResultImage } from "@/lib/fileStore";
-import { fileToDataUrl, validateImageFile } from "@/lib/imageUtils";
+import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { cn } from "@/lib/utils";
@@ -359,7 +359,7 @@ function EmptySlot({ role, onClick, onDrop, disabled = false }: {
         "flex flex-col items-center justify-center rounded-card transition-precise aspect-[4/3]",
         disabled ? "cursor-wait opacity-60" : "cursor-pointer hover:bg-cyan/6"
       )}
-      style={{ border: "2px dashed rgba(56,183,200,0.35)", background: "rgba(56,183,200,0.035)" }}
+      style={{ border: "2px dashed rgba(56,183,200,0.5)", background: "rgba(56,183,200,0.06)" }}
       onClick={onClick}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -371,7 +371,7 @@ function EmptySlot({ role, onClick, onDrop, disabled = false }: {
         {formatComparisonRole(role)}
       </span>
       <Upload size={18} className="text-cyan mb-2" />
-      <span className="font-mono text-[12px] text-readable">{disabled ? "Importing image..." : "Drop image or click"}</span>
+      <span className="font-mono text-[12px] text-readable">{disabled ? "Importing…" : "Drop image or video, or click"}</span>
       <span className="font-mono text-[10px] text-muted mt-1">Import into next slot</span>
     </div>
   );
@@ -626,7 +626,7 @@ export function ComparisonLab() {
   };
 
   const handleUploadFiles = async (files: FileList | File[]) => {
-    const file = Array.from(files).find((f) => f.type.startsWith("image/"));
+    const file = Array.from(files).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
     if (!file || uploading) return;
     if (slots.every(Boolean)) {
       setUploadError("All comparison slots are full. Remove one before adding another image.");
@@ -636,7 +636,7 @@ export function ComparisonLab() {
     setUploading(true);
     setUploadError("");
     try {
-      await validateImageFile(file);
+      await validateMediaFile(file);
       const title = file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ") || "Comparison upload";
       const dataUrl = await fileToDataUrl(file);
       let result: ComparisonResult;
@@ -1017,7 +1017,7 @@ export function ComparisonLab() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         className="hidden"
         onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
       />
@@ -1201,10 +1201,10 @@ export function ComparisonLab() {
               }}
               disabled={uploading}
               className="flex flex-col items-center justify-center gap-2 rounded-card py-8 transition-precise disabled:opacity-60 hover:bg-cyan/6"
-              style={{ border: "2px dashed rgba(56,183,200,0.35)", background: "rgba(56,183,200,0.035)" }}
+              style={{ border: "2px dashed rgba(56,183,200,0.5)", background: "rgba(56,183,200,0.06)" }}
             >
               <Upload size={18} className="text-cyan" />
-              <span className="font-mono text-[13px] text-soft-white">{uploading ? "Importing..." : "Import image"}</span>
+              <span className="font-mono text-[13px] text-soft-white">{uploading ? "Importing…" : "Drop image or video, or click to import"}</span>
               <span className="font-mono text-[10px] text-readable">Creates a project result and fills a slot</span>
             </button>
             {uploadError && (

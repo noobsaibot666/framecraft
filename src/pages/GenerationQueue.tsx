@@ -63,6 +63,7 @@ function QueueCard({
   onCopy,
   onStatus,
   onImport,
+  onImportFile,
   onPin,
   onMoveToTop,
 }: {
@@ -73,17 +74,31 @@ function QueueCard({
   onCopy: () => void;
   onStatus: (status: QueueStatus) => void;
   onImport: () => void;
+  onImportFile: (file: File) => void;
   onPin: (pinned: boolean) => void;
   onMoveToTop: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
+  const [dragOver, setDragOver] = useState(false);
 
   return (
     <div
       ref={setNodeRef}
-      style={{ ...style, border: "var(--border-default)", background: "var(--surface-card)" }}
-      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card"
+      style={{
+        ...style,
+        border: dragOver ? "1px solid rgba(56,183,200,0.6)" : "var(--border-default)",
+        background: dragOver ? "rgba(56,183,200,0.06)" : "var(--surface-card)",
+      }}
+      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 p-5 rounded-card transition-precise"
+      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+        if (file) onImportFile(file);
+      }}
     >
       <div className="flex flex-col items-center gap-1.5 pt-0.5">
         <span className="font-mono text-[9px] text-dim/40 tabular-nums leading-none">#{position}</span>
@@ -253,6 +268,19 @@ export function GenerationQueue() {
     };
   };
 
+  const handleDirectImport = async (itemId: string, file: File) => {
+    const item = items.find((entry) => entry.id === itemId);
+    if (!item) return;
+    try {
+      setImportError(null);
+      await importQueueResult(withPromptData(item), await fileToDataUrl(file));
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Import failed");
+    } finally {
+      await refresh();
+    }
+  };
+
   const handleSingleImport = async (files: FileList | null) => {
     const file = files?.[0];
     const item = items.find((entry) => entry.id === singleImportId);
@@ -301,14 +329,14 @@ export function GenerationQueue() {
             ref={bulkFileRef}
             type="file"
             multiple
-            accept="image/*"
+            accept="image/*,video/*"
             className="hidden"
             onChange={(event) => handleBulkImport(event.target.files)}
           />
           <input
             ref={singleFileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             className="hidden"
             onChange={(event) => handleSingleImport(event.target.files)}
           />
@@ -446,6 +474,7 @@ export function GenerationQueue() {
                     setSingleImportId(item.id);
                     singleFileRef.current?.click();
                   }}
+                  onImportFile={(file) => handleDirectImport(item.id, file)}
                   onPin={async (pinned) => {
                     await pinQueueItem(item.id, pinned);
                     await refresh();

@@ -1111,7 +1111,7 @@ function PromptThumbnailField({
   };
 
   return (
-    <div className="flex flex-col gap-2 w-40 shrink-0">
+    <div className="flex flex-col gap-2 w-full">
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -2431,50 +2431,6 @@ export function CraftPrompt() {
             </div>
           </div>
 
-          {/* Thumbnail & Version */}
-          <div>
-            <SectionHeader label="THUMBNAIL & VERSION" />
-            <div className="flex gap-4">
-              <PromptThumbnailField
-                thumbnailData={fields.thumbnail_data}
-                sourceUrl={fields.source_url}
-                onThumbnailChange={(v) => setF("thumbnail_data", v)}
-                onSourceUrlChange={(v) => setF("source_url", v)}
-              />
-              <div className="flex flex-col gap-2 flex-1 min-w-0 justify-center">
-                {isEdit ? (
-                  <>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-[11px] text-soft-white">Version {originalVersion}</span>
-                      {parentId && (
-                        <button type="button" onClick={() => navigate(`/craft/${parentId}`)}
-                          className="font-mono text-[9px] text-dim/50 hover:text-cyan transition-precise">
-                          ↑ view the version this was forked from
-                        </button>
-                      )}
-                    </div>
-                    <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
-                      Testing a change? Save it as a new version to keep this one intact and compare results side by side.
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSaveNewVersion}
-                      disabled={saving || savingNewVersion}
-                      className="w-fit"
-                    >
-                      <Save size={10} /> {savingNewVersion ? "Saving…" : `+ Add Version v${originalVersion + 1}`}
-                    </Button>
-                  </>
-                ) : (
-                  <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
-                    Version history and the "Add Version" fork become available once this prompt is saved.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* Prompt */}
           <div>
             <SectionHeader label="PROMPT" />
@@ -3047,6 +3003,47 @@ export function CraftPrompt() {
             {!["midjourney", "dalle", "stable_diffusion", "nano_banana"].includes(fields.provider) && (
               <p className="font-mono text-[13px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
+          </CollapsibleCard>
+
+          {/* Thumbnail & Version */}
+          <CollapsibleCard title="THUMBNAIL & VERSION">
+            <div className="flex flex-col gap-3">
+              <PromptThumbnailField
+                thumbnailData={fields.thumbnail_data}
+                sourceUrl={fields.source_url}
+                onThumbnailChange={(v) => setF("thumbnail_data", v)}
+                onSourceUrlChange={(v) => setF("source_url", v)}
+              />
+              {isEdit ? (
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[11px] text-soft-white">Version {originalVersion}</span>
+                    {parentId && (
+                      <button type="button" onClick={() => navigate(`/craft/${parentId}`)}
+                        className="font-mono text-[9px] text-dim/50 hover:text-cyan transition-precise">
+                        ↑ view the version this was forked from
+                      </button>
+                    )}
+                  </div>
+                  <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                    Testing a change? Save it as a new version to keep this one intact and compare results side by side.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSaveNewVersion}
+                    disabled={saving || savingNewVersion}
+                    className="w-fit"
+                  >
+                    <Save size={10} /> {savingNewVersion ? "Saving…" : `+ Add Version v${originalVersion + 1}`}
+                  </Button>
+                </>
+              ) : (
+                <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                  Version history and the "Add Version" fork become available once this prompt is saved.
+                </p>
+              )}
+            </div>
           </CollapsibleCard>
 
           {/* Related Prompts */}

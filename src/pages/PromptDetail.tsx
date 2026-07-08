@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft, Braces, Copy, CopyPlus, Download, Edit2, ExternalLink, Trash2, Star, AlertTriangle, Plus, ImageOff, GitBranch, BookOpen,
-  Layers, ListPlus, Shuffle, X, FolderOpen, Image as ImageIcon,
+  Layers, ListPlus, Shuffle, X, FolderOpen, Image as ImageIcon, RefreshCw,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -87,6 +87,66 @@ function ResultImage({ src }: { src?: string }) {
   return <img src={image.src} alt="Result" className="w-full h-full object-cover" onError={image.onError} />;
 }
 
+// Manual override (thumbnail_result_id) wins, else the best-rated linked
+// result (ties broken by recency), else the imported/uploaded thumbnail —
+// same priority order as PromptLibrary's getResultCoverMap ?? thumbnail_data.
+function resolveCoverImage(prompt: Prompt, results: Result[]): string | undefined {
+  if (prompt.thumbnail_result_id) {
+    const override = results.find((r) => r.id === prompt.thumbnail_result_id);
+    if (override?.file_path) return override.file_path;
+  }
+  const best = [...results]
+    .filter((r) => r.file_path)
+    .sort((a, b) => b.score_overall - a.score_overall || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  if (best?.file_path) return best.file_path;
+  return prompt.thumbnail_data;
+}
+
+// Hero preview at the top of the page — gives an at-a-glance look at the
+// prompt instead of making the user dig into the Results tab. Falls back to
+// a manual retry affordance (same pattern as PromptLibrary's PendingThumbnail)
+// when a source URL exists but the thumbnail fetch never resolved.
+function PromptPreview({ prompt, coverSrc, onOpen, onRetryThumbnail }: {
+  prompt: Prompt;
+  coverSrc?: string;
+  onOpen: () => void;
+  onRetryThumbnail: () => Promise<void>;
+}) {
+  const image = useImageDisplaySrc(coverSrc);
+  const [retrying, setRetrying] = useState(false);
+
+  if (image.src) {
+    return (
+      <button type="button" onClick={onOpen}
+        className="w-full max-h-96 rounded-card overflow-hidden cursor-zoom-in transition-precise hover:opacity-95"
+        style={{ border: "var(--border-default)" }}>
+        <img src={image.src} alt={prompt.title} onError={image.onError} className="w-full max-h-96 object-cover" />
+      </button>
+    );
+  }
+
+  if (!prompt.source_url) return null;
+
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (retrying) return;
+    setRetrying(true);
+    try { await onRetryThumbnail(); } finally { setRetrying(false); }
+  };
+
+  return (
+    <button type="button" onClick={handleRetry} disabled={retrying}
+      title="Thumbnail failed to load — click to retry"
+      className="w-full h-40 rounded-card flex flex-col items-center justify-center gap-2 transition-precise hover:border-cyan/40"
+      style={{ border: "1px dashed rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.02)" }}>
+      <RefreshCw size={14} className={cn("text-dim/50", retrying && "animate-spin")} />
+      <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">
+        {retrying ? "Retrying…" : "Thumbnail failed — retry"}
+      </span>
+    </button>
+  );
+}
+
 export function PromptDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -107,6 +167,7 @@ export function PromptDetail() {
   const [variationsLoading, setVariationsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"results" | "versions">("results");
   const [enlargedResult, setEnlargedResult] = useState<string | null>(null);
+  const [heroEnlarged, setHeroEnlarged] = useState(false);
   const [versions, setVersions] = useState<VersionNode[]>([]);
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesValue, setNotesValue] = useState("");
@@ -209,6 +270,18 @@ export function PromptDetail() {
       toast.success("Added to queue");
     } catch {
       toast.error("Failed to add to queue");
+    }
+  };
+
+  const handleRetryPromptThumbnail = async () => {
+    if (!prompt?.source_url) return;
+    try {
+      const { fetchImageAsDataUrl } = await import("@/lib/fetchImageUrl");
+      const dataUrl = await fetchImageAsDataUrl(prompt.source_url);
+      await update(prompt.id, { thumbnail_data: dataUrl });
+      setPrompt((p) => p ? { ...p, thumbnail_data: dataUrl } : p);
+    } catch {
+      toast.error("Thumbnail still unreachable — the source link may be blocked or expired");
     }
   };
 
@@ -502,6 +575,8 @@ export function PromptDetail() {
     );
   }
 
+  const coverSrc = resolveCoverImage(prompt, results);
+
   return (
     <PageContainer
       title={prompt.title}
@@ -626,21 +701,15 @@ export function PromptDetail() {
               </>
             )}
           </div>
-          {/* Danger Zone — audit doc 05 §11: previously Delete was just the
-              last button in the flat row, distinguished only by red
-              confirm-styling. Grouped the same way Result Actions already
-              is, so it reads as its own zone, not a color accident. */}
-          <div className="flex items-center p-0.5 rounded-sm" style={{ border: "1px solid rgba(215,25,33,0.25)" }} title="Danger Zone">
-            <Button
-              variant={confirmDelete ? "primary" : "ghost"}
-              size="sm"
-              onClick={handleDelete}
-              className={confirmDelete ? "bg-red/20 border-red/60 text-red" : "text-dim"}
-            >
-              <Trash2 size={11} />
-              {confirmDelete ? "Confirm Delete" : "Delete"}
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            className={confirmDelete ? "text-red border-red/40" : "text-dim hover:text-red"}
+          >
+            <Trash2 size={11} />
+            {confirmDelete ? "Confirm Delete" : "Delete"}
+          </Button>
         </div>
       }
     >
@@ -680,9 +749,38 @@ export function PromptDetail() {
         </div>
       )}
 
+      {/* Hero preview enlarge overlay */}
+      {heroEnlarged && coverSrc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 cursor-zoom-out"
+          onClick={() => setHeroEnlarged(false)}>
+          <div className="relative max-w-[90vw] max-h-[90vh] rounded-card overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <ResultImage src={coverSrc} />
+            <button type="button" onClick={() => setHeroEnlarged(false)}
+              className="absolute top-2 right-2 w-7 h-7 rounded-sm bg-black/70 text-white/60 hover:text-white flex items-center justify-center">
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-8 min-w-0">
         {/* Main column */}
         <div className="flex flex-col gap-6 flex-1 min-w-0">
+          {/* At-a-glance identity — provider, category, aspect ratio right under the title */}
+          <div className="flex flex-wrap items-center gap-2">
+            <ProviderBadge provider={prompt.provider} />
+            {prompt.category && <Badge variant="category">{prompt.category}</Badge>}
+            {prompt.aspect_ratio && <Badge>{prompt.aspect_ratio}</Badge>}
+          </div>
+
+          {/* Hero preview */}
+          <PromptPreview
+            prompt={prompt}
+            coverSrc={coverSrc}
+            onOpen={() => setHeroEnlarged(true)}
+            onRetryThumbnail={handleRetryPromptThumbnail}
+          />
+
           {showExtractRecipe && (
             <ExtractRecipePanel
               prompt={prompt}
@@ -977,7 +1075,7 @@ export function PromptDetail() {
         </div>
 
         {/* Sidebar */}
-        <div className="flex flex-col gap-5 w-64 shrink-0">
+        <div className="flex flex-col gap-5 w-72 shrink-0">
 
           {/* Scores + status */}
           <div
@@ -1088,6 +1186,72 @@ export function PromptDetail() {
                 ))}
               </div>
               <span className="font-mono text-[10px] text-dim">{prompt.reuse_potential}/10</span>
+            </div>
+          </div>
+
+          {/* Metadata — consolidated identity (provider, category, source) +
+              version info, previously split across two thin, loosely-related
+              "Parameters"/unlabeled version cards. */}
+          <div
+            className="flex flex-col gap-3 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <span className="system-label">METADATA</span>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-1.5">
+                <ProviderBadge provider={prompt.provider} />
+              </div>
+              <MetaRow label="CATEGORY" value={prompt.category} />
+              <MetaRow label="USE CASE" value={prompt.use_case} />
+              <MetaRow label="ASPECT" value={prompt.aspect_ratio} />
+              <MetaRow label="MODEL" value={prompt.model_version} />
+              <MetaRow label="CAMERA" value={prompt.camera} />
+              <MetaRow label="LENS" value={prompt.lens} />
+              <MetaRow label="LIGHTING" value={prompt.lighting} />
+            </div>
+            {prompt.parameters && Object.keys(prompt.parameters).length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <span className="font-mono text-[9px] tracking-widest uppercase text-dim/40">Provider Parameters</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(prompt.parameters).map(([key, value]) => (
+                    <span key={key}
+                      className="font-mono text-[9.5px] text-readable px-2 py-1 rounded-sm"
+                      style={{ border: "var(--border-dim)" }}>
+                      {key}{typeof value === "boolean" ? "" : `: ${formatParamValue(value)}`}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {prompt.source_url && (
+              <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                <span className="font-mono text-[9px] tracking-widest uppercase text-dim/40">Source</span>
+                <button type="button" onClick={() => window.open(prompt.source_url, "_blank")}
+                  title={`Open in browser: ${prompt.source_url}`}
+                  className="flex items-center gap-1.5 font-mono text-[10px] text-cyan/70 hover:text-cyan hover:underline transition-precise text-left min-w-0">
+                  <ExternalLink size={9} className="shrink-0" />
+                  <span className="truncate">{prompt.source_url}</span>
+                </button>
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <MetaRow label="VERSION" value={prompt.version} />
+              <MetaRow label="CREATED" value={formatDate(prompt.created_at)} />
+              <MetaRow label="UPDATED" value={formatDate(prompt.updated_at)} />
+              {prompt.parent_id && (
+                <button
+                  className="text-left font-mono text-[9px] text-dim hover:text-white transition-precise mt-1"
+                  onClick={() => navigate(`/library/${prompt.parent_id}`)}
+                >
+                  ↑ View parent version
+                </button>
+              )}
+              <button
+                className="flex items-center gap-1.5 font-mono text-[9px] text-dim hover:text-white transition-precise mt-1"
+                onClick={() => navigate(`/lineage/${prompt.id}`)}
+              >
+                <GitBranch size={9} /> Version history
+              </button>
             </div>
           </div>
 
@@ -1237,64 +1401,6 @@ export function PromptDetail() {
             ) : (
               <span className="font-mono text-[9px] text-dim/40">Not linked to any project</span>
             )}
-          </div>
-
-          {/* Parameters */}
-          <div
-            className="flex flex-col gap-3 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">PARAMETERS</span>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-1.5">
-                <ProviderBadge provider={prompt.provider} />
-              </div>
-              <MetaRow label="CATEGORY" value={prompt.category} />
-              <MetaRow label="USE CASE" value={prompt.use_case} />
-              <MetaRow label="ASPECT" value={prompt.aspect_ratio} />
-              <MetaRow label="MODEL" value={prompt.model_version} />
-              <MetaRow label="CAMERA" value={prompt.camera} />
-              <MetaRow label="LENS" value={prompt.lens} />
-              <MetaRow label="LIGHTING" value={prompt.lighting} />
-            </div>
-            {prompt.parameters && Object.keys(prompt.parameters).length > 0 && (
-              <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                <span className="font-mono text-[9px] tracking-widest uppercase text-dim/40">Provider Parameters</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {Object.entries(prompt.parameters).map(([key, value]) => (
-                    <span key={key}
-                      className="font-mono text-[9.5px] text-readable px-2 py-1 rounded-sm"
-                      style={{ border: "var(--border-dim)" }}>
-                      {key}{typeof value === "boolean" ? "" : `: ${formatParamValue(value)}`}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Version info */}
-          <div
-            className="flex flex-col gap-2 p-3 rounded-card"
-            style={{ border: "var(--border-dim)", background: "var(--surface-base)" }}
-          >
-            <MetaRow label="VERSION" value={prompt.version} />
-            <MetaRow label="CREATED" value={formatDate(prompt.created_at)} />
-            <MetaRow label="UPDATED" value={formatDate(prompt.updated_at)} />
-            {prompt.parent_id && (
-              <button
-                className="text-left font-mono text-[9px] text-dim hover:text-white transition-precise mt-1"
-                onClick={() => navigate(`/library/${prompt.parent_id}`)}
-              >
-                ↑ View parent version
-              </button>
-            )}
-            <button
-              className="flex items-center gap-1.5 font-mono text-[9px] text-dim hover:text-white transition-precise mt-1"
-              onClick={() => navigate(`/lineage/${prompt.id}`)}
-            >
-              <GitBranch size={9} /> Version history
-            </button>
           </div>
 
           {/* Related by tags */}

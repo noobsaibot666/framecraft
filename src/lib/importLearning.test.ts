@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeImportedPromptLearning, buildImportLearningNotes, suggestPromptTags, suggestPromptTitle } from "./importLearning";
+import { analyzeImportedPromptLearning, buildImportLearningNotes, suggestBestUse, suggestPromptTags, suggestPromptTitle } from "./importLearning";
 
 describe("importLearning", () => {
   it("extracts reusable learning signals from an imported prompt", () => {
@@ -85,5 +85,14 @@ describe("importLearning", () => {
     );
     expect(title.length).toBeLessThanOrEqual(48);
     expect(title.endsWith(" ")).toBe(false);
+  });
+
+  it("suggests a best-use label from the same category signal as tag detection", () => {
+    expect(suggestBestUse("Luxury product campaign, glass perfume bottle on black marble --ar 4:5"))
+      .toBe("Product shot / packshot");
+    expect(suggestBestUse("Editorial portrait, natural skin texture, soft window light --ar 3:4"))
+      .toBe("Portrait / headshot");
+    expect(suggestBestUse("A cat sitting on a windowsill")).toBe("");
+    expect(suggestBestUse("   ")).toBe("");
   });
 });

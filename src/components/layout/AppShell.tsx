@@ -86,7 +86,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
     >
       <div
         className="flex flex-col gap-5 w-full max-w-md rounded-card p-6"
-        style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+        style={{ border: "var(--border-default)", background: "var(--color-panel)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

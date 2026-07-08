@@ -391,7 +391,24 @@ const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTi
       </div>
       <FieldInput label="PROFILE --profile" value={p.profile} onChange={(v) => set("profile", v)} placeholder="e.g. og9pmia" />
       {/* Output tuning */}
-      <FieldInput label="SEED --seed" value={p.seed} onChange={(v) => set("seed", v)} placeholder="e.g. 4294967295" />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between">
+          <span className="system-label text-[10px] text-muted">SEED --seed</span>
+          <button
+            type="button"
+            onClick={() => set("seed", String(Math.floor(Math.random() * 4294967296)))}
+            className="font-mono text-[9px] text-readable hover:text-white uppercase tracking-widest transition-precise"
+          >
+            Randomize
+          </button>
+        </div>
+        <FieldInput label="" value={p.seed} onChange={(v) => set("seed", v)} placeholder="e.g. 4294967295" />
+        {p.seed && (
+          <span className="font-mono text-[8px] text-cyan/60 leading-relaxed">
+            Locked — Duplicate/Create Variation now carry this seed forward, so reuse it to keep the same look across a sequence.
+          </span>
+        )}
+      </div>
       <FieldInput label="ZOOM --zoom" value={p.zoom} onChange={(v) => set("zoom", v)} placeholder="1.5" hint="1–2" />
       <FieldInput label="STOP --stop" value={p.stop} onChange={(v) => set("stop", v)} placeholder="80" hint="10–100" />
       <FieldInput label="REPEAT --repeat" value={p.repeat} onChange={(v) => set("repeat", v)} placeholder="4" hint="1–40" />
@@ -447,43 +464,59 @@ const SDParamsPanel = memo(function SDParamsPanel({ p, set }: { p: SDParams; set
 
 // ─── Prompt assembly ──────────────────────────────────────────
 
+// Guards param-appending against duplicating a flag the base text already
+// carries (e.g. a manual-mode prompt the user hand-typed "--seed 12345"
+// into) — used by both builder-mode assembly and manual-mode copy/export,
+// since manual mode's base text can legitimately already contain any flag.
+function hasFlag(text: string, flag: string): boolean {
+  return new RegExp(`--${flag}\\b`, "i").test(text);
+}
+
+function appendMJParams(base: string, f: Pick<Fields, "aspect_ratio">, mj: MJParams): string {
+  let out = base;
+  if (f.aspect_ratio && !hasFlag(base, "ar"))      out += ` --ar ${f.aspect_ratio}`;
+  if (mj.model_version && !hasFlag(base, "v"))     out += ` --v ${mj.model_version}`;
+  if (mj.quality && !hasFlag(base, "q"))           out += ` --q ${mj.quality}`;
+  if (mj.stylize && !hasFlag(base, "s"))           out += ` --s ${mj.stylize}`;
+  if (mj.chaos && !hasFlag(base, "c"))             out += ` --c ${mj.chaos}`;
+  if (mj.weird && !hasFlag(base, "w"))             out += ` --w ${mj.weird}`;
+  if (mj.style && !hasFlag(base, "style"))         out += ` --style ${mj.style}`;
+  if (mj.sw && !hasFlag(base, "sw"))               out += ` --sw ${mj.sw}`;
+  if (mj.sv && !hasFlag(base, "sv"))               out += ` --sv ${mj.sv}`;
+  if (mj.seed && !hasFlag(base, "seed"))           out += ` --seed ${mj.seed}`;
+  if (mj.zoom && !hasFlag(base, "zoom"))           out += ` --zoom ${mj.zoom}`;
+  if (mj.stop && !hasFlag(base, "stop"))           out += ` --stop ${mj.stop}`;
+  if (mj.repeat && !hasFlag(base, "repeat"))       out += ` --repeat ${mj.repeat}`;
+  if (mj.sref_code && !hasFlag(base, "sref"))      out += ` --sref ${mj.sref_code}`;
+  if (mj.profile && !hasFlag(base, "profile"))     out += ` --profile ${mj.profile}`;
+  if (mj.raw && !hasFlag(base, "raw"))             out += ` --raw`;
+  if (mj.hd && !hasFlag(base, "hd"))               out += ` --hd`;
+  if (mj.tile && !hasFlag(base, "tile"))           out += ` --tile`;
+  if (mj.fast && !hasFlag(base, "fast"))           out += ` --fast`;
+  if (mj.relax && !hasFlag(base, "relax"))         out += ` --relax`;
+  if (mj.exp && !/-{1,2}exp\b/i.test(base))        out += ` -exp`;
+  if (mj.no_prompt && !hasFlag(base, "no"))        out += ` --no ${mj.no_prompt}`;
+  return out;
+}
+
 function assembleMJ(f: Fields, mj: MJParams): string {
   const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
-  let out = parts.join(", ");
-  if (f.aspect_ratio)   out += ` --ar ${f.aspect_ratio}`;
-  if (mj.model_version) out += ` --v ${mj.model_version}`;
-  if (mj.quality)       out += ` --q ${mj.quality}`;
-  if (mj.stylize)       out += ` --s ${mj.stylize}`;
-  if (mj.chaos)         out += ` --c ${mj.chaos}`;
-  if (mj.weird)         out += ` --w ${mj.weird}`;
-  if (mj.style)         out += ` --style ${mj.style}`;
-  if (mj.sw)            out += ` --sw ${mj.sw}`;
-  if (mj.sv)            out += ` --sv ${mj.sv}`;
-  if (mj.seed)          out += ` --seed ${mj.seed}`;
-  if (mj.zoom)          out += ` --zoom ${mj.zoom}`;
-  if (mj.stop)          out += ` --stop ${mj.stop}`;
-  if (mj.repeat)        out += ` --repeat ${mj.repeat}`;
-  if (mj.sref_code)     out += ` --sref ${mj.sref_code}`;
-  if (mj.profile)       out += ` --profile ${mj.profile}`;
-  if (mj.raw)           out += ` --raw`;
-  if (mj.hd)            out += ` --hd`;
-  if (mj.tile)          out += ` --tile`;
-  if (mj.fast)          out += ` --fast`;
-  if (mj.relax)         out += ` --relax`;
-  if (mj.exp)           out += ` -exp`;
-  if (mj.no_prompt)     out += ` --no ${mj.no_prompt}`;
+  return appendMJParams(parts.join(", "), f, mj);
+}
+
+function appendDalleParams(base: string, dalle: DalleParams): string {
+  let out = base;
+  if (dalle.size && !/\[size:/i.test(base))       out += ` [size: ${dalle.size}]`;
+  if (dalle.quality && !/\[quality:/i.test(base)) out += ` [quality: ${dalle.quality}]`;
+  if (dalle.style && !/\[style:/i.test(base))     out += ` [style: ${dalle.style}]`;
   return out;
 }
 
 function assembleDalle(f: Fields, dalle: DalleParams): string {
   const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
     .map((s) => s.trim()).filter(Boolean);
-  let out = parts.join(", ");
-  if (dalle.size) out += ` [size: ${dalle.size}]`;
-  if (dalle.quality) out += ` [quality: ${dalle.quality}]`;
-  if (dalle.style) out += ` [style: ${dalle.style}]`;
-  return out;
+  return appendDalleParams(parts.join(", "), dalle);
 }
 
 function assembleSD(f: Fields, _sd: SDParams): string {
@@ -1550,7 +1583,19 @@ export function CraftPrompt() {
   );
 
   const builtAssembled = (() => {
-    if (mode === "manual") return fields.prompt_text;
+    if (mode === "manual") {
+      // Manual mode's prompt_text is free text, not builder fields — but it
+      // still needs the provider parameters (--ar, --seed, --sref, --no, …)
+      // appended so Copy Prompt produces something actually paste-ready,
+      // instead of silently dropping every parameter the user set (or that
+      // import detected) whenever the prompt isn't in builder mode, which is
+      // the case for every prompt brought in through Import.
+      switch (fields.provider) {
+        case "midjourney": return appendMJParams(fields.prompt_text, fields, mjParams);
+        case "dalle": return appendDalleParams(fields.prompt_text, dalleParams);
+        default: return fields.prompt_text;
+      }
+    }
     const extras = extraTokenTexts.length ? `, ${extraTokenTexts.join(", ")}` : "";
     switch (fields.provider) {
       case "midjourney": return assembleMJ(fields, mjParams) + extras;

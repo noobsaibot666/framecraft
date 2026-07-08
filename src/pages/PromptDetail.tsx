@@ -391,6 +391,11 @@ export function PromptDetail() {
         camera: prompt.camera,
         lens: prompt.lens,
         lighting: prompt.lighting,
+        // style_ref (--sref) and parameters (--seed, --stylize, --chaos, …)
+        // were previously dropped on duplicate/variation — silently breaking
+        // the exact seed/style consistency across takes MJ's --seed exists for.
+        style_ref: prompt.style_ref,
+        parameters: prompt.parameters,
         tags: prompt.tags,
         notes: prompt.notes,
         parent_id: prompt.id,
@@ -420,6 +425,11 @@ export function PromptDetail() {
         camera: prompt.camera,
         lens: prompt.lens,
         lighting: prompt.lighting,
+        // Keep the same --seed/--sref/--stylize etc. as the original — a
+        // "variation" is meant to be a different take on the same subject,
+        // and MJ's --seed is exactly the mechanism for holding that steady.
+        style_ref: prompt.style_ref,
+        parameters: prompt.parameters,
         tags: prompt.tags,
         notes: prompt.notes,
         parent_id: prompt.id,
@@ -614,7 +624,7 @@ export function PromptDetail() {
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
                 <div className="absolute right-0 top-full mt-1 z-20 flex flex-col min-w-44 rounded-sm py-1"
-                  style={{ background: "var(--surface-card)", border: "var(--border-default)" }}>
+                  style={{ background: "var(--color-panel)", border: "var(--border-default)" }}>
                   <span className="px-3 pt-1.5 pb-1 font-mono text-[8px] tracking-widest uppercase text-dim/40">Copy / Export</span>
                   <button type="button"
                     onClick={() => { handleCopy(); setShowExportMenu(false); }}
@@ -718,7 +728,7 @@ export function PromptDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setShowCreateVariationModal(false)}>
           <div
             className="flex flex-col gap-4 w-full max-w-sm p-5 rounded-card"
-            style={{ border: "var(--border-strong)", background: "var(--surface-card)" }}
+            style={{ border: "var(--border-strong)", background: "var(--color-panel)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">

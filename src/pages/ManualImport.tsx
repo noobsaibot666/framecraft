@@ -16,6 +16,7 @@ import {
   analyzeImportedPromptLearning,
   buildImportLearningNotes,
   suggestPromptTags,
+  suggestBestUse,
   suggestPromptTitle,
   type ImportLearningSignal,
 } from "@/lib/importLearning";
@@ -448,10 +449,13 @@ export function ManualImport() {
 
   // Title is required to save, so pre-fill it from the pasted prompt text as
   // soon as there's enough to work with — only while the field is still empty,
-  // so it never overwrites a title the user typed or edited themselves.
+  // so it never overwrites a title the user typed or edited themselves. Best
+  // Use gets the same treatment — it's optional, but free when we already
+  // have the keyword signal used for tag detection.
   useEffect(() => {
     if (!raw.trim()) return;
     setTitle((prev) => (prev.trim() ? prev : suggestPromptTitle(raw)));
+    setBestUse((prev) => (prev.trim() ? prev : suggestBestUse(raw)));
   }, [raw]);
 
   // Batch import state
@@ -994,11 +998,6 @@ export function ManualImport() {
             )}
 
             <div className="flex flex-col gap-2">
-              {raw.trim() && !analyzed && (
-                <Button variant="ghost" size="sm" className="w-full justify-center" onClick={handleAnalyze}>
-                  Detect Parameters
-                </Button>
-              )}
               <Button variant="primary" size="md" onClick={() => handleSave(false)}
                 disabled={saving || !raw.trim()} className="w-full justify-center">
                 <Upload size={11} />
@@ -1087,9 +1086,6 @@ export function ManualImport() {
             )}
 
             <div className="flex flex-col gap-2">
-              <Button variant="ghost" size="sm" className="w-full justify-center" onClick={handleBatchParse} disabled={!batchJson.trim()}>
-                Parse JSON
-              </Button>
               <Button variant="primary" size="md" onClick={handleBatchImport}
                 disabled={!batchParsed.length || batchSaving} className="w-full justify-center">
                 <Upload size={11} />

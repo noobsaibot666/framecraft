@@ -216,6 +216,36 @@ export function suggestPromptTitle(text: string): string {
   return title || truncateAtWordBoundary(stripped, MAX_SUGGESTED_TITLE_LENGTH);
 }
 
+// Canonical "best use" phrase per TAG_KEYWORD_MAP category — reuses the same
+// keyword signal as tag detection so the suggestion stays consistent with
+// whatever category tag the prompt already matched.
+const BEST_USE_BY_CATEGORY: Record<string, string> = {
+  portrait: "Portrait / headshot",
+  product: "Product shot / packshot",
+  fashion: "Fashion editorial",
+  advertising: "Hero banner / ad campaign",
+  automotive: "Automotive campaign",
+  architecture: "Architectural / interior visual",
+  editorial: "Editorial spread",
+  cinematic: "Cinematic key art",
+};
+
+/**
+ * Suggests a short "best use" label (hero banner, product shot, editorial
+ * spread, …) from the prompt text, so the field can be pre-filled on import
+ * the same way the Title field is. Picks the first TAG_KEYWORD_MAP category
+ * the prompt matches — the same signal analyzeImportedPromptLearning uses for
+ * tags — so the suggestion always lines up with the detected category tag.
+ */
+export function suggestBestUse(text: string): string {
+  if (!text.trim()) return "";
+  const lower = stripPromptParams(text).toLowerCase();
+  const match = Object.entries(TAG_KEYWORD_MAP).find(([, keywords]) =>
+    keywords.some((keyword) => lower.includes(keyword))
+  );
+  return match ? BEST_USE_BY_CATEGORY[match[0]] ?? "" : "";
+}
+
 export function buildImportLearningNotes(source: string | undefined, learning: ImportLearningSignal): string | undefined {
   const lines = [
     source?.trim() ? `Source: ${source.trim()}` : "",

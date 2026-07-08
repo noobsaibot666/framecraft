@@ -12,11 +12,20 @@ import { scheduleLikelyRoutePrefetch } from "@/lib/routePrefetch";
 
 registerShortcutLabel("cmd+k", "Open command search");
 registerShortcutLabel("cmd+/", "Show keyboard shortcuts");
-registerShortcutLabel("cmd+ctrl+d", "Go to Dashboard");
-registerShortcutLabel("cmd+ctrl+p", "Go to Prompt Craft");
-registerShortcutLabel("cmd+ctrl+i", "Go to Library");
-registerShortcutLabel("cmd+ctrl+t", "Go to Tokens");
-registerShortcutLabel("cmd+ctrl+,", "Go to Settings");
+// cmd+shift+<letter>, not cmd+ctrl+<letter>: the old combo required holding
+// Ctrl *and* the Windows key together on Windows, which Win+Ctrl+D/Left/Right
+// etc. reserve system-wide for virtual-desktop switching — those keydowns
+// never reached the browser at all. cmd+shift avoids that, and avoids
+// colliding with bare Ctrl+P/F/N (print/find/new) browser accelerators.
+registerShortcutLabel("cmd+shift+d", "Go to Dashboard");
+registerShortcutLabel("cmd+shift+p", "Go to Prompt Craft");
+registerShortcutLabel("cmd+shift+i", "Go to Library");
+registerShortcutLabel("cmd+shift+t", "Go to Tokens");
+// Plain cmd+, (no Shift) — Shift+comma types "<", not ",", so
+// "cmd+shift+," could never match a real keypress. cmd+, is also the
+// universal cross-app "Preferences" convention and isn't a reserved
+// browser/OS accelerator, so it doesn't need the extra Shift anyway.
+registerShortcutLabel("cmd+,", "Go to Settings");
 
 export function AppShell() {
   const navigate = useNavigate();
@@ -37,11 +46,11 @@ export function AppShell() {
   useShortcut("cmd+/", () => setShortcutsOpen((v) => !v));
 
   // Global page-navigation shortcuts (available everywhere, AppShell wraps every route).
-  useShortcut("cmd+ctrl+d", () => navigate("/"));
-  useShortcut("cmd+ctrl+p", () => navigate("/craft"));
-  useShortcut("cmd+ctrl+i", () => navigate("/library"));
-  useShortcut("cmd+ctrl+t", () => navigate("/tokens"));
-  useShortcut("cmd+ctrl+,", () => navigate("/settings"));
+  useShortcut("cmd+shift+d", () => navigate("/"));
+  useShortcut("cmd+shift+p", () => navigate("/craft"));
+  useShortcut("cmd+shift+i", () => navigate("/library"));
+  useShortcut("cmd+shift+t", () => navigate("/tokens"));
+  useShortcut("cmd+,", () => navigate("/settings"));
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-black">

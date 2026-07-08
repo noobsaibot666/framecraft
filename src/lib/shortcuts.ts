@@ -8,20 +8,48 @@ export interface ShortcutDef {
 
 const SAFE_UNMODIFIED_KEYS = new Set(["escape"]);
 
-function isAllowedShortcut(keys: string): boolean {
-  const parsed = parseKeys(keys);
-  return parsed.meta || parsed.ctrl || parsed.shift || SAFE_UNMODIFIED_KEYS.has(parsed.key);
+/**
+ * "cmd" (and its "mod" alias) means "this platform's primary modifier" —
+ * Cmd on macOS, Ctrl on Windows/Linux — not the literal Meta/Windows key.
+ * Every shortcut in this app used to hardcode "cmd" -> Meta, so on Windows
+ * nothing ever fired: users press Ctrl, never the Windows key, for app
+ * shortcuts. Accepts an explicit platform hint for tests; in the real app
+ * it reads the live environment (falling back to "mac" only when no
+ * navigator exists at all, e.g. SSR/non-browser contexts).
+ */
+export function isMacPlatform(platformHint?: string): boolean {
+  if (platformHint !== undefined) return /mac/i.test(platformHint);
+  if (typeof navigator === "undefined") return true;
+  const uaDataPlatform = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform;
+  const source = uaDataPlatform || navigator.platform || navigator.userAgent || "";
+  return /mac/i.test(source);
 }
 
-function parseKeys(keys: string): { meta: boolean; ctrl: boolean; shift: boolean; alt: boolean; key: string } {
+const IS_MAC = isMacPlatform();
+
+interface ParsedShortcut {
+  meta: boolean;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  key: string;
+}
+
+export function parseKeys(keys: string, isMac: boolean = IS_MAC): ParsedShortcut {
   const parts = keys.toLowerCase().split("+");
+  const isPrimaryModifier = parts.includes("cmd") || parts.includes("mod");
   return {
-    meta: parts.includes("cmd") || parts.includes("meta"),
-    ctrl: parts.includes("ctrl"),
+    meta: parts.includes("meta") || (isPrimaryModifier && isMac),
+    ctrl: parts.includes("ctrl") || (isPrimaryModifier && !isMac),
     shift: parts.includes("shift"),
     alt: parts.includes("alt"),
     key: parts[parts.length - 1],
   };
+}
+
+function isAllowedShortcut(keys: string): boolean {
+  const parsed = parseKeys(keys);
+  return parsed.meta || parsed.ctrl || parsed.shift || SAFE_UNMODIFIED_KEYS.has(parsed.key);
 }
 
 function matches(e: KeyboardEvent, keys: string): boolean {
@@ -62,30 +90,31 @@ export function getRegisteredShortcuts(): { keys: string; description: string }[
   return [..._registry.entries()].map(([keys, description]) => ({ keys, description }));
 }
 
-// Format keys for display: "cmd+k" → "⌘K", "cmd+shift+n" → "⌘⇧N"
-export function formatShortcutKeys(keys: string): string {
-  return keys
-    .split("+")
-    .map((part) => {
-      switch (part.toLowerCase()) {
-        case "cmd":
-        case "meta":
-          return "⌘";
-        case "ctrl":
-          return "⌃";
-        case "shift":
-          return "⇧";
-        case "alt":
-          return "⌥";
-        case "escape":
-          return "Esc";
-        case "enter":
-          return "↵";
-        case "backspace":
-          return "⌫";
-        default:
-          return part.toUpperCase();
-      }
-    })
-    .join("");
+// Format keys for display: mac renders concatenated glyphs ("cmd+shift+p" ->
+// "⌘⇧P"), Windows/Linux render textual "+"-joined labels ("Ctrl+Shift+P").
+export function formatShortcutKeys(keys: string, isMac: boolean = IS_MAC): string {
+  const parts = keys.split("+").map((part) => {
+    switch (part.toLowerCase()) {
+      case "cmd":
+      case "mod":
+        return isMac ? "⌘" : "Ctrl";
+      case "meta":
+        return isMac ? "⌘" : "Win";
+      case "ctrl":
+        return isMac ? "⌃" : "Ctrl";
+      case "shift":
+        return isMac ? "⇧" : "Shift";
+      case "alt":
+        return isMac ? "⌥" : "Alt";
+      case "escape":
+        return "Esc";
+      case "enter":
+        return "↵";
+      case "backspace":
+        return "⌫";
+      default:
+        return part.toUpperCase();
+    }
+  });
+  return isMac ? parts.join("") : parts.join("+");
 }

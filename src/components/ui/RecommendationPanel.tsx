@@ -30,7 +30,7 @@ function Section({
       >
         <span className="system-label">{title}</span>
         <div className="flex items-center gap-1.5">
-          <span className="font-mono text-[10px] text-readable">{count}</span>
+          <span className="font-mono text-[11px] text-readable">{count}</span>
           {open
             ? <ChevronUp size={10} className="text-readable group-hover:text-cyan transition-precise" />
             : <ChevronDown size={10} className="text-readable group-hover:text-cyan transition-precise" />
@@ -66,7 +66,7 @@ function TokenChip({
       )}
       style={{ border: "var(--border-dim)" }}
     >
-      <span className="font-mono text-[12px] text-soft-white flex-1 truncate">{text}</span>
+      <span className="font-mono text-[13px] text-soft-white flex-1 truncate">{text}</span>
       {copied
         ? <Check size={10} className="text-cyan shrink-0" />
         : <Copy size={10} className="text-readable group-hover:text-cyan shrink-0 transition-precise" />
@@ -99,13 +99,13 @@ function PromptRow({
       style={{ border: "var(--border-dim)" }}
     >
       <div className="flex-1 min-w-0">
-        <span className="font-sans text-[11.5px] text-soft-white block truncate">{title}</span>
-        <span className="font-mono text-[10px] text-readable">{reason}</span>
+        <span className="font-sans text-[12.5px] text-soft-white block truncate">{title}</span>
+        <span className="font-mono text-[11px] text-readable">{reason}</span>
       </div>
       <div className="flex items-center gap-1 shrink-0 mt-0.5">
         {isWinner && <Star size={10} className="text-amber fill-amber/35" />}
         {rating > 0 && (
-          <span className="font-mono text-[10px] text-readable">{rating}/5</span>
+          <span className="font-mono text-[11px] text-readable">{rating}/5</span>
         )}
       </div>
     </button>
@@ -137,12 +137,12 @@ function CodeRow({
     <div className="flex min-h-10 items-center gap-2.5 px-3 py-2 rounded-sm"
       style={{ border: "var(--border-dim)" }}>
       <div className="flex-1 min-w-0">
-        <span className="font-mono text-[10.5px] text-soft-white truncate block">{code}</span>
-        {title && <span className="font-mono text-[10px] text-readable truncate block">{title}</span>}
-        <span className="font-mono text-[10px] text-readable">{reason}</span>
+        <span className="font-mono text-[11.5px] text-soft-white truncate block">{code}</span>
+        {title && <span className="font-mono text-[11px] text-readable truncate block">{title}</span>}
+        <span className="font-mono text-[11px] text-readable">{reason}</span>
       </div>
       {rating > 0 && (
-        <span className="font-mono text-[10px] text-readable shrink-0">{rating}/5</span>
+        <span className="font-mono text-[11px] text-readable shrink-0">{rating}/5</span>
       )}
       <button type="button" onClick={handleCopy}
         className="shrink-0 text-readable hover:text-cyan transition-precise">
@@ -179,8 +179,8 @@ function ReferenceRow({
         <div className="w-7 h-7 rounded-sm shrink-0" style={{ background: "rgba(255,255,255,0.05)" }} />
       )}
       <div className="flex-1 min-w-0">
-        <span className="font-sans text-[11.5px] text-soft-white truncate block">{title}</span>
-        <span className="font-mono text-[10px] text-readable">{kind} · {reason}</span>
+        <span className="font-sans text-[12.5px] text-soft-white truncate block">{title}</span>
+        <span className="font-mono text-[11px] text-readable">{kind} · {reason}</span>
       </div>
     </button>
   );
@@ -205,8 +205,8 @@ function AvoidanceRow({
         severity === "critical" || severity === "high" ? "text-red/50" : "text-white/25"
       )} />
       <div className="flex-1 min-w-0">
-        <span className="font-mono text-[10.5px] text-soft-white block">{label}</span>
-        <span className="font-mono text-[10px] text-readable">{reason}</span>
+        <span className="font-mono text-[11.5px] text-soft-white block">{label}</span>
+        <span className="font-mono text-[11px] text-readable">{reason}</span>
       </div>
     </div>
   );
@@ -217,9 +217,13 @@ function AvoidanceRow({
 interface Props {
   context: RecommendationContext;
   onTokenCopy?: (text: string) => void;
+  // Lets a caller that already renders its own "RECOMMENDATIONS" fold
+  // header (e.g. CraftPrompt's CollapsibleCard) skip this component's own
+  // duplicate header instead of showing two stacked side by side.
+  hideHeader?: boolean;
 }
 
-export function RecommendationPanel({ context, onTokenCopy }: Props) {
+export function RecommendationPanel({ context, onTokenCopy, hideHeader = false }: Props) {
   const [recs, setRecs] = useState<RecommendationSet | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
@@ -272,15 +276,17 @@ export function RecommendationPanel({ context, onTokenCopy }: Props) {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <Lightbulb size={12} className="text-cyan" />
-        <span className="system-label">RECOMMENDATIONS</span>
-        {loading && <span className="font-mono text-[10px] text-readable">Loading...</span>}
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center gap-2">
+          <Lightbulb size={12} className="text-cyan" />
+          <span className="system-label">RECOMMENDATIONS</span>
+          {loading && <span className="font-mono text-[12px] text-readable">Loading...</span>}
+        </div>
+      )}
 
       {!recs || total === 0 ? (
         <div className="flex flex-col items-center justify-center py-6 gap-1">
-          <span className="font-mono text-[12px] text-readable">
+          <span className="font-mono text-[13px] text-readable">
             {loading
               ? "Scanning library…"
               : !context.provider

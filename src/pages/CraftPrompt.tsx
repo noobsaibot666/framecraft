@@ -1,7 +1,8 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon } from "lucide-react";
-import { ChevronDown } from "lucide-react";
+import { useDropzone } from "react-dropzone";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon, Lightbulb } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea } from "@/components/ui/Input";
@@ -45,7 +46,7 @@ import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
 // cmd+s label registered in ProjectWorkspace (shared context)
-registerShortcutLabel("cmd+ctrl+r", "Reset prompt fields");
+registerShortcutLabel("cmd+shift+r", "Reset prompt fields");
 
 // ─── Shared sub-components ────────────────────────────────────
 
@@ -115,7 +116,7 @@ function FieldInput({
 function RatingPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="system-label text-[12px] text-muted">RATING</label>
+      <label className="system-label text-[13px] text-muted">RATING</label>
       <div className="flex items-center gap-1.5">
         {Array.from({ length: 5 }).map((_, i) => (
           <button
@@ -139,8 +140,8 @@ function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <label className="system-label text-[12px] text-muted">AI-LOOK RISK</label>
-        <span className={cn("font-mono text-[12px]", colorClass)}>{value}/10</span>
+        <label className="system-label text-[13px] text-muted">AI-LOOK RISK</label>
+        <span className={cn("font-mono text-[13px]", colorClass)}>{value}/10</span>
       </div>
       <input
         type="range" min={0} max={10} value={value}
@@ -648,10 +649,10 @@ const NANO_BANANA_TEMPLATES: NanaBananaTemplate[] = [
 function NanaBananaParamsPanel({ onUseTemplate }: { onUseTemplate: (t: NanaBananaTemplate) => void }) {
   return (
     <div className="flex flex-col gap-3">
-      <p className="font-mono text-[10px] text-readable leading-relaxed">
+      <p className="font-mono text-[11px] text-readable leading-relaxed">
         Structured JSON for Gemini realism generation. Fill the fields above, then copy the generated JSON from the output panel.
       </p>
-      <span className="font-mono text-[8px] uppercase tracking-widest text-amber/50">Realism Formula References</span>
+      <span className="font-mono text-[9px] uppercase tracking-widest text-amber/50">Realism Formula References</span>
       <div className="grid grid-cols-2 gap-2">
         {NANO_BANANA_TEMPLATES.map((t) => (
           <div
@@ -660,11 +661,11 @@ function NanaBananaParamsPanel({ onUseTemplate }: { onUseTemplate: (t: NanaBanan
             style={{ border: "1px solid rgba(246,173,85,0.18)", background: "rgba(246,173,85,0.03)" }}
           >
             <div className="flex items-center justify-between gap-1">
-              <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: "rgba(246,173,85,0.7)" }}>{t.label}</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: "rgba(246,173,85,0.7)" }}>{t.label}</span>
               <button
                 type="button"
                 onClick={() => onUseTemplate(t)}
-                className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm transition-precise"
+                className="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded-sm transition-precise"
                 style={{ border: "1px solid rgba(246,173,85,0.25)", color: "rgba(246,173,85,0.6)" }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(246,173,85,0.9)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(246,173,85,0.08)"; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(246,173,85,0.6)"; (e.currentTarget as HTMLButtonElement).style.background = ""; }}
@@ -676,7 +677,7 @@ function NanaBananaParamsPanel({ onUseTemplate }: { onUseTemplate: (t: NanaBanan
               {t.keyElements.map((el) => (
                 <li key={el} className="flex items-start gap-1">
                   <span className="mt-px shrink-0" style={{ color: "rgba(246,173,85,0.35)" }}>·</span>
-                  <span className="font-mono text-[9px] text-muted leading-tight">{el}</span>
+                  <span className="font-mono text-[10px] text-muted leading-tight">{el}</span>
                 </li>
               ))}
             </ul>
@@ -933,11 +934,11 @@ function ImpactRefRow({ ref_ }: { ref_: ImpactReference }) {
       <ImpactRefThumb src={ref_.thumbnail_data} />
       <div className="flex-1 min-w-0">
         <span className="font-sans text-[13px] text-soft-white truncate block">{ref_.title}</span>
-        <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{ref_.kind}</span>
+        <span className="font-mono text-[10px] text-readable tracking-widest uppercase">{ref_.kind}</span>
       </div>
       <div className="flex flex-col items-end shrink-0 gap-0.5">
-        <span className="font-mono text-[10px] text-amber">{ref_.result_win_count + ref_.project_winner_count}★</span>
-        <span className="font-mono text-[8px] text-muted">{ref_.project_count} proj</span>
+        <span className="font-mono text-[11px] text-amber">{ref_.result_win_count + ref_.project_winner_count}★</span>
+        <span className="font-mono text-[9px] text-muted">{ref_.project_count} proj</span>
       </div>
     </button>
   );
@@ -950,6 +951,7 @@ function ProviderFormatBlock({ label, icon, color, borderColor, bgColor, content
   borderColor: string; bgColor: string; content: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [open, setOpen] = useState(true);
   const handleCopy = async () => {
     await navigator.clipboard.writeText(content);
     setCopied(true);
@@ -958,18 +960,63 @@ function ProviderFormatBlock({ label, icon, color, borderColor, bgColor, content
   return (
     <div className="flex flex-col gap-3 p-4 rounded-card" style={{ border: `1px solid ${borderColor}`, background: bgColor }}>
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-widest" style={{ color }}>
+        <button type="button" onClick={() => setOpen((o) => !o)}
+          className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest transition-precise" style={{ color }}>
+          {open ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
           {icon} {label}
-        </span>
+        </button>
         <button type="button" onClick={handleCopy}
-          className="font-mono text-[9px] uppercase tracking-widest transition-precise"
+          className="font-mono text-[10px] uppercase tracking-widest transition-precise"
           style={{ color: copied ? "#fff" : color }}>
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
-      <pre className="font-mono text-[10.5px] text-soft-white/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">
-        {content}
-      </pre>
+      {open && (
+        <pre className="selectable font-mono text-[11.5px] text-soft-white/80 whitespace-pre-wrap leading-relaxed overflow-x-auto">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+// ─── Collapsible right-column card ─────────────────────────────
+// Every card from PARAMETERS down to the AI Prompt Advisor shares this
+// fold/unfold chrome so the whole right column can be scanned or tucked
+// away section by section — mirrors the fold pattern RecommendationPanel's
+// own internal Section component already uses (ChevronUp/ChevronDown).
+
+function CollapsibleCard({
+  title,
+  icon,
+  headerExtra,
+  defaultOpen = true,
+  gap = "gap-4",
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  headerExtra?: React.ReactNode;
+  defaultOpen?: boolean;
+  gap?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={cn("flex flex-col p-5 rounded-card", gap)} style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center justify-between w-full group text-left">
+        <span className="flex items-center gap-2 system-label text-soft-white">
+          {icon}
+          {title}
+        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {headerExtra}
+          {open
+            ? <ChevronUp size={11} className="text-readable group-hover:text-cyan transition-precise" />
+            : <ChevronDown size={11} className="text-readable group-hover:text-cyan transition-precise" />}
+        </div>
+      </button>
+      {open && children}
     </div>
   );
 }
@@ -1661,6 +1708,16 @@ export function CraftPrompt() {
     if (!fields.title.trim()) errs.title = "Required";
     if (!assembled.trim()) errs.prompt_text = "Required";
     setErrors(errs);
+    // Previously this only set inline field errors with no toast — clicking
+    // Save with a missing title or empty prompt did nothing visible at all,
+    // reading exactly like a broken button. Surface it loudly instead.
+    if (errs.title && errs.prompt_text) {
+      toast.error("Add a title and write a prompt before saving.");
+    } else if (errs.title) {
+      toast.error("Add a title before saving.");
+    } else if (errs.prompt_text) {
+      toast.error("Nothing to save yet — fill in the prompt fields or write a prompt.");
+    }
     return Object.keys(errs).length === 0;
   };
 
@@ -1894,7 +1951,6 @@ export function CraftPrompt() {
   };
 
   // ── Image Description AI (right column, under Prompt Output) ──
-  const describeFileInputRef = useRef<HTMLInputElement>(null);
   const [describeModel, setDescribeModel] = useState<AIModel>(() => pickVisionModel() ?? VISION_MODELS[0]);
   const [describeImageFile, setDescribeImageFile] = useState<File | null>(null);
   const [describeImageUrl, setDescribeImageUrl] = useState("");
@@ -1918,10 +1974,7 @@ export function CraftPrompt() {
 
   useEffect(() => () => { if (describeImageUrl) URL.revokeObjectURL(describeImageUrl); }, [describeImageUrl]);
 
-  const handleDescribeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  const handleDescribeFile = useCallback((file: File) => {
     setDescribeImageFile(file);
     setDescribeImageUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -1933,10 +1986,31 @@ export function CraftPrompt() {
     setDescribeAspectRatio("");
     // Exact ratio from the real pixels — more reliable than asking the vision
     // model to guess, and feeds the formula's Midjourney-style Parameters step.
+    const probeUrl = URL.createObjectURL(file);
     const probe = new Image();
-    probe.onload = () => setDescribeAspectRatio(computeAspectRatioLabel(probe.naturalWidth, probe.naturalHeight));
-    probe.src = URL.createObjectURL(file);
-  };
+    probe.onload = () => {
+      setDescribeAspectRatio(computeAspectRatioLabel(probe.naturalWidth, probe.naturalHeight));
+      URL.revokeObjectURL(probeUrl);
+    };
+    probe.onerror = () => URL.revokeObjectURL(probeUrl);
+    probe.src = probeUrl;
+  }, []);
+
+  const handleDescribeDrop = useCallback((accepted: File[]) => {
+    const file = accepted[0];
+    if (file) handleDescribeFile(file);
+  }, [handleDescribeFile]);
+
+  const {
+    getRootProps: getDescribeRootProps,
+    getInputProps: getDescribeInputProps,
+    isDragActive: describeDragActive,
+  } = useDropzone({
+    onDrop: handleDescribeDrop,
+    accept: { "image/*": [".jpg", ".jpeg", ".png", ".webp"] },
+    maxFiles: 1,
+    multiple: false,
+  });
 
   const handleDescribeAnalyze = async () => {
     if (!describeImageFile) return;
@@ -1973,7 +2047,7 @@ export function CraftPrompt() {
   };
 
   useShortcut("cmd+s", () => { if (!saving && !savingNewVersion) handleSave(false); });
-  useShortcut("cmd+ctrl+r", handleReset);
+  useShortcut("cmd+shift+r", handleReset);
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
@@ -2744,14 +2818,10 @@ export function CraftPrompt() {
         <div className="flex flex-col gap-5 min-w-0">
 
           {/* Provider Parameters */}
-          <div
-            className="flex flex-col gap-4 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          <CollapsibleCard
+            title="PARAMETERS"
+            headerExtra={<span className="font-mono text-[11px] text-readable uppercase tracking-widest">{fields.provider}</span>}
           >
-            <div className="flex items-center justify-between">
-              <span className="system-label text-soft-white">PARAMETERS</span>
-              <span className="font-mono text-[10px] text-readable uppercase tracking-widest">{fields.provider}</span>
-            </div>
             {fields.provider === "midjourney" && (
               <MidjourneyParams
                 p={mjParams}
@@ -2777,20 +2847,13 @@ export function CraftPrompt() {
               />
             )}
             {!["midjourney", "dalle", "stable_diffusion", "nano_banana"].includes(fields.provider) && (
-              <p className="font-mono text-[12px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
+              <p className="font-mono text-[13px] text-readable leading-relaxed">No structured parameters for this provider. Add them manually in the prompt text.</p>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Related Prompts */}
           {relatedPrompts.length > 0 && (
-            <div
-              className="flex flex-col gap-3 p-5 rounded-card"
-              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-            >
-              <div className="flex items-center gap-2">
-                <Zap size={11} className="text-cyan" />
-                <span className="system-label text-soft-white">RELATED</span>
-              </div>
+            <CollapsibleCard title="RELATED" icon={<Zap size={11} className="text-cyan" />} gap="gap-3">
               {relatedPrompts.map((p) => (
                 <button
                   key={p.id}
@@ -2799,7 +2862,7 @@ export function CraftPrompt() {
                   className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
                   style={{ border: "var(--border-dim)" }}
                 >
-                  <span className="font-mono text-[12px] text-readable truncate">{p.title}</span>
+                  <span className="font-mono text-[13px] text-readable truncate">{p.title}</span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
@@ -2807,19 +2870,12 @@ export function CraftPrompt() {
                   </div>
                 </button>
               ))}
-            </div>
+            </CollapsibleCard>
           )}
 
           {/* Recipes */}
           {availableRecipes.length > 0 && (
-            <div
-              className="flex flex-col gap-3 p-5 rounded-card"
-              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-            >
-              <div className="flex items-center gap-2">
-                <Wand2 size={11} className="text-cyan" />
-                <span className="system-label text-soft-white">RECIPES</span>
-              </div>
+            <CollapsibleCard title="RECIPES" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-3">
               {availableRecipes.map((recipe) => (
                 <button
                   key={recipe.id}
@@ -2829,23 +2885,22 @@ export function CraftPrompt() {
                   style={{ border: appliedRecipeId === recipe.id ? "1px solid rgba(72,229,232,0.35)" : "var(--border-dim)" }}
                 >
                   <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="font-mono text-[12px] text-readable truncate">{recipe.title}</span>
-                    <span className="font-mono text-[9px] text-muted truncate">{recipe.provider}</span>
+                    <span className="font-mono text-[13px] text-readable truncate">{recipe.title}</span>
+                    <span className="font-mono text-[10px] text-muted truncate">{recipe.provider}</span>
                   </div>
-                  <span className="font-mono text-[9px] text-cyan shrink-0">Use</span>
+                  <span className="font-mono text-[10px] text-cyan shrink-0">Use</span>
                 </button>
               ))}
-            </div>
+            </CollapsibleCard>
           )}
 
           {/* Project inspirations — full visual reference board */}
           {projectRefs.length > 0 && (
-            <div className="flex flex-col gap-3 p-5 rounded-card"
-              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-              <div className="flex items-center justify-between">
-                <span className="system-label text-soft-white">INSPIRATIONS</span>
-                <span className="font-mono text-[9px] text-muted">{projectRefs.length} project ref{projectRefs.length !== 1 ? "s" : ""}</span>
-              </div>
+            <CollapsibleCard
+              title="INSPIRATIONS"
+              gap="gap-3"
+              headerExtra={<span className="font-mono text-[10px] text-muted">{projectRefs.length} project ref{projectRefs.length !== 1 ? "s" : ""}</span>}
+            >
               <div className="grid grid-cols-4 gap-2">
                 {projectRefs.map((ref) => (
                   <button
@@ -2857,39 +2912,38 @@ export function CraftPrompt() {
                     title={ref.title}
                   >
                     <InspirationThumb src={ref.thumbnail_data} />
-                    <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[8px] text-white/80 truncate opacity-0 group-hover:opacity-100 transition-precise"
+                    <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[9px] text-white/80 truncate opacity-0 group-hover:opacity-100 transition-precise"
                       style={{ background: "rgba(0,0,0,0.75)" }}>
                       {ref.title}
                     </span>
                   </button>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
           )}
 
           {/* High-impact references */}
           {insightsReady && impactRefs.length > 0 && (
-            <div className="flex flex-col gap-3 p-5 rounded-card"
-              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-              <div className="flex items-center justify-between">
-                <span className="system-label text-soft-white">IMPACT REFS</span>
-                <span className="font-mono text-[9px] text-muted">linked to winners</span>
-              </div>
+            <CollapsibleCard
+              title="IMPACT REFS"
+              gap="gap-3"
+              headerExtra={<span className="font-mono text-[10px] text-muted">linked to winners</span>}
+            >
               <div className="flex flex-col gap-1.5">
                 {impactRefs.map((ref) => (
                   <ImpactRefRow key={ref.id} ref_={ref} />
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
           )}
 
-          {/* Recommendations */}
-          <div
-            className="flex flex-col gap-4 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
+          {/* Recommendations — hideHeader since the panel would otherwise
+              render its own second "RECOMMENDATIONS" label right below
+              this card's fold header. */}
+          <CollapsibleCard title="RECOMMENDATIONS" icon={<Lightbulb size={11} className="text-cyan" />}>
             {insightsReady ? (
               <RecommendationPanel
+                hideHeader
                 context={{
                   provider: deferredProvider,
                   category: deferredCategory || undefined,
@@ -2901,17 +2955,13 @@ export function CraftPrompt() {
               />
             ) : (
               <div className="flex items-center justify-center py-6">
-                <span className="font-mono text-[10px] text-muted">Loading recommendations…</span>
+                <span className="font-mono text-[11px] text-muted">Loading recommendations…</span>
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Scoring */}
-          <div
-            className="flex flex-col gap-5 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label text-soft-white">SCORING</span>
+          <CollapsibleCard title="SCORING" gap="gap-5">
             <RatingPicker value={fields.rating} onChange={(n) => setF("rating", n)} />
             <RiskSlider value={fields.ai_look_risk} onChange={(n) => setF("ai_look_risk", n)} />
             <div className="flex items-center gap-4 pt-1">
@@ -2924,29 +2974,27 @@ export function CraftPrompt() {
                 <span className="system-label text-dim/60">FAILED</span>
               </label>
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Prompt Output — editable */}
-          <div
-            className="flex flex-col gap-3 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <div className="flex items-center justify-between">
-              <span className="system-label">PROMPT OUTPUT</span>
-              <span className={cn("font-mono text-[9px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
+          <CollapsibleCard
+            title="PROMPT OUTPUT"
+            gap="gap-3"
+            headerExtra={
+              <span className={cn("font-mono text-[10px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
                 {charCount} chars
               </span>
-            </div>
-
+            }
+          >
             {/* Provider formatting hints */}
             {(() => {
               const hints = getProviderHints(fields.provider);
               if (!hints.length) return null;
               return (
                 <div className="flex flex-col gap-1">
-                  <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
                   {hints.map((h) => (
-                    <span key={h} className="font-mono text-[9px] text-dim/60">· {h}</span>
+                    <span key={h} className="font-mono text-[10px] text-dim/60">· {h}</span>
                   ))}
                 </div>
               );
@@ -2958,7 +3006,7 @@ export function CraftPrompt() {
               onChange={(e) => setOutputOverride(e.target.value)}
               placeholder="Assembled prompt will appear here…"
               rows={7}
-              className="w-full px-3 py-2 font-mono text-[10px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
+              className="w-full px-3 py-2 font-mono text-[11px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
               style={{ border: "var(--border-dim)" }}
             />
 
@@ -2966,7 +3014,7 @@ export function CraftPrompt() {
               <button
                 type="button"
                 onClick={() => setOutputOverride(null)}
-                className="font-mono text-[9px] text-dim/60 hover:text-white transition-precise text-left"
+                className="font-mono text-[10px] text-dim/60 hover:text-white transition-precise text-left"
               >
                 ↺ Reset to assembled
               </button>
@@ -2979,10 +3027,10 @@ export function CraftPrompt() {
               >
                 <Check size={9} className="text-cyan shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/70">Formatted</span>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/70">Formatted</span>
                   <ul className="mt-0.5 space-y-0.5">
                     {formatChanges.map((c) => (
-                      <li key={c} className="font-mono text-[9px] text-soft-white/70">· {c}</li>
+                      <li key={c} className="font-mono text-[10px] text-soft-white/70">· {c}</li>
                     ))}
                   </ul>
                 </div>
@@ -2998,7 +3046,7 @@ export function CraftPrompt() {
                   onChange={(e) => setIncludeAvoidance(e.target.checked)}
                   className="accent-white/60"
                 />
-                <span className="system-label text-[8px]">INCLUDE AVOIDANCE ON COPY</span>
+                <span className="system-label text-[9px]">INCLUDE AVOIDANCE ON COPY</span>
               </label>
             )}
 
@@ -3006,40 +3054,29 @@ export function CraftPrompt() {
               {copied ? <Check size={10} /> : <Copy size={10} />}
               {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
             </Button>
-          </div>
+          </CollapsibleCard>
 
           {/* Image Description AI — upload a reference image, ask the AI to
               describe it, and copy the description back into the prompt. */}
-          <div
-            className="flex flex-col gap-3 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <div className="flex items-center gap-2">
-              <ScanEye size={11} className="text-cyan" />
-              <span className="system-label">IMAGE DESCRIPTION AI</span>
-            </div>
-
+          <CollapsibleCard title="IMAGE DESCRIPTION AI" icon={<ScanEye size={11} className="text-cyan" />} gap="gap-3">
             <div
-              onClick={() => describeFileInputRef.current?.click()}
+              {...getDescribeRootProps()}
               className={cn(
-                "flex flex-col items-center justify-center gap-2 rounded-sm cursor-pointer transition-precise hover:border-cyan/40 hover:bg-white/3",
-                describeImageUrl ? "h-36" : "h-20"
+                "flex flex-col items-center justify-center gap-2 rounded-sm cursor-pointer transition-precise",
+                describeImageUrl ? "h-36" : "h-20",
+                describeDragActive ? "border-cyan/50 bg-cyan/8" : "hover:border-cyan/40 hover:bg-white/3"
               )}
-              style={{ border: "var(--border-dim)" }}
+              style={{ border: describeDragActive ? "1px solid rgba(0,229,255,0.4)" : "var(--border-dim)" }}
             >
-              <input
-                ref={describeFileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                className="hidden"
-                onChange={handleDescribeFileChange}
-              />
+              <input {...getDescribeInputProps()} />
               {describeImageUrl ? (
                 <img src={describeImageUrl} alt="Selected for description" className="w-full h-full object-contain rounded-sm" />
               ) : (
                 <>
                   <Upload size={14} className="text-cyan" />
-                  <span className="font-mono text-[10px] text-readable">Click to upload image</span>
+                  <span className="font-mono text-[11px] text-readable">
+                    {describeDragActive ? "Drop image here" : "Click or drop image here"}
+                  </span>
                 </>
               )}
             </div>
@@ -3049,7 +3086,7 @@ export function CraftPrompt() {
               value={describeQuestion}
               onChange={(e) => setDescribeQuestion(e.target.value)}
               placeholder="Ask for something specific… (optional)"
-              className="h-9 px-2.5 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim focus:outline-none"
+              className="h-9 px-2.5 rounded-sm bg-transparent font-mono text-[12px] text-soft-white placeholder:text-dim focus:outline-none"
               style={{ border: "1px solid rgba(255,255,255,0.12)" }}
             />
 
@@ -3060,7 +3097,7 @@ export function CraftPrompt() {
                   const m = VISION_MODELS.find((mm) => mm.id === e.target.value);
                   if (m) setDescribeModel(m);
                 }}
-                className="w-full appearance-none pr-7 h-9 px-2.5 font-mono text-[11px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
+                className="w-full appearance-none pr-7 h-9 px-2.5 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
                 style={{ border: "1px solid rgba(255,255,255,0.16)" }}
               >
                 {VISION_MODELS.map((m) => (
@@ -3072,7 +3109,7 @@ export function CraftPrompt() {
 
             {!describeApiKey && (
               <button type="button" onClick={() => navigate("/settings")}
-                className="flex items-center gap-1.5 font-mono text-[10px] text-red/70 hover:text-red transition-precise text-left">
+                className="flex items-center gap-1.5 font-mono text-[11px] text-red/70 hover:text-red transition-precise text-left">
                 <SettingsIcon size={10} /> No API key configured — open Settings
               </button>
             )}
@@ -3089,20 +3126,24 @@ export function CraftPrompt() {
             </Button>
 
             {describeError && (
-              <span className="font-mono text-[10px] text-red/70">{describeError}</span>
+              <span className="font-mono text-[11px] text-red/70">{describeError}</span>
             )}
 
             {describeResult && (
               <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.02)" }}>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">Description (reverse-engineered)</span>
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-dim/60">Description (reverse-engineered)</span>
                   <button type="button" onClick={handleDescribeCopy}
-                    className="flex items-center gap-1 font-mono text-[9px] text-readable hover:text-cyan transition-precise">
+                    className="flex items-center gap-1 font-mono text-[10px] text-readable hover:text-cyan transition-precise">
                     {describeCopied ? <Check size={9} /> : <Copy size={9} />}
                     {describeCopied ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <p className="font-mono text-[11px] text-soft-white leading-relaxed whitespace-pre-wrap">{describeResult}</p>
+                {/* selectable: body text/results are exempted from the app-wide
+                    user-select:none reset (styles/globals.css) so the user can
+                    manually select and copy any part of it, not just the whole
+                    block via the Copy button. */}
+                <p className="selectable font-mono text-[12px] text-soft-white leading-relaxed whitespace-pre-wrap">{describeResult}</p>
               </div>
             )}
 
@@ -3110,13 +3151,13 @@ export function CraftPrompt() {
                 success formula for whichever provider is selected above in
                 PARAMETERS; changing that provider re-renders this instantly. */}
             {formulaRows.length > 0 && (
-              <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "1px solid rgba(0,229,255,0.18)", background: "rgba(0,229,255,0.03)" }}>
+              <div className="selectable flex flex-col gap-2 p-3 rounded-sm" style={{ border: "1px solid rgba(0,229,255,0.18)", background: "rgba(0,229,255,0.03)" }}>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/70">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/70">
                     Formula — {fields.provider}
                   </span>
                   <button type="button" onClick={handleFormulaCopy}
-                    className="flex items-center gap-1 font-mono text-[9px] text-readable hover:text-cyan transition-precise">
+                    className="flex items-center gap-1 font-mono text-[10px] text-readable hover:text-cyan transition-precise">
                     {formulaCopied ? <Check size={9} /> : <Copy size={9} />}
                     {formulaCopied ? "Copied!" : "Copy"}
                   </button>
@@ -3124,10 +3165,10 @@ export function CraftPrompt() {
                 <div className="flex flex-col gap-1.5">
                   {formulaRows.map((row) => (
                     <div key={row.step} className="flex flex-col gap-0.5">
-                      <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50">{row.step}</span>
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/50">{row.step}</span>
                       <span
                         className={cn(
-                          "font-mono text-[11px] leading-snug",
+                          "font-mono text-[12px] leading-snug",
                           row.value === FORMULA_STEP_NOT_INFERABLE ? "text-dim/40 italic" : "text-soft-white"
                         )}
                       >
@@ -3136,12 +3177,12 @@ export function CraftPrompt() {
                     </div>
                   ))}
                 </div>
-                <span className="font-mono text-[9px] text-dim/50 leading-relaxed pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <span className="font-mono text-[10px] text-dim/50 leading-relaxed pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                   {PROVIDER_GUIDANCE[fields.provider]}
                 </span>
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Provider-specific formatted output */}
           {fields.provider === "nano_banana" && assembled && (
@@ -3178,17 +3219,17 @@ export function CraftPrompt() {
             >
               <AlertCircle size={11} className="text-red/60 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60">Low-performing tokens</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-red/60">Low-performing tokens</span>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {lowQualityTokens.map((t) => (
-                    <span key={t.id} className="font-mono text-[9px] text-muted/80">{t.text}</span>
+                    <span key={t.id} className="font-mono text-[10px] text-muted/80">{t.text}</span>
                   ))}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setLowQualityDismissed(true)}
-                className="font-mono text-[9px] text-dim/40 hover:text-white shrink-0 transition-precise"
+                className="font-mono text-[10px] text-dim/40 hover:text-white shrink-0 transition-precise"
               >
                 ×
               </button>
@@ -3201,13 +3242,13 @@ export function CraftPrompt() {
             const canAnalyze = analyzeCheck.valid;
             const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0 || advice.improvements.length > 0) && !adviceDismissed;
             return (
-              <div className="flex flex-col gap-2">
+              <CollapsibleCard title="AI PROMPT ADVISOR" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-2">
                 <input
                   type="text"
                   value={analyzeDirection}
                   onChange={(e) => setAnalyzeDirection(e.target.value)}
                   placeholder="Direction: make it shorter, add lighting…"
-                  className="h-8 px-2.5 rounded-sm bg-transparent font-mono text-[10px] text-soft-white placeholder:text-dim focus:outline-none"
+                  className="h-8 px-2.5 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim focus:outline-none"
                   style={{ border: "1px solid rgba(255,255,255,0.12)" }}
                 />
                 <div className="flex items-center gap-1.5">
@@ -3235,40 +3276,40 @@ export function CraftPrompt() {
                 </div>
                 {hasAdvice && (
                   <div className={cn(
-                    "flex flex-col gap-2 px-3 py-2.5 rounded-sm transition-precise",
+                    "selectable flex flex-col gap-2 px-3 py-2.5 rounded-sm transition-precise",
                     adviceJustIn && "ring-1 ring-cyan/50"
                   )}
                     style={{ border: "1px solid rgba(255,255,255,0.1)", background: adviceJustIn ? "rgba(72,229,232,0.06)" : "rgba(255,255,255,0.03)" }}>
                     <div className="flex items-center justify-between">
-                      <span className="font-mono text-[8px] uppercase tracking-widest text-readable">AI Advice</span>
-                      <button onClick={() => setAdviceDismissed(true)} className="text-readable hover:text-white text-[10px]">×</button>
+                      <span className="font-mono text-[9px] uppercase tracking-widest text-readable">AI Advice</span>
+                      <button onClick={() => setAdviceDismissed(true)} className="text-readable hover:text-white text-[11px]">×</button>
                     </div>
                     {advice.suggestions.map((s, i) => (
                       <div key={i} className="flex items-start gap-1.5">
-                        <span className="mt-0.5 shrink-0 font-mono text-[8px] text-white/40">→</span>
-                        <span className="font-mono text-[9px] text-white/70 leading-relaxed">{s}</span>
+                        <span className="mt-0.5 shrink-0 font-mono text-[9px] text-white/40">→</span>
+                        <span className="font-mono text-[10px] text-white/70 leading-relaxed">{s}</span>
                       </div>
                     ))}
                     {advice.risks.map((r, i) => (
                       <div key={i} className="flex items-start gap-1.5">
-                        <span className="mt-0.5 shrink-0 font-mono text-[8px] text-red/50">!</span>
-                        <span className="font-mono text-[9px] text-red/60 leading-relaxed">{r}</span>
+                        <span className="mt-0.5 shrink-0 font-mono text-[9px] text-red/50">!</span>
+                        <span className="font-mono text-[10px] text-red/60 leading-relaxed">{r}</span>
                       </div>
                     ))}
                     {advice.improvements.length > 0 && (
                       <div className="flex flex-col gap-1.5 pt-1.5" style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                        <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50">Apply improvements</span>
+                        <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/50">Apply improvements</span>
                         {advice.improvements.map((imp, i) => (
                           <div key={i} className="flex items-center gap-2">
-                            <span className="font-mono text-[7.5px] uppercase tracking-widest text-white/35 shrink-0 w-14 truncate">{imp.label}</span>
-                            <span className="font-mono text-[9px] text-white/55 flex-1 min-w-0 truncate">{imp.value}</span>
+                            <span className="font-mono text-[8.5px] uppercase tracking-widest text-white/35 shrink-0 w-14 truncate">{imp.label}</span>
+                            <span className="font-mono text-[10px] text-white/55 flex-1 min-w-0 truncate">{imp.value}</span>
                             <button
                               type="button"
                               onClick={() => {
                                 setFields((f) => ({ ...f, [imp.field]: imp.value }));
                                 if (mode !== "builder") setMode("builder");
                               }}
-                              className="font-mono text-[7.5px] uppercase tracking-widest text-cyan/60 hover:text-cyan transition-precise shrink-0 px-1.5 py-0.5 rounded-sm"
+                              className="font-mono text-[8.5px] uppercase tracking-widest text-cyan/60 hover:text-cyan transition-precise shrink-0 px-1.5 py-0.5 rounded-sm"
                               style={{ border: "1px solid rgba(0,229,255,0.2)" }}
                             >
                               Apply
@@ -3279,7 +3320,7 @@ export function CraftPrompt() {
                     )}
                   </div>
                 )}
-              </div>
+              </CollapsibleCard>
             );
           })()}
 
@@ -3306,7 +3347,7 @@ export function CraftPrompt() {
                 >
                   {saving ? "Saving…" : saved ? "Saved" : "Overwrite Current"}
                 </Button>
-                <p className="font-mono text-[8px] text-dim/40 text-center leading-relaxed">
+                <p className="font-mono text-[9px] text-dim/40 text-center leading-relaxed">
                   New Version saves a copy linked to v{originalVersion}
                 </p>
               </>

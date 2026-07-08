@@ -55,8 +55,8 @@ const NAV_GROUPS = [
   {
     label: "INTELLIGENCE",
     items: [
-      { label: "Image", to: "/analyze", icon: Image },
       { label: "Brief", to: "/brief", icon: FileText },
+      { label: "Image", to: "/analyze", icon: Image },
       { label: "Frames", to: "/frames", icon: Layers },
       { label: "Compare", to: "/compare", icon: GitCompare },
     ],

@@ -3,10 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Star, AlertTriangle, Check, X,
   LayoutGrid, Columns2, ImageOff, Zap, ChevronDown, GitCompare, Upload, Edit2, Sparkles,
+  Images, ShieldAlert, Boxes, GitBranch, Target, Compass, Palette,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { ProviderBadge } from "@/components/ui/Badge";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   createSession,
   getSessions,
@@ -52,6 +55,54 @@ import type {
   ComparisonSourceRole,
   ComparisonType,
 } from "@/types";
+
+// ─── Comparison type presentation (icons + grouping) ───────────
+// COMPARISON_TYPES (comparisonWorkflow.ts) carries the business-logic label
+// and a full descriptive sentence — the sentence is too much to show on every
+// button at once, so it moves into a hover tooltip and the button itself only
+// shows an icon + short label, grouped by what's actually being judged.
+
+const TYPE_ICON: Record<ComparisonType, LucideIcon> = {
+  result_result: Images,
+  ai_risk: ShieldAlert,
+  provider_provider: Boxes,
+  prompt_version: GitBranch,
+  reference_result: Target,
+  direction_result: Compass,
+  sref_sref: Palette,
+};
+
+const TYPE_SECTIONS: { label: string; types: ComparisonType[] }[] = [
+  { label: "Results", types: ["result_result", "ai_risk"] },
+  { label: "Providers & Versions", types: ["provider_provider", "prompt_version"] },
+  { label: "Creative Direction", types: ["reference_result", "direction_result", "sref_sref"] },
+];
+
+function ComparisonTypeButton({ typeId, selected, onSelect, wrapperClassName }: {
+  typeId: ComparisonType;
+  selected: boolean;
+  onSelect: () => void;
+  wrapperClassName?: string;
+}) {
+  const type = getComparisonDefinition(typeId);
+  const Icon = TYPE_ICON[typeId];
+  return (
+    <Tooltip text={type.purpose} className={wrapperClassName ?? "relative flex"}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "flex flex-1 flex-col items-center gap-2 px-3 py-3.5 rounded-sm text-center transition-precise",
+          selected ? "bg-cyan/10 text-white" : "text-readable hover:text-white hover:bg-white/5"
+        )}
+        style={{ border: selected ? "1px solid rgba(56,183,200,0.5)" : "var(--border-dim)" }}
+      >
+        <Icon size={16} className={selected ? "text-cyan" : "text-readable/70"} />
+        <span className="font-mono text-[10px] tracking-wide leading-tight">{type.label}</span>
+      </button>
+    </Tooltip>
+  );
+}
 
 // ─── Score bar ────────────────────────────────────────────────
 
@@ -356,7 +407,7 @@ function EmptySlot({ role, onClick, onDrop, disabled = false }: {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-card transition-precise aspect-[4/3]",
+        "flex flex-col items-center justify-center text-center rounded-card transition-precise aspect-4/3 px-5 py-4",
         disabled ? "cursor-wait opacity-60" : "cursor-pointer hover:bg-cyan/6"
       )}
       style={{ border: "2px dashed rgba(56,183,200,0.5)", background: "rgba(56,183,200,0.06)" }}
@@ -371,7 +422,7 @@ function EmptySlot({ role, onClick, onDrop, disabled = false }: {
         {formatComparisonRole(role)}
       </span>
       <Upload size={18} className="text-cyan mb-2" />
-      <span className="font-mono text-[12px] text-readable">{disabled ? "Importing…" : "Drop image or video, or click"}</span>
+      <span className="font-mono text-[12px] text-readable leading-relaxed">{disabled ? "Importing…" : "Drop image or video, or click"}</span>
       <span className="font-mono text-[10px] text-muted mt-1">Import into next slot</span>
     </div>
   );
@@ -394,7 +445,7 @@ function PickerRow({
       disabled={selected}
       onClick={onAdd}
       className={cn(
-        "flex items-center gap-3 w-full px-3 py-3 rounded-sm text-left transition-precise",
+        "flex items-center gap-3 w-full px-4 py-3.5 rounded-sm text-left transition-precise",
         selected ? "opacity-50 cursor-default" : "hover:bg-white/6 cursor-pointer"
       )}
       style={{ border: "var(--border-default)" }}
@@ -429,14 +480,24 @@ function SessionCard({ session, onOpen, onDelete }: {
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const definition = getComparisonDefinition(session.comparison_type);
+  const TypeIcon = TYPE_ICON[session.comparison_type];
   return (
     <div
-      className="flex flex-col gap-3 p-5 rounded-card cursor-pointer hover:bg-white/6 transition-precise"
+      className="flex flex-col gap-4 p-5 rounded-card cursor-pointer hover:bg-white/6 transition-precise"
       style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
       onClick={onOpen}
     >
-      <div className="flex items-start justify-between">
-        <span className="font-sans text-[15px] font-semibold text-soft-white">{session.title}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-center w-8 h-8 rounded-sm shrink-0"
+            style={{ border: "1px solid rgba(56,183,200,0.3)", background: "rgba(56,183,200,0.08)" }}>
+            <TypeIcon size={13} className="text-cyan" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <span className="font-sans text-[15px] font-semibold text-soft-white truncate">{session.title}</span>
+            <span className="font-mono text-[9.5px] tracking-widest uppercase text-dim/50">{definition.label}</span>
+          </div>
+        </div>
         <button
           type="button"
           onClick={(e) => {
@@ -444,16 +505,17 @@ function SessionCard({ session, onOpen, onDelete }: {
             if (!confirmDelete) { setConfirmDelete(true); setTimeout(() => setConfirmDelete(false), 3000); return; }
             onDelete();
           }}
-          className={cn("font-mono text-[8px] transition-precise px-1.5 py-0.5 rounded-sm",
+          className={cn("font-mono text-[9px] tracking-widest uppercase transition-precise px-2 py-1 rounded-sm shrink-0",
             confirmDelete ? "text-red bg-red/10" : "text-muted hover:text-red"
           )}
+          style={{ border: confirmDelete ? "1px solid rgba(215,25,33,0.35)" : "1px solid rgba(255,255,255,0.08)" }}
         >
           {confirmDelete ? "Confirm" : "Delete"}
         </button>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="font-mono text-[10px] text-cyan">{definition.label}</span>
-        <span className="font-mono text-[12px] text-readable">{session.item_count} items</span>
+
+      <div className="flex items-center gap-4">
+        <span className="font-mono text-[12px] text-readable">{session.item_count} item{session.item_count !== 1 ? "s" : ""}</span>
         {session.winner_count > 0 && (
           <div className="flex items-center gap-1">
             <Star size={10} className="text-amber fill-amber/40" />
@@ -461,8 +523,10 @@ function SessionCard({ session, onOpen, onDelete }: {
           </div>
         )}
       </div>
+
       {session.outcome_summary && (
-        <p className="font-mono text-[10px] leading-relaxed text-readable line-clamp-2">
+        <p className="font-mono text-[11px] leading-relaxed text-readable/85 line-clamp-2 pl-3"
+          style={{ borderLeft: "2px solid rgba(255,255,255,0.10)" }}>
           {session.outcome_summary}
         </p>
       )}
@@ -901,39 +965,46 @@ export function ComparisonLab() {
 
           {/* Create new */}
           <div
-            className="flex flex-col gap-4 p-7 rounded-card"
+            className="flex flex-col gap-6 p-7 rounded-card"
             style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
           >
-            <span className="system-label">NEW COMPARISON</span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {COMPARISON_TYPES.map((type) => (
-                <button
-                  key={type.id}
-                  type="button"
-                  onClick={() => setComparisonType(type.id)}
-                  className={cn(
-                    "flex flex-col items-start gap-1 px-3 py-3 rounded-sm text-left transition-precise",
-                    comparisonType === type.id ? "bg-cyan/8 text-white" : "text-readable hover:text-white hover:bg-white/5"
-                  )}
-                  style={{ border: comparisonType === type.id ? "1px solid rgba(56,183,200,0.45)" : "var(--border-default)" }}
-                >
-                  <span className="font-sans text-[14px] font-semibold">{type.label}</span>
-                  <span className="font-mono text-[10px] leading-relaxed text-readable">{type.purpose}</span>
-                </button>
+            <div className="flex flex-col gap-0.5">
+              <span className="system-label">New Comparison</span>
+              <span className="font-mono text-[10.5px] text-dim/50">Pick what you're judging — hover an option to see what it's for.</span>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {TYPE_SECTIONS.map((section) => (
+                <div key={section.label} className="flex flex-col gap-1.5">
+                  <span className="font-mono text-[9px] tracking-widest uppercase text-dim/45">{section.label}</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {section.types.map((typeId) => (
+                      <ComparisonTypeButton
+                        key={typeId}
+                        typeId={typeId}
+                        selected={comparisonType === typeId}
+                        onSelect={() => setComparisonType(typeId)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
-            <input
-              value={sessionTitle}
-              onChange={(e) => setSessionTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleNewSession()}
-              placeholder="Session name… (optional)"
-              className="w-full h-10 px-3 font-sans text-[15px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
-              style={{ border: "1px solid rgba(255,255,255,0.16)" }}
-            />
-            <Button variant="primary" size="md" onClick={handleNewSession} className="self-start">
-              <GitCompare size={11} />
-              Start Comparison
-            </Button>
+
+            <div className="flex flex-col gap-3 pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <input
+                value={sessionTitle}
+                onChange={(e) => setSessionTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleNewSession()}
+                placeholder="Session name… (optional)"
+                className="w-full h-10 px-3 font-sans text-[15px] text-white placeholder:text-dim bg-dark rounded-sm focus:outline-none transition-precise"
+                style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+              />
+              <Button variant="primary" size="md" onClick={handleNewSession} className="self-start">
+                <GitCompare size={11} />
+                Start Comparison
+              </Button>
+            </div>
           </div>
 
           {/* Existing sessions */}
@@ -970,24 +1041,35 @@ export function ComparisonLab() {
       title="COMPARISON LAB"
       subtitle={`${filledSlots} OF ${displaySlots.length} SLOTS FILLED`}
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {synced && (
-            <span className="font-mono text-[10px] text-cyan flex items-center gap-1">
-              <Check size={9} /> Outcome saved
+            <span className="font-mono text-[10px] text-cyan flex items-center gap-1 shrink-0">
+              <Check size={9} /> Saved
             </span>
           )}
-          {filledSlots >= 2 && (
-            <Button variant="ghost" size="sm" onClick={handleGenerateDecision} disabled={decisionLoading}
-              title="AI judges the filled slots: stronger option, why, what failed, what to reuse and avoid">
-              <Sparkles size={11} /> {decisionLoading ? "Judging…" : "AI Decision"}
-            </Button>
+
+          {(filledSlots >= 2 || comparisonSummary.canApplyDecisions) && (
+            <>
+              <div className="flex items-center gap-2">
+                {filledSlots >= 2 && (
+                  <Button variant="ghost" size="sm" onClick={handleGenerateDecision} disabled={decisionLoading}
+                    title="AI judges the filled slots: stronger option, why, what failed, what to reuse and avoid">
+                    <Sparkles size={11} /> {decisionLoading ? "Judging…" : "AI Decision"}
+                  </Button>
+                )}
+                {comparisonSummary.canApplyDecisions && (
+                  <Button variant="primary" size="sm" onClick={handleApplyDecision}
+                    title="Write your Winner/Reject picks back onto the result records">
+                    <Check size={11} /> Apply
+                  </Button>
+                )}
+              </div>
+              <div className="w-px h-5 bg-white/8" />
+            </>
           )}
-          {comparisonSummary.canApplyDecisions && (
-            <Button variant="primary" size="sm" onClick={handleApplyDecision}>
-              <Check size={11} /> Apply Decisions
-            </Button>
-          )}
-          <div className="flex items-center rounded-sm overflow-hidden" style={{ border: "var(--border-dim)" }}>
+
+          <div className="flex items-center rounded-sm overflow-hidden" style={{ border: "var(--border-dim)" }}
+            title="Comparison grid layout">
             {(["2up", "4up"] as const).map((l) => (
               <button
                 key={l}
@@ -1003,14 +1085,20 @@ export function ComparisonLab() {
               </button>
             ))}
           </div>
-          <Button variant="ghost" size="sm" onClick={() => { setActiveSessionId(null); setSlots([null, null, null, null]); }}>
-            <ArrowLeft size={11} /> Sessions
-          </Button>
-          {projectId && (
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectId}`)}>
-              <ArrowLeft size={11} /> Project
+
+          <div className="w-px h-5 bg-white/8" />
+
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setActiveSessionId(null); setSlots([null, null, null, null]); }}
+              title="Back to all comparison sessions">
+              <ArrowLeft size={11} /> Sessions
             </Button>
-          )}
+            {projectId && (
+              <Button variant="ghost" size="sm" onClick={() => navigate(`/projects/${projectId}`)}>
+                <ArrowLeft size={11} /> Project
+              </Button>
+            )}
+          </div>
         </div>
       }
     >
@@ -1024,61 +1112,54 @@ export function ComparisonLab() {
       <div className="flex flex-col gap-4">
         {/* Type toggle bar (Phase 187) */}
         <div className="flex flex-col gap-2">
-          <span className="system-label">COMPARISON TYPE</span>
+          <span className="system-label">Comparison Type</span>
           <div className="flex flex-wrap gap-2">
             {COMPARISON_TYPES.map((type) => (
-              <button
+              <ComparisonTypeButton
                 key={type.id}
-                type="button"
-                onClick={() => handleChangeType(type.id)}
-                className={cn(
-                  "flex flex-col items-start gap-0.5 px-3 py-2.5 rounded-sm text-left transition-precise",
-                  comparisonType === type.id ? "bg-cyan/8 text-white" : "text-readable hover:text-white hover:bg-white/5"
-                )}
-                style={{ border: comparisonType === type.id ? "1px solid rgba(56,183,200,0.45)" : "var(--border-dim)" }}
-              >
-                <span className="font-mono text-[9px] tracking-widest uppercase">{type.label}</span>
-                <span className="font-mono text-[8px] text-readable leading-relaxed max-w-40">{type.purpose}</span>
-              </button>
+                typeId={type.id}
+                selected={comparisonType === type.id}
+                onSelect={() => handleChangeType(type.id)}
+                wrapperClassName="relative flex w-24"
+              />
             ))}
           </div>
         </div>
 
         {/* Outcome summary (Phase 190) */}
         {(outcomeSummary || editingOutcome) && (
-          <div className="flex flex-col gap-2 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.28)", background: "rgba(223,168,58,0.05)" }}>
+          <div className="flex flex-col gap-3 px-5 py-4 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.28)", background: "rgba(223,168,58,0.05)" }}>
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] tracking-widest uppercase text-amber">Saved outcome</span>
+              <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-amber">
+                <Star size={10} className="fill-amber/30" /> Saved Outcome
+              </span>
               {!editingOutcome && (
                 <button type="button" onClick={() => { setOutcomeEditValue(outcomeSummary); setEditingOutcome(true); }}
-                  className="font-mono text-[8px] tracking-widest uppercase text-amber/50 hover:text-amber px-2 py-0.5 rounded-sm transition-precise"
-                  style={{ border: "1px solid rgba(223,168,58,0.2)" }}>
-                  <Edit2 size={8} className="inline mr-1" />Edit
+                  className="flex items-center gap-1.5 font-mono text-[9px] tracking-widest uppercase text-amber/70 hover:text-amber px-2.5 py-1.5 rounded-sm transition-precise"
+                  style={{ border: "1px solid rgba(223,168,58,0.25)" }}>
+                  <Edit2 size={9} />Edit
                 </button>
               )}
             </div>
             {editingOutcome ? (
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2.5">
                 <textarea
                   autoFocus
                   value={outcomeEditValue}
                   onChange={(e) => setOutcomeEditValue(e.target.value)}
                   onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSaveOutcome(); if (e.key === "Escape") setEditingOutcome(false); }}
                   rows={4}
-                  className="w-full p-2 font-mono text-[12px] text-soft-white bg-black/30 rounded-sm resize-none focus:outline-none leading-relaxed"
+                  className="w-full p-3 font-mono text-[12px] text-soft-white bg-black/30 rounded-sm resize-none focus:outline-none leading-relaxed"
                   style={{ border: "1px solid rgba(223,168,58,0.3)" }}
                 />
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={handleSaveOutcome}
-                    className="font-mono text-[9px] tracking-widest uppercase text-amber px-3 py-1.5 rounded-sm transition-precise"
-                    style={{ border: "1px solid rgba(223,168,58,0.4)", background: "rgba(223,168,58,0.08)" }}>
+                  <Button variant="ghost" size="sm" onClick={handleSaveOutcome}
+                    style={{ borderColor: "rgba(223,168,58,0.4)", background: "rgba(223,168,58,0.08)", color: "#DFA83A" }}>
                     Save
-                  </button>
-                  <button type="button" onClick={() => setEditingOutcome(false)}
-                    className="font-mono text-[9px] tracking-widest uppercase text-dim hover:text-white px-3 py-1.5 rounded-sm transition-precise"
-                    style={{ border: "var(--border-dim)" }}>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setEditingOutcome(false)}>
                     Cancel
-                  </button>
+                  </Button>
                   <span className="font-mono text-[9px] text-dim/30 ml-auto">⌘↩ save</span>
                 </div>
               </div>
@@ -1093,53 +1174,57 @@ export function ComparisonLab() {
           <p className="font-mono text-[11px] text-red/80 px-1">{decisionError}</p>
         )}
         {decision && (
-          <div className="flex flex-col gap-3 px-4 py-4 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.32)", background: "rgba(56,183,200,0.045)" }}>
+          <div className="flex flex-col gap-3 px-5 py-4 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.32)", background: "rgba(56,183,200,0.045)" }}>
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-cyan">
                 <Sparkles size={10} /> AI Decision Summary
               </span>
               <div className="flex items-center gap-2">
                 <button type="button" onClick={handleSaveDecisionOutcome}
-                  className="font-mono text-[8px] tracking-widest uppercase text-cyan/70 hover:text-cyan px-2 py-0.5 rounded-sm transition-precise"
+                  className="font-mono text-[9px] tracking-widest uppercase text-cyan/70 hover:text-cyan px-2.5 py-1.5 rounded-sm transition-precise"
                   style={{ border: "1px solid rgba(56,183,200,0.3)" }}>
                   Save as Outcome
                 </button>
-                <button type="button" onClick={() => setDecision(null)} className="text-cyan/50 hover:text-white text-[10px]">×</button>
+                <button type="button" onClick={() => setDecision(null)}
+                  className="flex items-center justify-center w-6 h-6 rounded-sm text-cyan/60 hover:text-white hover:bg-white/10 transition-precise"
+                  title="Dismiss">
+                  <X size={11} />
+                </button>
               </div>
             </div>
             {decision.stronger_option && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Stronger</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Stronger</span>
                 <span className="font-mono text-[12px] text-soft-white leading-relaxed">{decision.stronger_option}</span>
               </div>
             )}
             {decision.why_stronger && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Why</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Why</span>
                 <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.why_stronger}</span>
               </div>
             )}
             {decision.what_failed && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60 w-16 shrink-0">Failed</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-red/60 w-16 shrink-0">Failed</span>
                 <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.what_failed}</span>
               </div>
             )}
             {decision.reuse.length > 0 && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-amber/60 w-16 shrink-0">Reuse</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-amber/60 w-16 shrink-0">Reuse</span>
                 <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.reuse.join(" · ")}</span>
               </div>
             )}
             {decision.avoid.length > 0 && (
               <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[8px] uppercase tracking-widest text-red/60 w-16 shrink-0">Avoid</span>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-red/60 w-16 shrink-0">Avoid</span>
                 <span className="font-mono text-[11px] text-white/70 leading-relaxed">{decision.avoid.join(" · ")}</span>
               </div>
             )}
             {decision.intelligence && (
-              <div className="flex items-baseline gap-2 pt-1" style={{ borderTop: "1px solid rgba(56,183,200,0.15)" }}>
-                <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Intel</span>
+              <div className="flex items-baseline gap-2 pt-2" style={{ borderTop: "1px solid rgba(56,183,200,0.15)" }}>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/50 w-16 shrink-0">Intel</span>
                 <span className="font-mono text-[11px] text-cyan/80 leading-relaxed">{decision.intelligence}</span>
               </div>
             )}
@@ -1159,23 +1244,23 @@ export function ComparisonLab() {
         )}
 
         <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
-          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}>
+          <div className="flex flex-col gap-1.5 px-5 py-4 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.045)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Loaded</span>
             <span className="font-sans text-[22px] font-semibold text-white">{comparisonSummary.filledCount}</span>
           </div>
-          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.34)", background: "rgba(223,168,58,0.07)" }}>
+          <div className="flex flex-col gap-1.5 px-5 py-4 rounded-sm" style={{ border: "1px solid rgba(223,168,58,0.34)", background: "rgba(223,168,58,0.07)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Winner</span>
             <span className="font-sans text-[22px] font-semibold text-amber">{comparisonSummary.winnerCount}</span>
           </div>
-          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}>
+          <div className="flex flex-col gap-1.5 px-5 py-4 rounded-sm" style={{ border: "1px solid rgba(215,25,33,0.28)", background: "rgba(215,25,33,0.055)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Rejected</span>
             <span className="font-sans text-[22px] font-semibold text-red">{comparisonSummary.rejectedCount}</span>
           </div>
-          <div className="flex flex-col gap-1 px-4 py-3 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.035)" }}>
+          <div className="flex flex-col gap-1.5 px-5 py-4 rounded-sm" style={{ border: "var(--border-default)", background: "rgba(255,255,255,0.035)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Pending</span>
             <span className="font-sans text-[22px] font-semibold text-soft-white">{comparisonSummary.pendingDecisionCount}</span>
           </div>
-          <div className="col-span-2 xl:col-span-1 flex flex-col gap-1 px-4 py-3 rounded-sm min-w-0" style={{ border: "1px solid rgba(56,183,200,0.28)", background: "rgba(56,183,200,0.045)" }}>
+          <div className="col-span-2 xl:col-span-1 flex flex-col gap-1.5 px-5 py-4 rounded-sm min-w-0" style={{ border: "1px solid rgba(56,183,200,0.28)", background: "rgba(56,183,200,0.045)" }}>
             <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Top score</span>
             <span className="font-sans text-[15px] font-semibold text-white truncate">
               {comparisonSummary.topScoreLabel ?? "No result"}
@@ -1186,7 +1271,7 @@ export function ComparisonLab() {
           </div>
         </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-7 min-w-0">
+        <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-7 min-w-0">
 
         {/* Left: result picker */}
         {(availableResults.length > 0 || projectId) && (

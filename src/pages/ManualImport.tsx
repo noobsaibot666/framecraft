@@ -75,7 +75,9 @@ function detectMidjourneyParams(text: string): DetectedParams {
   const rp  = m(/--r(?:epeat)?\s+(\d+)/);                   if (rp)  dp.repeat        = rp[1];
   // --sref with optional value (bare --sref at end of string is valid)
   const sr  = m(/--sref(?:\s+([^\s-]\S*))?/);               if (sr)  dp.sref          = sr[1] ?? "";
-  const pr  = m(/--profile\s+(\S+)|--p\s+(\S+)/);           if (pr)  dp.profile       = pr[1] ?? pr[2];
+  // --profile codes can be multiple space-separated tokens (e.g. "--profile abc123 def456 ghi789") —
+  // capture everything until the next --param or end of string, same as --no below.
+  const pr  = m(/(?:--profile|--p)\s+(.+?)(?=\s--[a-zA-Z]|$)/s); if (pr) dp.profile   = pr[1].trim();
   // --no: capture everything until next --param or end of string (allow hyphens inside words)
   const no  = m(/--no\s+(.*?)(?=\s--[a-zA-Z]|$)/s);         if (no)  dp.no            = no[1].trim();
   // Boolean flags: \b doesn't work before -- (- is non-word char), use negative lookahead instead
@@ -105,8 +107,7 @@ function stripParams(text: string): string {
     .replace(/--stop\s+\d+/g, "")
     .replace(/--r(?:epeat)?\s+\d+/g, "")
     .replace(/--sref(?:\s+\S+)?/g, "")
-    .replace(/--profile\s+\S+/g, "")
-    .replace(/--p\s+\S+/g, "")
+    .replace(/(?:--profile|--p)\s+.*?(?=\s--[a-zA-Z]|$)/gs, "")
     .replace(/--no\s+.*?(?=\s--[a-zA-Z]|$)/gs, "")
     .replace(/--raw(?!\w)/g, "")
     .replace(/--hd(?!\w)/g, "")

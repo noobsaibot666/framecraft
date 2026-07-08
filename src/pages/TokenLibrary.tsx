@@ -11,6 +11,8 @@ import type { Token, TokenCategory } from "@/types";
 
 registerShortcutLabel("cmd+f", "Focus search (Token Library)");
 
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 type SortOption = "quality" | "use" | "alpha" | "rating" | "winners";
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
@@ -147,7 +149,7 @@ export function TokenLibrary() {
   const favorites = tokens.filter((t) => t.is_favorite).length;
   const highQuality = tokens.filter((t) => (t.quality_score ?? 0) > 0.5).length;
 
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     if (tokens.length === 0) return;
     const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const headers = ["text", "category", "quality_score", "use_count", "avg_rating", "win_appearances", "is_favorite", "is_builtin"];
@@ -162,6 +164,29 @@ export function TokenLibrary() {
       t.is_builtin ? "1" : "0",
     ].join(","));
     const csv = [headers.join(","), ...rows].join("\n");
+
+    // A blob-download <a> click is a no-op in the packaged Tauri webview (no
+    // browser download manager to catch it) — use the native save dialog there,
+    // and only fall back to the browser download trick in the Vite dev server.
+    if (isTauri) {
+      try {
+        const [{ save }, { writeTextFile }] = await Promise.all([
+          import("@tauri-apps/plugin-dialog"),
+          import("@tauri-apps/plugin-fs"),
+        ]);
+        const path = await save({
+          defaultPath: "framecraft-tokens.csv",
+          filters: [{ name: "CSV", extensions: ["csv"] }],
+        });
+        if (!path) return;
+        await writeTextFile(path, csv);
+        toast.success("Tokens exported");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Export failed");
+      }
+      return;
+    }
+
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -202,11 +227,12 @@ export function TokenLibrary() {
           </div>
 
           {/* Category tabs */}
-          <div className="flex items-center gap-1 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               type="button"
               onClick={() => setCategoryFilter("")}
-              className={cn("font-mono text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-pill transition-precise", categoryFilter === "" ? "bg-white/12 text-white" : "text-dim/60 hover:text-white")}
+              className={cn("font-mono text-[10px] uppercase tracking-widest px-2.5 py-1.5 rounded-pill transition-precise",
+                categoryFilter === "" ? "bg-amber/15 text-amber" : "text-readable hover:text-white")}
             >
               All
             </button>
@@ -215,7 +241,8 @@ export function TokenLibrary() {
                 key={c.id}
                 type="button"
                 onClick={() => setCategoryFilter(c.id === categoryFilter ? "" : c.id)}
-                className={cn("font-mono text-[9px] uppercase tracking-widest px-2.5 py-1.5 rounded-pill transition-precise", categoryFilter === c.id ? "bg-white/12 text-white" : "text-dim/60 hover:text-white")}
+                className={cn("font-mono text-[10px] uppercase tracking-widest px-2.5 py-1.5 rounded-pill transition-precise",
+                  categoryFilter === c.id ? "bg-amber/15 text-amber" : "text-readable hover:text-white")}
               >
                 {c.name}
               </button>

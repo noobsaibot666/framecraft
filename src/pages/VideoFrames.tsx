@@ -5,7 +5,7 @@ import { Film, Scan, Copy, Check, AlertTriangle, ArrowRight, Tag, Play, Pause, V
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { AI_MODELS, getApiKey } from "@/lib/aiConfig";
+import { AI_MODELS, getApiKey, pickVisionModel } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
@@ -237,8 +237,18 @@ export function VideoFrames() {
   const { create } = usePromptStore();
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const [selectedModel, setSelectedModel] = useState<AIModel>(AI_MODELS[0]);
+  const [selectedModel, setSelectedModel] = useState<AIModel>(() => pickVisionModel() ?? AI_MODELS[0]);
   const apiKey = getApiKey(selectedModel.provider);
+  // Vision analysis only supports Anthropic/OpenAI (DeepSeek has no vision endpoint) —
+  // only ever offer models the user can actually use, and auto-correct the selection
+  // if it lands on a disconnected one (e.g. no key was saved yet when this page mounted).
+  const visionModels = AI_MODELS.filter((m) => m.provider !== "deepseek" && getApiKey(m.provider));
+  useEffect(() => {
+    if (visionModels.length && !visionModels.some((m) => m.id === selectedModel.id)) {
+      setSelectedModel(visionModels[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visionModels.map((m) => m.id).join(",")]);
 
   // Video file state
   const [videoFile, setVideoFile]     = useState<File | null>(null);
@@ -293,6 +303,25 @@ export function VideoFrames() {
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Math.max(0, Math.min(duration, v.currentTime + secs));
+  };
+
+  // Browsers don't expose a video's real frame rate, so 1/30s is the standard
+  // web approximation for "one frame" — fine-grained enough for picking an
+  // exact moment to extract, without needing WebCodecs just to read the fps.
+  const FRAME_STEP = 1 / 30;
+  const stepFrame = (direction: 1 | -1) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.pause();
+    const next = Math.max(0, Math.min(duration || v.duration || 0, v.currentTime + direction * FRAME_STEP));
+    v.currentTime = next;
+    setCurrentTime(next);
+  };
+  const handlePlayerKeyDown = (e: React.KeyboardEvent) => {
+    if (!videoFile) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); stepFrame(-1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); stepFrame(1); }
+    else if (e.key === " ") { e.preventDefault(); togglePlay(); }
   };
 
   const captureCurrentFrame = () => {
@@ -363,6 +392,7 @@ export function VideoFrames() {
     maxFiles: 1,
     multiple: false,
     noClick: !!videoFile, // video click = play/pause; file picker via Replace button
+    noKeyboard: !!videoFile, // once loaded, arrow keys step frames instead of opening the file picker
   });
 
   const handleExtract = async () => {
@@ -492,9 +522,11 @@ export function VideoFrames() {
 
         {/* ── Video preview — full width, big ── */}
         <div {...getRootProps()}
+          onKeyDown={handlePlayerKeyDown}
           className={cn(
             "relative w-full max-h-[560px] rounded-card overflow-hidden cursor-pointer transition-precise",
             !videoFile && "flex flex-col items-center justify-center gap-4",
+            videoFile && "focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan/50",
             isDragActive ? "bg-cyan/8" : !videoFile && "hover:border-cyan/40"
           )}
           style={{
@@ -633,6 +665,12 @@ export function VideoFrames() {
           </div>
         )}
 
+        {videoFile && (
+          <p className="font-mono text-[10px] text-dim/50 -mt-3">
+            Click the video, then use <span className="text-readable">← / →</span> to step frame-by-frame — <span className="text-readable">Space</span> to play/pause
+          </p>
+        )}
+
         {/* ── Action controls bar ── */}
         <div className="flex items-center gap-4 flex-wrap py-1">
           {/* Filename */}
@@ -668,31 +706,32 @@ export function VideoFrames() {
 
           <div className="flex-1" />
 
-          {/* API key warning (compact) */}
-          {frames.length > 0 && !apiKey && (
+          {/* API key warning — only when there's truly nothing to pick from */}
+          {frames.length > 0 && visionModels.length === 0 && (
             <button type="button" onClick={() => navigate("/settings")}
               className="flex items-center gap-2 font-mono text-[12px] text-red/80 hover:text-red transition-precise">
-              <AlertTriangle size={9} /> No {selectedModel.provider} key — Settings
+              <AlertTriangle size={9} /> Add an OpenAI or Anthropic key to analyze frames — Settings
             </button>
           )}
 
-          {/* Model select */}
-          {frames.length > 0 && (
+          {/* Model select — only ever lists models with a connected key */}
+          {frames.length > 0 && visionModels.length > 0 && (
             <div className="relative">
               <select
                 value={selectedModel.id}
-                onChange={(e) => setSelectedModel(AI_MODELS.find((m) => m.id === e.target.value) ?? AI_MODELS[0])}
+                onChange={(e) => setSelectedModel(visionModels.find((m) => m.id === e.target.value) ?? visionModels[0])}
                 className="accent-selected appearance-none h-9 pl-3 pr-8 font-mono text-[12px] text-soft-white bg-dark rounded-sm focus:outline-none cursor-pointer transition-precise">
-                <optgroup label="Anthropic">
-                  {AI_MODELS.filter((m) => m.provider === "anthropic").map((m) => (
-                    <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="OpenAI">
-                  {AI_MODELS.filter((m) => m.provider === "openai").map((m) => (
-                    <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
-                  ))}
-                </optgroup>
+                {(["anthropic", "openai"] as const).map((provider) => {
+                  const models = visionModels.filter((m) => m.provider === provider);
+                  if (!models.length) return null;
+                  return (
+                    <optgroup key={provider} label={provider === "anthropic" ? "Anthropic" : "OpenAI"}>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id} className="bg-panel">{m.label}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 pointer-events-none text-[8px]">▾</span>
             </div>

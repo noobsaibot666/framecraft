@@ -68,7 +68,9 @@ const PARAM_PATTERNS: Array<[RegExp, string]> = [
   [/--style\s+(\S+)/, "--style"],
   [/--seed\s+(\d+)/, "--seed"],
   [/--sref(?:\s+([^\s-]\S*))?/, "--sref"],
-  [/--profile\s+(\S+)|--p\s+(\S+)/, "--profile"],
+  // --profile codes can be multiple space-separated tokens — capture everything
+  // until the next --param or end of string, same treatment as --no below.
+  [/(?:--profile|--p)\s+(.+?)(?=\s--[a-zA-Z]|$)/s, "--profile"],
 ];
 
 function unique(values: string[]): string[] {
@@ -78,6 +80,11 @@ function unique(values: string[]): string[] {
 function stripPromptParams(text: string): string {
   return text
     .replace(/--no\s+.*?(?=\s--[a-zA-Z]|$)/gs, "")
+    // --profile codes can be multiple space-separated tokens — strip through to
+    // the next --param or end of string, same as --no above, before the generic
+    // single-token catch-all below runs (which would otherwise leave the extra
+    // tokens dangling as garbage in the stripped text).
+    .replace(/(?:--profile|--p)\s+.*?(?=\s--[a-zA-Z]|$)/gs, "")
     .replace(/--[a-zA-Z]+(?:\s+\S+)?/g, "")
     .replace(/-{1,2}exp(?!\w)/g, "")
     .replace(/\s{2,}/g, " ")

@@ -17,6 +17,22 @@ describe("importLearning", () => {
     expect(learning.parameterLabels).toEqual(["--ar 4:5", "--s 250", "--no plastic skin, extra fingers"]);
   });
 
+  it("captures a multi-token --profile value in full, not just its first word", () => {
+    const learning = analyzeImportedPromptLearning(
+      "Editorial portrait, natural light --profile gtbhewc awv472p gj5325t gy97k8r --ar 3:4"
+    );
+    expect(learning.parameterLabels).toContain("--profile gtbhewc awv472p gj5325t gy97k8r");
+    // The multi-token value must not leak into reusable tokens / tag phrases.
+    expect(learning.reusableTokens.join(" ")).not.toContain("awv472p");
+  });
+
+  it("captures a bare --profile as the last parameter through end of string", () => {
+    const learning = analyzeImportedPromptLearning(
+      "Editorial portrait --ar 3:4 --profile gtbhewc awv472p gj5325t gy97k8r"
+    );
+    expect(learning.parameterLabels).toContain("--profile gtbhewc awv472p gj5325t gy97k8r");
+  });
+
   it("builds concise import notes without empty sections", () => {
     const notes = buildImportLearningNotes(
       "Midjourney community",

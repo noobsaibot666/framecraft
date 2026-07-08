@@ -91,6 +91,37 @@ export function fileToPreviewUrl(file: File): string {
   return URL.createObjectURL(file);
 }
 
+const COMMON_ASPECT_RATIOS: { label: string; value: number }[] = [
+  { label: "1:1", value: 1 },
+  { label: "16:9", value: 16 / 9 },
+  { label: "9:16", value: 9 / 16 },
+  { label: "4:3", value: 4 / 3 },
+  { label: "3:4", value: 3 / 4 },
+  { label: "3:2", value: 3 / 2 },
+  { label: "2:3", value: 2 / 3 },
+  { label: "21:9", value: 21 / 9 },
+  { label: "4:5", value: 4 / 5 },
+];
+
+/**
+ * Snap a pixel width/height to the nearest common generation aspect ratio
+ * (within 6% tolerance), falling back to a raw decimal ratio. Computed from
+ * the actual uploaded pixels rather than asked of a vision model, so it's
+ * always exact — used to fill the "Parameters" (--ar) step of the Image
+ * Description AI's formula output.
+ */
+export function computeAspectRatioLabel(width: number, height: number): string {
+  if (width <= 0 || height <= 0) return "";
+  const ratio = width / height;
+  let closest = COMMON_ASPECT_RATIOS[0];
+  let closestDiff = Math.abs(ratio - closest.value);
+  for (const candidate of COMMON_ASPECT_RATIOS.slice(1)) {
+    const diff = Math.abs(ratio - candidate.value);
+    if (diff < closestDiff) { closest = candidate; closestDiff = diff; }
+  }
+  return closestDiff / closest.value < 0.06 ? closest.label : `${Math.round(ratio * 100) / 100}:1`;
+}
+
 export async function fileToDataUrl(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);

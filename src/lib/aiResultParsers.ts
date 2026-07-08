@@ -8,6 +8,35 @@ export interface GeneratedPrompt {
   aspect_ratio: string;
 }
 
+// Element vocabulary an image can actually reveal — mirrors the step labels
+// used across provider formulas (promptFormula.ts DEFAULT_FORMULAS) so the
+// Image Description AI's output can be reformatted into any provider's
+// formula client-side, without another vision call (see describeFormula.ts).
+export interface DescribeElements {
+  subject: string;
+  environment: string;
+  composition: string;
+  light: string;
+  material_realism: string;
+  mood: string;
+  camera_language: string;
+  style: string;
+  image_type: string;
+  intent: string;
+  action: string;
+  text_graphics: string;
+  references: string;
+  consistency: string;
+  quality_tags: string;
+  exclusions: string;
+  moment: string;
+}
+
+export interface DescribeResult {
+  description: string;
+  elements: DescribeElements;
+}
+
 export interface SuggestedRecipe {
   title: string;
   description: string;
@@ -66,6 +95,38 @@ export function parseAnalysisResult(rawText: string): AnalysisResult {
     aspect_ratio: asString(parsed.aspect_ratio),
     quality_tier: asString(parsed.quality_tier) || "concept",
     provider: asString(parsed.provider) || "midjourney",
+  };
+}
+
+function asDescribeElements(value: unknown): DescribeElements {
+  const rec = asRecord(value);
+  return {
+    subject: asString(rec.subject),
+    environment: asString(rec.environment),
+    composition: asString(rec.composition),
+    light: asString(rec.light),
+    material_realism: asString(rec.material_realism),
+    mood: asString(rec.mood),
+    camera_language: asString(rec.camera_language),
+    style: asString(rec.style),
+    image_type: asString(rec.image_type),
+    intent: asString(rec.intent),
+    action: asString(rec.action),
+    text_graphics: asString(rec.text_graphics),
+    references: asString(rec.references),
+    consistency: asString(rec.consistency),
+    quality_tags: asString(rec.quality_tags),
+    exclusions: asString(rec.exclusions),
+    moment: asString(rec.moment),
+  };
+}
+
+export function parseDescribeResult(rawText: string): DescribeResult {
+  const parsed = asRecord(JSON.parse(stripJsonFences(rawText)));
+  const description = requireNonEmpty(asString(parsed.description), "description");
+  return {
+    description,
+    elements: asDescribeElements(parsed.elements),
   };
 }
 

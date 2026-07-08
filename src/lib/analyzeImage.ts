@@ -1,7 +1,8 @@
 import { getApiKey } from "@/lib/aiConfig";
 import type { AIModel } from "@/lib/aiConfig";
 import { fetchProviderJson, requireValidApiKey } from "@/lib/aiClient";
-import { parseAnalysisResult } from "@/lib/aiResultParsers";
+import { parseAnalysisResult, parseDescribeResult } from "@/lib/aiResultParsers";
+import type { DescribeResult } from "@/lib/aiResultParsers";
 
 export interface AnalysisResult {
   title: string;
@@ -97,4 +98,55 @@ export async function analyzeImage(
 ): Promise<AnalysisResult> {
   const text = await visionComplete(base64, mimeType, model, ANALYSIS_PROMPT);
   return parseAnalysisResult(text);
+}
+
+// ─── Reverse-engineering description (Prompt Craft's Image Description AI) ──
+// Distinct from ANALYSIS_PROMPT above: this is not a superficial caption but
+// a prompt-engineer's dissection of the image, plus a structured element
+// breakdown that describeFormula.ts reformats into any provider's success
+// formula client-side (no extra vision call needed when the user switches
+// provider in the builder).
+export const DESCRIBE_PROMPT_BASE = `You are an expert AI prompt engineer reverse-engineering this image so someone could recreate it with an image-generation model.
+Do not write a superficial caption. Dissect it like a finished prompt: name the exact subject, environment, composition, lighting setup, camera/lens language, material and texture realism, color grade and mood, and stylistic influences you see evidence of in the image.
+
+Return ONLY a valid JSON object (no markdown, no explanation) with exactly these fields:
+{
+  "description": "4-8 sentences of accurate, prompt-engineering-grade reverse-engineered description of exactly what is visible — subject, composition, lighting, camera/lens, materials, color grade, mood, and style. Written as prose explaining how this image could be recreated, not a generic caption.",
+  "elements": {
+    "subject": "the main subject(s), described precisely",
+    "environment": "setting / background / world the subject sits in",
+    "composition": "framing, angle, rule of thirds, crop, negative space",
+    "light": "lighting setup — direction, quality, source, time of day",
+    "material_realism": "textures and material qualities visible (skin, fabric, surfaces, grain)",
+    "mood": "color grade, tone, atmosphere, emotional quality",
+    "camera_language": "camera angle, lens type, depth of field, focal length feel",
+    "style": "artistic/photographic style or visual influences evident",
+    "image_type": "photograph / illustration / 3D render / product shot / editorial, etc.",
+    "intent": "the likely creative or commercial intent behind this image",
+    "action": "what the subject is doing, if anything — empty string if static",
+    "text_graphics": "any in-image text, typography, or graphic elements — empty string if none",
+    "references": "visual influences or reference styles this resembles — empty string if none obvious",
+    "consistency": "elements that would need to stay consistent across variations of this image — empty string if not applicable",
+    "quality_tags": "quality/production descriptors evident (e.g. commercial polish, editorial grain)",
+    "exclusions": "artifacts or qualities to explicitly avoid when recreating this (e.g. avoid plastic skin, avoid AI blur)",
+    "moment": "the specific instant captured — decisive moment, time of day, motion blur if any"
+  }
+}
+Every "elements" value must be a short, precise phrase (under 20 words), not a sentence. Use "" only when genuinely absent from the image — never invent detail that isn't visible. Return only the JSON object — no markdown fences, no preamble.`;
+
+export function buildDescribePrompt(question: string): string {
+  const trimmed = question.trim();
+  return trimmed
+    ? `${DESCRIBE_PROMPT_BASE}\n\nThe user also wants special attention paid to this in "description": ${trimmed}`
+    : DESCRIBE_PROMPT_BASE;
+}
+
+export async function describeImageForFormula(
+  base64: string,
+  mimeType: string,
+  model: AIModel,
+  question: string
+): Promise<DescribeResult> {
+  const text = await visionComplete(base64, mimeType, model, buildDescribePrompt(question), 2048);
+  return parseDescribeResult(text);
 }

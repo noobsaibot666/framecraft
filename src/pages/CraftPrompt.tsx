@@ -1,6 +1,6 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -33,12 +33,19 @@ import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { detectConsistencyIssues, detectProviderMismatch, findConflictingTexts, type ConsistencyMatch, type ProviderMismatch } from "@/lib/tokenConsistency";
 import { isVideoProvider } from "@/lib/providerCapabilities";
 import { recordConsistencyEvent, getAllConsistencyRuleCounts } from "@/lib/inconsistencyIntelligence";
-import { useShortcut } from "@/lib/shortcuts";
+import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { toast } from "@/lib/toast";
+import { AI_MODELS, getApiKey, pickVisionModel, type AIModel } from "@/lib/aiConfig";
+import { describeImageForFormula } from "@/lib/analyzeImage";
+import type { DescribeElements } from "@/lib/aiResultParsers";
+import { buildFormulaRows, formatFormulaRows, FORMULA_STEP_NOT_INFERABLE, type FormulaRow } from "@/lib/describeFormula";
+import { PROVIDER_GUIDANCE } from "@/lib/promptFormula";
+import { fileToDataUrl, computeAspectRatioLabel } from "@/lib/imageUtils";
 import type { Provider, Category, Token, Prompt, Project, SREF } from "@/types";
 import type { CreatePromptInput } from "@/lib/db";
 
 // cmd+s label registered in ProjectWorkspace (shared context)
+registerShortcutLabel("cmd+ctrl+r", "Reset prompt fields");
 
 // ─── Shared sub-components ────────────────────────────────────
 
@@ -698,6 +705,10 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+// Image Description AI (right column, under Prompt Output) — only vision-capable
+// providers (DeepSeek has no vision endpoint, matches pickVisionModel's set).
+const VISION_MODELS: AIModel[] = AI_MODELS.filter((m) => m.provider === "anthropic" || m.provider === "openai");
+
 const CATEGORIES: { value: string; label: string }[] = [
   { value: "", label: "Select category…" },
   { value: "advertising", label: "Advertising" },
@@ -785,6 +796,66 @@ const EMPTY_MJ: MJParams = {
 };
 const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
 const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
+
+// ─── In-progress draft persistence ─────────────────────────────
+// Keeps whatever the user has typed on a *new* (unsaved) prompt when they
+// navigate away to check another page and come back — cleared only on an
+// explicit Reset or once the prompt is actually saved to the library.
+
+const CRAFT_DRAFT_KEY = "fc_craft_draft";
+
+interface CraftDraftPayload {
+  fields: Fields;
+  mjParams: MJParams;
+  dalleParams: DalleParams;
+  sdParams: SDParams;
+  shots: Shot[];
+  mode: "builder" | "manual";
+  tokenSequence: Token[];
+  tokenOverrides: Record<string, string>;
+  fieldTokenIds: Record<string, keyof Fields>;
+  consistencyFactors: string[];
+  formulaSteps: string[];
+  formulaCustomized: boolean;
+  outputOverride: string | null;
+  includeAvoidance: boolean;
+}
+
+function draftStorageKey(projectId: string | null): string {
+  return `${CRAFT_DRAFT_KEY}:${projectId ?? "none"}`;
+}
+
+function loadCraftDraft(projectId: string | null): CraftDraftPayload | null {
+  try {
+    const raw = localStorage.getItem(draftStorageKey(projectId));
+    return raw ? (JSON.parse(raw) as CraftDraftPayload) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCraftDraft(projectId: string | null, payload: CraftDraftPayload): void {
+  try {
+    localStorage.setItem(draftStorageKey(projectId), JSON.stringify(payload));
+  } catch { /* storage unavailable/full — draft persistence is best-effort */ }
+}
+
+function clearCraftDraft(projectId: string | null): void {
+  try { localStorage.removeItem(draftStorageKey(projectId)); } catch { /* ignore */ }
+}
+
+/** True when the draft holds nothing worth restoring (fresh/reset form). */
+function isEmptyDraftState(fields: Fields, tokenSequence: Token[], shots: Shot[]): boolean {
+  const meaningfulFieldsEmpty = (Object.keys(fields) as (keyof Fields)[]).every((key) => {
+    if (key === "provider" || key === "category" || key === "aspect_ratio") return true; // preference defaults, not draft content
+    const value = fields[key];
+    if (Array.isArray(value)) return value.length === 0;
+    if (typeof value === "number") return value === 0;
+    if (typeof value === "boolean") return value === false;
+    return !String(value).trim();
+  });
+  return meaningfulFieldsEmpty && tokenSequence.length === 0 && shots.length === 0;
+}
 
 const VARIATION_PRESETS: { id: string; label: string; value: string }[] = [
   { id: "rot90",   label: "Rotate 90°",  value: "composition rotated 90° clockwise" },
@@ -994,7 +1065,32 @@ export function CraftPrompt() {
   const hydratedRef = useRef(false);
 
   useEffect(() => {
-    if (!id) { hydratedRef.current = true; return; }
+    if (!id) {
+      const draft = loadCraftDraft(projectId);
+      if (draft) {
+        setFields(draft.fields);
+        setMjParams(draft.mjParams);
+        setDalleParams(draft.dalleParams);
+        setSDParams(draft.sdParams);
+        setShots(draft.shots);
+        setMode(draft.mode);
+        setTokenSequence(draft.tokenSequence);
+        setTokenOverrides(draft.tokenOverrides);
+        setFieldTokenIds(draft.fieldTokenIds);
+        setConsistencyFactors(draft.consistencyFactors);
+        setFormulaSteps(draft.formulaSteps);
+        setFormulaCustomized(draft.formulaCustomized);
+        setOutputOverride(draft.outputOverride);
+        setIncludeAvoidance(draft.includeAvoidance);
+        // Defer the hydrated flag to the next tick so the draft-save effect
+        // (below) doesn't see this render's still-empty `fields` closure and
+        // wipe the draft we just asked React to restore.
+        window.setTimeout(() => { hydratedRef.current = true; }, 0);
+      } else {
+        hydratedRef.current = true;
+      }
+      return;
+    }
     hydratedRef.current = false;
     const token = promptLoadGuard.current.begin();
     getById(id).then((p) => {
@@ -1122,7 +1218,7 @@ export function CraftPrompt() {
       hydratedRef.current = true;
     });
     return () => promptLoadGuard.current.invalidate();
-  }, [id, getById]);
+  }, [id, getById, projectId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setInsightsReady(true), 120);
@@ -1667,7 +1763,8 @@ export function CraftPrompt() {
     setFactorInput("");
     setFormulaCustomized(false);
     setFormulaSteps(getFormulaForProvider((getPreferences().defaultProvider as Provider) || EMPTY.provider));
-  }, []);
+    clearCraftDraft(projectId);
+  }, [projectId]);
 
   const handleSave = async (asRecipe = false) => {
     if (!validate()) return;
@@ -1681,6 +1778,7 @@ export function CraftPrompt() {
       } else {
         const newId = await create(buildData(asRecipe));
         toast.success(asRecipe ? "Recipe saved" : "Prompt saved");
+        clearCraftDraft(projectId);
         if (projectId) {
           try {
             await addPromptToProject(projectId, newId);
@@ -1753,6 +1851,30 @@ export function CraftPrompt() {
     fieldTokenIds, consistencyFactors, formulaSteps,
   ]);
 
+  // Draft persistence for *new* (unsaved) prompts — lets the user browse to
+  // another page (Tokens, Library, …) and come back without losing what
+  // they've typed. Cleared explicitly by Reset or once the prompt is saved.
+  useEffect(() => {
+    if (isEdit || !hydratedRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (isEmptyDraftState(fields, tokenSequence, shots)) {
+        clearCraftDraft(projectId);
+        return;
+      }
+      saveCraftDraft(projectId, {
+        fields, mjParams, dalleParams, sdParams, shots, mode,
+        tokenSequence, tokenOverrides, fieldTokenIds, consistencyFactors,
+        formulaSteps, formulaCustomized, outputOverride, includeAvoidance,
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isEdit, projectId, fields, mjParams, dalleParams, sdParams, shots, mode,
+    tokenSequence, tokenOverrides, fieldTokenIds, consistencyFactors,
+    formulaSteps, formulaCustomized, outputOverride, includeAvoidance,
+  ]);
+
   const handleCopy = async () => {
     if (!fullCopyText) return;
     await navigator.clipboard.writeText(fullCopyText);
@@ -1771,7 +1893,87 @@ export function CraftPrompt() {
     }
   };
 
+  // ── Image Description AI (right column, under Prompt Output) ──
+  const describeFileInputRef = useRef<HTMLInputElement>(null);
+  const [describeModel, setDescribeModel] = useState<AIModel>(() => pickVisionModel() ?? VISION_MODELS[0]);
+  const [describeImageFile, setDescribeImageFile] = useState<File | null>(null);
+  const [describeImageUrl, setDescribeImageUrl] = useState("");
+  const [describeAspectRatio, setDescribeAspectRatio] = useState("");
+  const [describeQuestion, setDescribeQuestion] = useState("");
+  const [describing, setDescribing] = useState(false);
+  const [describeResult, setDescribeResult] = useState("");
+  const [describeElements, setDescribeElements] = useState<DescribeElements | null>(null);
+  const [describeError, setDescribeError] = useState("");
+  const [describeCopied, setDescribeCopied] = useState(false);
+  const [formulaCopied, setFormulaCopied] = useState(false);
+  const describeApiKey = getApiKey(describeModel.provider);
+
+  // Recomputed purely client-side from the last analysis whenever the builder's
+  // provider changes — no extra vision call needed to re-target the formula.
+  const formulaRows: FormulaRow[] = useMemo(
+    () => (describeElements ? buildFormulaRows(describeElements, fields.provider, describeAspectRatio) : []),
+    [describeElements, fields.provider, describeAspectRatio]
+  );
+  const formulaText = useMemo(() => formatFormulaRows(formulaRows), [formulaRows]);
+
+  useEffect(() => () => { if (describeImageUrl) URL.revokeObjectURL(describeImageUrl); }, [describeImageUrl]);
+
+  const handleDescribeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setDescribeImageFile(file);
+    setDescribeImageUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setDescribeResult("");
+    setDescribeElements(null);
+    setDescribeError("");
+    setDescribeAspectRatio("");
+    // Exact ratio from the real pixels — more reliable than asking the vision
+    // model to guess, and feeds the formula's Midjourney-style Parameters step.
+    const probe = new Image();
+    probe.onload = () => setDescribeAspectRatio(computeAspectRatioLabel(probe.naturalWidth, probe.naturalHeight));
+    probe.src = URL.createObjectURL(file);
+  };
+
+  const handleDescribeAnalyze = async () => {
+    if (!describeImageFile) return;
+    setDescribing(true);
+    setDescribeError("");
+    setDescribeResult("");
+    setDescribeElements(null);
+    try {
+      const dataUrl = await fileToDataUrl(describeImageFile);
+      const [header, base64] = dataUrl.split(",");
+      const mimeType = header.match(/data:([^;]+)/)?.[1] ?? "image/jpeg";
+      const { description, elements } = await describeImageForFormula(base64, mimeType, describeModel, describeQuestion);
+      setDescribeResult(description);
+      setDescribeElements(elements);
+    } catch (e) {
+      setDescribeError(e instanceof Error ? e.message : "Description failed. Check your API key in Settings.");
+    } finally {
+      setDescribing(false);
+    }
+  };
+
+  const handleDescribeCopy = async () => {
+    if (!describeResult) return;
+    await navigator.clipboard.writeText(describeResult);
+    setDescribeCopied(true);
+    setTimeout(() => setDescribeCopied(false), 1500);
+  };
+
+  const handleFormulaCopy = async () => {
+    if (!formulaText) return;
+    await navigator.clipboard.writeText(formulaText);
+    setFormulaCopied(true);
+    setTimeout(() => setFormulaCopied(false), 1500);
+  };
+
   useShortcut("cmd+s", () => { if (!saving && !savingNewVersion) handleSave(false); });
+  useShortcut("cmd+ctrl+r", handleReset);
 
   const SectionHeader = ({ label }: { label: string }) => (
     <div className="flex items-center gap-3 mb-3">
@@ -2804,6 +3006,141 @@ export function CraftPrompt() {
               {copied ? <Check size={10} /> : <Copy size={10} />}
               {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
             </Button>
+          </div>
+
+          {/* Image Description AI — upload a reference image, ask the AI to
+              describe it, and copy the description back into the prompt. */}
+          <div
+            className="flex flex-col gap-3 p-4 rounded-card"
+            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          >
+            <div className="flex items-center gap-2">
+              <ScanEye size={11} className="text-cyan" />
+              <span className="system-label">IMAGE DESCRIPTION AI</span>
+            </div>
+
+            <div
+              onClick={() => describeFileInputRef.current?.click()}
+              className={cn(
+                "flex flex-col items-center justify-center gap-2 rounded-sm cursor-pointer transition-precise hover:border-cyan/40 hover:bg-white/3",
+                describeImageUrl ? "h-36" : "h-20"
+              )}
+              style={{ border: "var(--border-dim)" }}
+            >
+              <input
+                ref={describeFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleDescribeFileChange}
+              />
+              {describeImageUrl ? (
+                <img src={describeImageUrl} alt="Selected for description" className="w-full h-full object-contain rounded-sm" />
+              ) : (
+                <>
+                  <Upload size={14} className="text-cyan" />
+                  <span className="font-mono text-[10px] text-readable">Click to upload image</span>
+                </>
+              )}
+            </div>
+
+            <input
+              type="text"
+              value={describeQuestion}
+              onChange={(e) => setDescribeQuestion(e.target.value)}
+              placeholder="Ask for something specific… (optional)"
+              className="h-9 px-2.5 rounded-sm bg-transparent font-mono text-[11px] text-soft-white placeholder:text-dim focus:outline-none"
+              style={{ border: "1px solid rgba(255,255,255,0.12)" }}
+            />
+
+            <div className="relative">
+              <select
+                value={describeModel.id}
+                onChange={(e) => {
+                  const m = VISION_MODELS.find((mm) => mm.id === e.target.value);
+                  if (m) setDescribeModel(m);
+                }}
+                className="w-full appearance-none pr-7 h-9 px-2.5 font-mono text-[11px] text-white bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise cursor-pointer"
+                style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+              >
+                {VISION_MODELS.map((m) => (
+                  <option key={m.id} value={m.id} className="bg-panel text-white">{m.label}</option>
+                ))}
+              </select>
+              <ChevronDown size={10} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+            </div>
+
+            {!describeApiKey && (
+              <button type="button" onClick={() => navigate("/settings")}
+                className="flex items-center gap-1.5 font-mono text-[10px] text-red/70 hover:text-red transition-precise text-left">
+                <SettingsIcon size={10} /> No API key configured — open Settings
+              </button>
+            )}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDescribeAnalyze}
+              disabled={!describeImageFile || !describeApiKey || describing}
+              className="w-full justify-center"
+            >
+              <ScanEye size={10} />
+              {describing ? "Analyzing…" : "Describe Image"}
+            </Button>
+
+            {describeError && (
+              <span className="font-mono text-[10px] text-red/70">{describeError}</span>
+            )}
+
+            {describeResult && (
+              <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "var(--border-dim)", background: "rgba(255,255,255,0.02)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-dim/60">Description (reverse-engineered)</span>
+                  <button type="button" onClick={handleDescribeCopy}
+                    className="flex items-center gap-1 font-mono text-[9px] text-readable hover:text-cyan transition-precise">
+                    {describeCopied ? <Check size={9} /> : <Copy size={9} />}
+                    {describeCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <p className="font-mono text-[11px] text-soft-white leading-relaxed whitespace-pre-wrap">{describeResult}</p>
+              </div>
+            )}
+
+            {/* Formula — the same description reformatted into the ordered
+                success formula for whichever provider is selected above in
+                PARAMETERS; changing that provider re-renders this instantly. */}
+            {formulaRows.length > 0 && (
+              <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "1px solid rgba(0,229,255,0.18)", background: "rgba(0,229,255,0.03)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/70">
+                    Formula — {fields.provider}
+                  </span>
+                  <button type="button" onClick={handleFormulaCopy}
+                    className="flex items-center gap-1 font-mono text-[9px] text-readable hover:text-cyan transition-precise">
+                    {formulaCopied ? <Check size={9} /> : <Copy size={9} />}
+                    {formulaCopied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {formulaRows.map((row) => (
+                    <div key={row.step} className="flex flex-col gap-0.5">
+                      <span className="font-mono text-[8px] uppercase tracking-widest text-cyan/50">{row.step}</span>
+                      <span
+                        className={cn(
+                          "font-mono text-[11px] leading-snug",
+                          row.value === FORMULA_STEP_NOT_INFERABLE ? "text-dim/40 italic" : "text-soft-white"
+                        )}
+                      >
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <span className="font-mono text-[9px] text-dim/50 leading-relaxed pt-1" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                  {PROVIDER_GUIDANCE[fields.provider]}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Provider-specific formatted output */}

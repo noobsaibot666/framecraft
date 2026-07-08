@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { TopBar } from "./TopBar";
 import { Sidebar } from "./Sidebar";
@@ -10,9 +11,15 @@ import { getFramecraftDb } from "@/lib/dbConnection";
 import { scheduleLikelyRoutePrefetch } from "@/lib/routePrefetch";
 
 registerShortcutLabel("cmd+k", "Open command search");
-registerShortcutLabel("cmd+?", "Show keyboard shortcuts");
+registerShortcutLabel("cmd+/", "Show keyboard shortcuts");
+registerShortcutLabel("cmd+ctrl+d", "Go to Dashboard");
+registerShortcutLabel("cmd+ctrl+p", "Go to Prompt Craft");
+registerShortcutLabel("cmd+ctrl+i", "Go to Library");
+registerShortcutLabel("cmd+ctrl+t", "Go to Tokens");
+registerShortcutLabel("cmd+ctrl+,", "Go to Settings");
 
 export function AppShell() {
+  const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
@@ -28,6 +35,13 @@ export function AppShell() {
   const openSearch = useCallback(() => setSearchOpen((open) => !open), []);
   useShortcut("cmd+k", openSearch);
   useShortcut("cmd+/", () => setShortcutsOpen((v) => !v));
+
+  // Global page-navigation shortcuts (available everywhere, AppShell wraps every route).
+  useShortcut("cmd+ctrl+d", () => navigate("/"));
+  useShortcut("cmd+ctrl+p", () => navigate("/craft"));
+  useShortcut("cmd+ctrl+i", () => navigate("/library"));
+  useShortcut("cmd+ctrl+t", () => navigate("/tokens"));
+  useShortcut("cmd+ctrl+,", () => navigate("/settings"));
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-black">

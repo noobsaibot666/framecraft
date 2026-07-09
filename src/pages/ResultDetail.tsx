@@ -4,6 +4,7 @@ import { ArrowLeft, CheckSquare, Square, Star, Trash2, Check, AlertTriangle, Lay
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { getResultById, updateResult, deleteResult, recomputePromptResultSummary, getPromptById, setPromptThumbnail } from "@/lib/db";
 import { getProjectsForPrompt } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -307,11 +308,7 @@ export function ResultDetail() {
         <div className="flex flex-col gap-4 w-72 shrink-0">
 
           {/* Quick rating */}
-          <div
-            className="flex flex-col gap-4 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">OVERALL RATING</span>
+          <CollapsibleCard title="OVERALL RATING">
             <div className="flex items-center gap-1.5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <button
@@ -354,14 +351,10 @@ export function ResultDetail() {
                 <span className="font-mono text-[9px] text-red/70">{checkedArtifacts.size} artifact{checkedArtifacts.size !== 1 ? "s" : ""} flagged</span>
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Advanced scoring */}
-          <div
-            className="flex flex-col gap-4 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">ADVANCED SCORING</span>
+          <CollapsibleCard title="ADVANCED SCORING">
             <ScoreDots label="REALISM" value={scores.realism} onChange={(v) => setScore("realism", v)} />
             <ScoreDots label="BRAND FIT" value={scores.brand_fit} onChange={(v) => setScore("brand_fit", v)} />
             <ScoreDots label="COMPOSITION" value={scores.composition} onChange={(v) => setScore("composition", v)} />
@@ -374,14 +367,10 @@ export function ResultDetail() {
               invert
             />
             <ScoreDots label="REUSE" value={scores.reuse} onChange={(v) => setScore("reuse", v)} />
-          </div>
+          </CollapsibleCard>
 
           {/* Ownership context: prompt / version / project / campaign / provider */}
-          <div
-            className="flex flex-col gap-2.5 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">CONTEXT</span>
+          <CollapsibleCard title="CONTEXT" gap="gap-2.5">
             <div className="flex items-center gap-2 text-[11px] font-mono">
               <Layers size={11} className="text-readable shrink-0" />
               <span className="text-dim/50 shrink-0">Prompt</span>
@@ -440,7 +429,7 @@ export function ResultDetail() {
             >
               {prompt?.thumbnail_result_id === id ? "Current Prompt Thumbnail" : settingThumbnail ? "Setting…" : "Set as Prompt Thumbnail"}
             </Button>
-          </div>
+          </CollapsibleCard>
 
           {/* Go to prompt */}
           <Button

@@ -10,6 +10,7 @@ import { TokenCloud } from "@/components/ui/TokenCloud";
 import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
 import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { addPromptToProject, getProjectById, getReferencesForProject } from "@/lib/projects";
@@ -1013,47 +1014,6 @@ function ProviderFormatBlock({ label, icon, color, borderColor, bgColor, content
           {content}
         </pre>
       )}
-    </div>
-  );
-}
-
-// ─── Collapsible right-column card ─────────────────────────────
-// Every card from PARAMETERS down to the AI Prompt Advisor shares this
-// fold/unfold chrome so the whole right column can be scanned or tucked
-// away section by section — mirrors the fold pattern RecommendationPanel's
-// own internal Section component already uses (ChevronUp/ChevronDown).
-
-function CollapsibleCard({
-  title,
-  icon,
-  headerExtra,
-  defaultOpen = true,
-  gap = "gap-4",
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  headerExtra?: React.ReactNode;
-  defaultOpen?: boolean;
-  gap?: string;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className={cn("flex flex-col p-5 rounded-card", gap)} style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center justify-between w-full group text-left">
-        <span className="flex items-center gap-2 system-label text-soft-white">
-          {icon}
-          {title}
-        </span>
-        <div className="flex items-center gap-2 shrink-0">
-          {headerExtra}
-          {open
-            ? <ChevronUp size={11} className="text-readable group-hover:text-cyan transition-precise" />
-            : <ChevronDown size={11} className="text-readable group-hover:text-cyan transition-precise" />}
-        </div>
-      </button>
-      {open && children}
     </div>
   );
 }

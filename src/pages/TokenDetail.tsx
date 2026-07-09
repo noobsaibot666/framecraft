@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Star, ExternalLink, Heart, Zap } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import {
   getTokenById,
   getPromptsUsingToken,
@@ -239,9 +240,7 @@ export function TokenDetail() {
         {/* Right — combos + metadata */}
         <div className="flex flex-col gap-6">
           {/* Proven combos */}
-          <div className="flex flex-col gap-3 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <span className="system-label text-soft-white">PROVEN COMBOS</span>
+          <CollapsibleCard title="PROVEN COMBOS" gap="gap-3">
             {combos.length === 0 ? (
               <span className="font-mono text-[12px] text-muted">
                 No co-occurrence data yet. Rate results to build pattern intelligence.
@@ -257,13 +256,11 @@ export function TokenDetail() {
                 ))}
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Top system patterns */}
           {patterns.length > 0 && (
-            <div className="flex flex-col gap-3 p-5 rounded-card"
-              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-              <span className="system-label text-soft-white">TOP PATTERNS</span>
+            <CollapsibleCard title="TOP PATTERNS" gap="gap-3">
               <span className="font-mono text-[9px] text-dim/40">Highest-rated token pairs library-wide</span>
               <div className="flex flex-col gap-1.5">
                 {patterns.map((pat, i) => (
@@ -279,13 +276,11 @@ export function TokenDetail() {
                   </div>
                 ))}
               </div>
-            </div>
+            </CollapsibleCard>
           )}
 
           {/* Token metadata */}
-          <div className="flex flex-col gap-3 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <span className="system-label text-soft-white">METADATA</span>
+          <CollapsibleCard title="METADATA" gap="gap-3">
             <div className="flex flex-col gap-2">
               {[
                 { label: "CATEGORY", value: token.category_name },
@@ -299,7 +294,7 @@ export function TokenDetail() {
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Quick action */}
           <Button variant="ghost" size="sm"

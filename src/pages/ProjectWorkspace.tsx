@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Save, Trash2, ChevronDown, Plus, X,
-  Star, Check, Image, FileText, Upload, Sparkles, Copy,
+  Star, Check, Image, FileText, Upload, Sparkles, Copy, Lightbulb,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { Button } from "@/components/ui/Button";
 import {
   getProjectById,
@@ -1353,8 +1354,7 @@ export function ProjectWorkspace() {
         <div className="flex flex-col gap-6">
 
           {/* Metadata */}
-          <div className="flex flex-col gap-5 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <span className="system-label text-soft-white">METADATA</span>
+          <CollapsibleCard title="METADATA" gap="gap-5">
             <div className="flex flex-col gap-1.5">
               <FieldLabel>CATEGORY</FieldLabel>
               <FieldSelect<Category>
@@ -1368,19 +1368,21 @@ export function ProjectWorkspace() {
               <FieldLabel>TAGS</FieldLabel>
               <TagChipInput tags={tags} onChange={setTags} />
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Inspirations panel */}
-          <Panel
+          <CollapsibleCard
             title="INSPIRATIONS"
-            count={linkedRefs.length}
-            action={
-              <button type="button"
-                onClick={() => setPickerMode(pickerMode === "references" ? null : "references")}
-                className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
-                style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
-                <Plus size={10} /> Add
-              </button>
+            headerExtra={
+              <span className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <span className="font-mono text-[10px] text-readable">({linkedRefs.length})</span>
+                <button type="button"
+                  onClick={() => setPickerMode(pickerMode === "references" ? null : "references")}
+                  className="flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase text-red hover:text-white transition-precise px-2.5 py-1.5 rounded-sm"
+                  style={{ border: "1px solid rgba(215,25,33,0.32)", background: "rgba(215,25,33,0.06)" }}>
+                  <Plus size={10} /> Add
+                </button>
+              </span>
             }
           >
             {pickerMode === "references" && (
@@ -1406,14 +1408,17 @@ export function ProjectWorkspace() {
                 ))}
               </div>
             )}
-          </Panel>
+          </CollapsibleCard>
 
-          {/* Recommendations */}
-          <div className="flex flex-col gap-4 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+          {/* Recommendations — hideHeader since the panel would otherwise
+              render its own second "RECOMMENDATIONS" label right below
+              this card's fold header. */}
+          <CollapsibleCard title="RECOMMENDATIONS" icon={<Lightbulb size={11} className="text-cyan" />}>
             <RecommendationPanel
+              hideHeader
               context={{ category: category || undefined, provider: providerTargets[0] || undefined, projectId: id, tags }}
             />
-          </div>
+          </CollapsibleCard>
 
           {/* Notes */}
           <div className="flex flex-col gap-1.5">

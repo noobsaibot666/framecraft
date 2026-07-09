@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, CheckSquare, Square, Star, Upload, Bookmark, Ch
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
 import { scoreToQualityDelta } from "@/lib/memoryEngine";
@@ -391,11 +392,7 @@ export function ResultReview() {
         <div className="flex flex-col gap-4 w-72 shrink-0">
 
           {/* Quick rating */}
-          <div
-            className="flex flex-col gap-4 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">QUICK RATING</span>
+          <CollapsibleCard title="QUICK RATING">
             <div className="flex items-center gap-1.5">
               {Array.from({ length: 5 }).map((_, i) => (
                 <button
@@ -432,14 +429,10 @@ export function ResultReview() {
                 <span className="system-label text-dim/60">FAILED</span>
               </label>
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Advanced scoring */}
-          <div
-            className="flex flex-col gap-4 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label">ADVANCED SCORING</span>
+          <CollapsibleCard title="ADVANCED SCORING">
             <ScoreDots label="REALISM" value={scores.realism} onChange={(v) => setScore("realism", v)} />
             <ScoreDots label="BRAND FIT" value={scores.brand_fit} onChange={(v) => setScore("brand_fit", v)} />
             <ScoreDots label="COMPOSITION" value={scores.composition} onChange={(v) => setScore("composition", v)} />
@@ -452,7 +445,7 @@ export function ResultReview() {
               invert
             />
             <ScoreDots label="REUSE" value={scores.reuse} onChange={(v) => setScore("reuse", v)} />
-          </div>
+          </CollapsibleCard>
 
           {/* Actions */}
           <div className="flex flex-col gap-2">

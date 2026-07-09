@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ChevronDown, Layers, Plus, Save, Trash2, Wand2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { extractSlots, type ExtractedRecipeSlot } from "@/lib/recipeExtract";
 import { createPrompt, updatePrompt } from "@/lib/db";
@@ -468,18 +469,11 @@ export function RecipeEditor() {
         <div className="flex flex-col gap-5 min-w-0">
 
           {/* Detected Slots */}
-          <div
-            className="flex flex-col gap-4 p-5 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+          <CollapsibleCard
+            title="DETECTED SLOTS"
+            icon={<Layers size={11} className="text-cyan/60" />}
+            headerExtra={<span className="font-mono text-[10px] text-dim/40">{detectedSlots.length}</span>}
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Layers size={11} className="text-cyan/60" />
-                <span className="system-label text-soft-white">DETECTED SLOTS</span>
-              </div>
-              <span className="font-mono text-[10px] text-dim/40">{detectedSlots.length}</span>
-            </div>
-
             {detectedSlots.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-4">
                 <span className="font-mono text-[10px] text-dim/40 text-center leading-relaxed">
@@ -501,14 +495,10 @@ export function RecipeEditor() {
                 ))}
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Quick guide */}
-          <div
-            className="flex flex-col gap-3 p-4 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <span className="system-label text-soft-white">SLOT SYNTAX</span>
+          <CollapsibleCard title="SLOT SYNTAX" gap="gap-3" defaultOpen={false}>
             <div className="flex flex-col gap-2">
               {[
                 { token: "[Subject]", desc: "Required placeholder" },
@@ -523,7 +513,7 @@ export function RecipeEditor() {
                 </div>
               ))}
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Actions */}
           <div className="flex flex-col gap-2">
@@ -558,11 +548,13 @@ export function RecipeEditor() {
 
           {/* Danger zone — only on edit */}
           {!isNew && (
-            <div
-              className="flex flex-col gap-3 p-4 rounded-card"
+            <CollapsibleCard
+              title="DANGER"
+              gap="gap-3"
+              defaultOpen={false}
+              titleClassName="text-[10px] text-red/60"
               style={{ border: "1px solid rgba(215,25,33,0.15)", background: "rgba(215,25,33,0.03)" }}
             >
-              <span className="system-label text-[10px] text-red/60">DANGER</span>
               <button
                 type="button"
                 onClick={async () => {
@@ -582,7 +574,7 @@ export function RecipeEditor() {
               >
                 <Trash2 size={11} /> Delete Recipe
               </button>
-            </div>
+            </CollapsibleCard>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { fileToDataUrl } from "@/lib/imageUtils";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import {
   getReferenceById,
   createReference,
@@ -489,8 +490,7 @@ export function ReferenceDetail() {
         <div className="flex flex-col gap-6">
 
           {/* Rating */}
-          <div className="flex flex-col gap-3 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <FieldLabel>RATING</FieldLabel>
+          <CollapsibleCard title="RATING" gap="gap-3">
             <StarRating value={rating} onChange={setRating} />
             {!isNew && impactScore > 0 && (
               <div className="flex items-center gap-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.10)" }}>
@@ -501,12 +501,10 @@ export function ReferenceDetail() {
                 <span className="font-mono text-[9px] text-muted ml-auto">IMPACT</span>
               </div>
             )}
-          </div>
+          </CollapsibleCard>
 
           {/* Metadata */}
-          <div className="flex flex-col gap-5 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <span className="system-label text-soft-white">METADATA</span>
-
+          <CollapsibleCard title="METADATA" gap="gap-5">
             <div className="flex flex-col gap-1.5">
               <FieldLabel>PROVIDER</FieldLabel>
               <FieldSelect value={provider} onChange={setProvider} options={PROVIDER_OPTIONS} empty="— provider —" />
@@ -526,15 +524,14 @@ export function ReferenceDetail() {
               <FieldLabel>TAGS</FieldLabel>
               <TagInput tags={tags} onChange={setTags} />
             </div>
-          </div>
+          </CollapsibleCard>
 
           {/* Linked items */}
           {(linkedPrompts.length > 0 || linkedResults.length > 0) && (
-            <div className="flex flex-col gap-5 p-5 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-              <span className="system-label text-soft-white">LINKED TO</span>
+            <CollapsibleCard title="LINKED TO" gap="gap-5">
               <LinkedSection title="PROMPTS" items={linkedPrompts} />
               <LinkedSection title="RESULTS" items={linkedResults} />
-            </div>
+            </CollapsibleCard>
           )}
 
         </div>

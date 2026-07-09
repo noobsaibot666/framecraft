@@ -196,6 +196,24 @@ pub fn run() {
             sql: include_str!("../migrations/031_creative_strategy.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 32,
+            description: "creative_taxonomy",
+            sql: include_str!("../migrations/032_creative_taxonomy.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 33,
+            description: "styling_taxonomy",
+            sql: include_str!("../migrations/033_styling_taxonomy.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 34,
+            description: "category_field_order",
+            sql: include_str!("../migrations/034_category_field_order.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

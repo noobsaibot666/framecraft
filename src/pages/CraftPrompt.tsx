@@ -11,6 +11,8 @@ import { SequenceBuilder } from "@/components/ui/SequenceBuilder";
 import { AvoidancePanel } from "@/components/ui/AvoidancePanel";
 import { RecommendationPanel } from "@/components/ui/RecommendationPanel";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
+import { CodeSuggestField } from "@/components/ui/CodeSuggestField";
+import type { RecommendationContext } from "@/lib/recommendations";
 import { usePromptStore } from "@/stores/usePromptStore";
 import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
 import { addPromptToProject, getProjectById, getReferencesForProject } from "@/lib/projects";
@@ -342,12 +344,13 @@ const SD_SAMPLERS = [
   { value: "LMS", label: "LMS" },
 ];
 
-const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref }: {
+const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref, context }: {
   p: MJParams;
   set: (k: keyof MJParams, v: string | boolean) => void;
   selectedSrefTitle?: string | null;
   onBrowseSref: () => void;
   onClearSref: () => void;
+  context: RecommendationContext;
 }) {
   const flag = (k: keyof MJParams, label: string) => (
     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -388,9 +391,19 @@ const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTi
             </span>
           </div>
         )}
-        <FieldInput label="" value={p.sref_code} onChange={(v) => { set("sref_code", v); if (!v) onClearSref(); }} placeholder="12345" />
+        <CodeSuggestField
+          label="" kind="sref" context={context}
+          value={p.sref_code}
+          onChange={(v) => { set("sref_code", v); if (!v) onClearSref(); }}
+          placeholder="12345"
+        />
       </div>
-      <FieldInput label="PROFILE --profile" value={p.profile} onChange={(v) => set("profile", v)} placeholder="e.g. og9pmia" />
+      <CodeSuggestField
+        label="PROFILE --profile" kind="profile" context={context}
+        value={p.profile}
+        onChange={(v) => set("profile", v)}
+        placeholder="e.g. og9pmia"
+      />
       {/* Output tuning */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
@@ -501,7 +514,7 @@ function appendMJParams(base: string, f: Pick<Fields, "aspect_ratio">, mj: MJPar
 }
 
 function assembleMJ(f: Fields, mj: MJParams): string {
-  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism, f.product_interaction, f.direction_notes, f.wardrobe_notes]
     .map((s) => s.trim()).filter(Boolean);
   return appendMJParams(parts.join(", "), f, mj);
 }
@@ -515,19 +528,19 @@ function appendDalleParams(base: string, dalle: DalleParams): string {
 }
 
 function assembleDalle(f: Fields, dalle: DalleParams): string {
-  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism, f.product_interaction, f.direction_notes, f.wardrobe_notes]
     .map((s) => s.trim()).filter(Boolean);
   return appendDalleParams(parts.join(", "), dalle);
 }
 
 function assembleSD(f: Fields, _sd: SDParams): string {
-  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism]
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism, f.product_interaction, f.direction_notes, f.wardrobe_notes]
     .map((s) => s.trim()).filter(Boolean);
   return parts.join(", ");
 }
 
 function assembleGeneric(f: Fields, shots: Shot[] = []): string {
-  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism];
+  const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism, f.product_interaction, f.direction_notes, f.wardrobe_notes];
   if (f.provider === "nano_banana") {
     parts.push(
       f.text_graphics ? `text: ${f.text_graphics}` : "",
@@ -781,6 +794,16 @@ interface Fields {
   // world/spatial logic is Kling-only, distinct from generic Environment.
   continuity_notes: string; scene_world: string;
   thumbnail_data: string; source_url: string;
+  // Product placement/interaction/psychology/semiotics tokens all merge here,
+  // same pattern as subject+action both routing into `subject`.
+  product_interaction: string;
+  // Direction/director's vision/craft/framing intention/contrast relationship/
+  // chromatic contrast tokens all merge here.
+  direction_notes: string;
+  // Wardrobe/designer influence/accessories tokens all merge here — kept
+  // separate from `character` so appearance/performance and styling/wardrobe
+  // don't crowd into one field.
+  wardrobe_notes: string;
 }
 
 const EMPTY: Fields = {
@@ -799,6 +822,8 @@ const EMPTY: Fields = {
   text_graphics: "", reference_role: "",
   continuity_notes: "", scene_world: "",
   thumbnail_data: "", source_url: "",
+  product_interaction: "", direction_notes: "",
+  wardrobe_notes: "",
 };
 
 // Token category → builder field routing (V2 §7). Categories without a
@@ -816,6 +841,40 @@ const CATEGORY_FIELD_MAP: Partial<Record<string, keyof Fields>> = {
   realism: "realism",
   avoidance: "avoidance_text",
   motion: "motion",
+  // Character/Acting group — merges into the character field alongside
+  // whatever's already routed there, same pattern as subject+action → subject.
+  character: "character",
+  acting: "character",
+  facial_expressions: "character",
+  body_language: "character",
+  body_movement: "character",
+  intentions: "character",
+  // Product group — placement/interaction/environment/psychology/semiotics
+  // all merge into one Product Interaction field.
+  product_placement: "product_interaction",
+  product_interaction: "product_interaction",
+  products_in_environment: "product_interaction",
+  product_psychology: "product_interaction",
+  product_semiotics: "product_interaction",
+  // Direction/Craft group — direction/vision/craft/framing/contrast all
+  // merge into one Direction & Craft field.
+  direction: "direction_notes",
+  directors_vision: "direction_notes",
+  craft: "direction_notes",
+  framing_intention: "direction_notes",
+  contrast_relationship: "direction_notes",
+  chromatic_contrast: "direction_notes",
+  // Storytelling routes into the existing (previously builder-only) narrative field.
+  storytelling: "narrative_format",
+  // Casting is a "who's in the shot" decision — merges into subject alongside action.
+  casting_style: "subject",
+  // Wardrobe/designer influence/accessories all merge into one styling field.
+  wardrobe: "wardrobe_notes",
+  designer_influence: "wardrobe_notes",
+  accessories: "wardrobe_notes",
+  // Weather/time of day are scene-setting, same as the environment category.
+  weather: "environment",
+  time_of_day: "environment",
 };
 
 /** Remove one clause (case-insensitive exact match) from a comma-separated field value. */
@@ -1299,6 +1358,7 @@ export function CraftPrompt() {
             narrative_format?: string; transitions?: string; audio?: string;
             text_graphics?: string; reference_role?: string;
             continuity_notes?: string; scene_world?: string; shots?: Shot[];
+            product_interaction?: string; direction_notes?: string; wardrobe_notes?: string;
             usedAvoidanceIds?: string[];
             fieldTokenIds?: Record<string, keyof Fields>;
             consistencyFactors?: string[];
@@ -1354,6 +1414,9 @@ export function CraftPrompt() {
             reference_role: bs.reference_role ?? "",
             continuity_notes: bs.continuity_notes ?? "",
             scene_world: bs.scene_world ?? "",
+            product_interaction: bs.product_interaction ?? "",
+            direction_notes: bs.direction_notes ?? "",
+            wardrobe_notes: bs.wardrobe_notes ?? "",
           }));
         } catch { /* ignore corrupt builder state */ }
       } else {
@@ -1882,6 +1945,9 @@ export function CraftPrompt() {
       reference_role: fields.reference_role,
       continuity_notes: fields.continuity_notes,
       scene_world: fields.scene_world,
+      product_interaction: fields.product_interaction,
+      direction_notes: fields.direction_notes,
+      wardrobe_notes: fields.wardrobe_notes,
       shots,
       usedAvoidanceIds: Array.from(usedAvoidanceIds),
       fieldTokenIds,
@@ -2177,6 +2243,9 @@ export function CraftPrompt() {
     { key: "lens", label: "LENS", placeholder: "14mm ultra-wide" },
     { key: "lighting", label: "LIGHTING", placeholder: "natural morning sunlight" },
     { key: "mood", label: "MOOD / BRAND TONE", placeholder: "documentary realism" },
+    { key: "product_interaction", label: "PRODUCT INTERACTION", placeholder: "grabbing firmly, presenting outward" },
+    { key: "direction_notes", label: "DIRECTION / CRAFT", placeholder: "restrained and deliberate, meticulous detail" },
+    { key: "wardrobe_notes", label: "WARDROBE / STYLING", placeholder: "tailored suit, statement jewelry" },
   ];
 
   // Audit doc 05 §6 — the subtitle used to read "PROJECT CRAFT - {title}"
@@ -2943,6 +3012,14 @@ export function CraftPrompt() {
                 selectedSrefTitle={selectedSref?.title ?? null}
                 onBrowseSref={handleOpenSrefPicker}
                 onClearSref={handleClearSref}
+                context={{
+                  provider: deferredProvider,
+                  category: deferredCategory || undefined,
+                  excludePromptId: id,
+                  projectId: projectId ?? undefined,
+                  promptText: deferredAssembled,
+                  tags: fields.tags,
+                }}
               />
             )}
             {fields.provider === "dalle" && <DalleParamsPanel p={dalleParams} set={setDalle} />}

@@ -281,6 +281,13 @@
   transition: all var(--duration-fast) var(--ease-precise);
 }
 
+/* Long-press-to-delete fill on a token pill (TokenCloud) — left-to-right
+   red wash that completes exactly when the hold triggers the delete confirm. */
+@keyframes token-hold-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
 /* ─── Dot-matrix grid background (subtle) ───────────────── */
 
 .dot-grid-bg {

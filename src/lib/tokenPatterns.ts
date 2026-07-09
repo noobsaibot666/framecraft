@@ -85,6 +85,40 @@ export async function getProvenCombos(
   return rows;
 }
 
+export interface RecurringToken {
+  token_id: string;
+  text: string;
+  recurrence_count: number;
+}
+
+// How often each token in a category recurs across the whole prompt library
+// (by substring match against prompt_text, same idiom as updateCoOccurrences
+// above and updateTokenQualityFromResult in db.ts) — independent of whether
+// those prompts ever went through result scoring. Surfaces tokens that show
+// up often across imported/unscored prompts, not just quality-rated ones.
+export async function getRecurringTokens(
+  categoryId: string,
+  limit = 6,
+  minCount = 2
+): Promise<RecurringToken[]> {
+  if (!isTauri || !categoryId) return [];
+  const db = await getFramecraftDb();
+
+  const rows = (await db.select(
+    `SELECT t.id AS token_id, t.text, COUNT(DISTINCT p.id) AS recurrence_count
+     FROM tokens t
+     JOIN prompts p ON instr(lower(p.prompt_text), lower(t.text)) > 0
+     WHERE t.category_id = $1 AND length(t.text) > 2
+     GROUP BY t.id
+     HAVING recurrence_count >= $2
+     ORDER BY recurrence_count DESC, t.text ASC
+     LIMIT $3`,
+    [categoryId, minCount, limit]
+  )) as RecurringToken[];
+
+  return rows;
+}
+
 // Top co-occurrence patterns library-wide, for dashboard use.
 export async function getTopPatterns(limit = 10): Promise<TopPattern[]> {
   if (!isTauri) return [];

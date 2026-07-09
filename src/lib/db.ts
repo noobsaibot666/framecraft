@@ -545,22 +545,50 @@ export async function clearAllData(): Promise<void> {
 
 // ─── Token Library ────────────────────────────────────────────
 
+// Ordered to match the sequence matching fields appear in the Prompt Craft
+// builder form (migration 034) — categories that route into the same field
+// (per CATEGORY_FIELD_MAP in CraftPrompt.tsx) are grouped together; fieldless
+// categories (material, color, parameters) sort last.
 const STATIC_CATEGORIES: TokenCategory[] = [
-  { id: "subject",     name: "subject",     label: "Subject",              sort_order: 1 },
-  { id: "action",      name: "action",      label: "Action",               sort_order: 2 },
-  { id: "environment", name: "environment", label: "Environment",          sort_order: 3 },
-  { id: "camera",      name: "camera",      label: "Camera",               sort_order: 4 },
-  { id: "lens",        name: "lens",        label: "Lens",                 sort_order: 5 },
-  { id: "composition", name: "composition", label: "Composition",          sort_order: 6 },
-  { id: "lighting",    name: "lighting",    label: "Lighting",             sort_order: 7 },
-  { id: "mood",        name: "mood",        label: "Mood",                 sort_order: 8 },
-  { id: "material",    name: "material",    label: "Material",             sort_order: 9 },
-  { id: "color",       name: "color",       label: "Color",                sort_order: 10 },
-  { id: "realism",     name: "realism",     label: "Realism",              sort_order: 11 },
-  { id: "brand_tone",  name: "brand_tone",  label: "Brand Tone",           sort_order: 12 },
-  { id: "motion",      name: "motion",      label: "Motion",               sort_order: 13 },
-  { id: "avoidance",   name: "avoidance",   label: "Avoidance",            sort_order: 14 },
-  { id: "parameters",  name: "parameters",  label: "Provider Parameters",  sort_order: 15 },
+  { id: "subject",                 name: "subject",                 label: "Subject",                 sort_order: 1 },
+  { id: "action",                  name: "action",                  label: "Action",                  sort_order: 2 },
+  { id: "casting_style",           name: "casting_style",           label: "Casting Style",            sort_order: 3 },
+  { id: "character",               name: "character",               label: "Character",                sort_order: 4 },
+  { id: "acting",                  name: "acting",                  label: "Acting",                   sort_order: 5 },
+  { id: "facial_expressions",      name: "facial_expressions",      label: "Facial Expressions",       sort_order: 6 },
+  { id: "body_language",           name: "body_language",           label: "Body Language",            sort_order: 7 },
+  { id: "body_movement",           name: "body_movement",           label: "Body Movement",            sort_order: 8 },
+  { id: "intentions",              name: "intentions",               label: "Intentions",              sort_order: 9 },
+  { id: "environment",             name: "environment",              label: "Environment",             sort_order: 10 },
+  { id: "weather",                 name: "weather",                  label: "Weather",                 sort_order: 11 },
+  { id: "time_of_day",             name: "time_of_day",              label: "Time of Day",             sort_order: 12 },
+  { id: "composition",             name: "composition",              label: "Composition",             sort_order: 13 },
+  { id: "camera",                  name: "camera",                   label: "Camera",                  sort_order: 14 },
+  { id: "lens",                    name: "lens",                     label: "Lens",                    sort_order: 15 },
+  { id: "lighting",                name: "lighting",                 label: "Lighting",                sort_order: 16 },
+  { id: "mood",                    name: "mood",                     label: "Mood",                    sort_order: 17 },
+  { id: "brand_tone",              name: "brand_tone",               label: "Brand Tone",              sort_order: 18 },
+  { id: "product_placement",       name: "product_placement",        label: "Product Placement",       sort_order: 19 },
+  { id: "product_interaction",     name: "product_interaction",      label: "Product Interaction",     sort_order: 20 },
+  { id: "products_in_environment", name: "products_in_environment",  label: "Products in Environment", sort_order: 21 },
+  { id: "product_psychology",      name: "product_psychology",       label: "Product Psychology",      sort_order: 22 },
+  { id: "product_semiotics",       name: "product_semiotics",        label: "Product Semiotics",       sort_order: 23 },
+  { id: "direction",               name: "direction",                label: "Direction",               sort_order: 24 },
+  { id: "directors_vision",        name: "directors_vision",         label: "Director's Vision",       sort_order: 25 },
+  { id: "craft",                   name: "craft",                    label: "Craft",                   sort_order: 26 },
+  { id: "framing_intention",       name: "framing_intention",        label: "Framing Intention",       sort_order: 27 },
+  { id: "contrast_relationship",   name: "contrast_relationship",    label: "Contrast Relationship",   sort_order: 28 },
+  { id: "chromatic_contrast",      name: "chromatic_contrast",       label: "Chromatic Contrast",      sort_order: 29 },
+  { id: "wardrobe",                name: "wardrobe",                 label: "Wardrobe",                sort_order: 30 },
+  { id: "designer_influence",      name: "designer_influence",       label: "Designer Influence",      sort_order: 31 },
+  { id: "accessories",             name: "accessories",              label: "Accessories",             sort_order: 32 },
+  { id: "realism",                 name: "realism",                  label: "Realism",                 sort_order: 33 },
+  { id: "avoidance",               name: "avoidance",                label: "Avoidance",               sort_order: 34 },
+  { id: "storytelling",            name: "storytelling",             label: "Storytelling",            sort_order: 35 },
+  { id: "motion",                  name: "motion",                   label: "Motion",                  sort_order: 36 },
+  { id: "material",                name: "material",                 label: "Material",                sort_order: 37 },
+  { id: "color",                   name: "color",                    label: "Color",                   sort_order: 38 },
+  { id: "parameters",              name: "parameters",               label: "Provider Parameters",     sort_order: 39 },
 ];
 
 function rowToCategory(row: Record<string, unknown>): TokenCategory {
@@ -686,6 +714,24 @@ export async function toggleTokenFavorite(id: string, isFavorite: boolean): Prom
   if (isTauri) {
     const db = await getDb();
     await db.execute("UPDATE tokens SET is_favorite = $1 WHERE id = $2", [isFavorite ? 1 : 0, id]);
+    invalidateRecommendationCache();
+    return;
+  }
+  // dev mode: no-op (tokens are stateless in dev)
+}
+
+/**
+ * Permanently deletes one token — never a category. `prompt_tokens` has no
+ * ON DELETE CASCADE, so its junction rows are cleared explicitly first; this
+ * loses no prompt data since a prompt's final text/builder_state already has
+ * the token's text baked in independent of this link table. token_patterns
+ * rows cascade on their own (ON DELETE CASCADE in migration 007).
+ */
+export async function deleteToken(id: string): Promise<void> {
+  if (isTauri) {
+    const db = await getDb();
+    await db.execute("DELETE FROM prompt_tokens WHERE token_id = $1", [id]);
+    await db.execute("DELETE FROM tokens WHERE id = $1", [id]);
     invalidateRecommendationCache();
     return;
   }

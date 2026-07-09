@@ -202,7 +202,13 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
   if (!isTauri) return [];
   const db = await getDb();
 
-  const conditions: string[] = ["t.quality_score > 0.1"];
+  // recurrence_count — how many distinct prompts (by substring match against
+  // prompt_text, same idiom as tokenPatterns.ts) contain this token's text,
+  // regardless of whether those prompts were ever scored. Captures signal
+  // from imported prompts that never went through result scoring, where
+  // quality_score/use_count stay at zero — those tokens would otherwise never
+  // clear the quality_score filter below, so recurrence is an alternate way in.
+  const conditions: string[] = ["(t.quality_score > 0.1 OR sub.recurrence_count >= 3)"];
   const values: unknown[] = [];
 
   if (ctx.provider) {
@@ -211,16 +217,24 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
   }
 
   const rows = (await db.select(
-    `SELECT t.*, tc.name as category_name
+    `SELECT t.*, tc.name as category_name, sub.recurrence_count
      FROM tokens t
      LEFT JOIN token_categories tc ON t.category_id = tc.id
+     LEFT JOIN (
+       SELECT tk.id AS token_id, COUNT(DISTINCT p.id) AS recurrence_count
+       FROM tokens tk
+       JOIN prompts p ON instr(lower(p.prompt_text), lower(tk.text)) > 0
+       GROUP BY tk.id
+     ) sub ON sub.token_id = t.id
      WHERE ${conditions.join(" AND ")}
-     ORDER BY t.quality_score DESC, t.use_count DESC, t.is_favorite DESC
+     ORDER BY (t.quality_score + MIN(COALESCE(sub.recurrence_count, 0), 10) * 0.02) DESC,
+              t.use_count DESC, t.is_favorite DESC
      LIMIT ${limit * 3}`,
     values
   )) as Record<string, unknown>[];
 
   const tokens = rows.map(rowToToken);
+  const recurrenceByTokenId = new Map(rows.map((r) => [r.id as string, (r.recurrence_count as number) ?? 0]));
 
   // Filter out tokens already in the prompt text
   const promptLower = (ctx.promptText ?? "").toLowerCase();
@@ -239,6 +253,7 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
 
   return scored.slice(0, limit).map((t) => {
     const tagMatch = tagsLower.length > 0 && tagsLower.some((tag) => t.text.toLowerCase().includes(tag));
+    const recurrenceCount = recurrenceByTokenId.get(t.id) ?? 0;
     return {
       token: t,
       score: t.quality_score,
@@ -248,7 +263,9 @@ export async function recommendTokens(ctx: RecommendationContext, limit = 6): Pr
           ? "Favorited"
           : t.use_count > 5
             ? `Used ${t.use_count}× with high score`
-            : "High quality score",
+            : t.quality_score <= 0.15 && recurrenceCount >= 3
+              ? `Recurs in ${recurrenceCount} of your prompts`
+              : "High quality score",
     };
   });
 }
@@ -475,74 +492,137 @@ export async function recommendAvoidance(ctx: RecommendationContext, limit = 4):
   return recs.slice(0, limit);
 }
 
-/** SREF suggestions: same provider, same category, highest rated. */
+/**
+ * SREF suggestions: blends the catalog's own rating with real usage mined
+ * from `prompts.style_ref` — codes actually typed into similar (same
+ * provider/category), especially winning, prompts rank higher even if
+ * they were never manually rated in the SREF library. Tag overlap with the
+ * prompt being built is a secondary re-sort, same idiom as recommendTokens.
+ */
 export async function recommendSREFs(ctx: RecommendationContext, limit = 3): Promise<SREFRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
 
-  const conditions: string[] = ["s.rating > 0"];
   const values: unknown[] = [];
+  let providerParam = "";
+  let categoryParam = "";
+  if (ctx.provider) { values.push(ctx.provider); providerParam = `$${values.length}`; }
+  if (ctx.category) { values.push(ctx.category); categoryParam = `$${values.length}`; }
 
-  if (ctx.provider) {
-    values.push(ctx.provider);
-    conditions.push(`s.provider = $${values.length}`);
-  }
-  if (ctx.category) {
-    values.push(ctx.category);
-    conditions.push(`(s.category = $${values.length} OR s.category IS NULL)`);
-  }
+  const usageConditions = ["p.style_ref IS NOT NULL", "p.style_ref != ''"];
+  if (providerParam) usageConditions.push(`p.provider = ${providerParam}`);
+  if (categoryParam) usageConditions.push(`(p.category = ${categoryParam} OR p.category IS NULL)`);
+
+  // Widened from a hard "rating > 0" filter — a never-manually-rated code
+  // that's already used 2+ times in similar prompts is still worth surfacing.
+  const outerConditions = ["(s.rating > 0 OR COALESCE(usage.usage_count, 0) >= 2)"];
+  if (providerParam) outerConditions.push(`s.provider = ${providerParam}`);
+  if (categoryParam) outerConditions.push(`(s.category = ${categoryParam} OR s.category IS NULL)`);
 
   const rows = (await db.select(
-    `SELECT s.* FROM srefs s
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY s.rating DESC
-     LIMIT ${limit}`,
+    `SELECT s.*, COALESCE(usage.usage_count, 0) AS usage_count, COALESCE(usage.winner_count, 0) AS winner_count
+     FROM srefs s
+     LEFT JOIN (
+       SELECT p.style_ref AS code, COUNT(*) AS usage_count, SUM(p.is_winner) AS winner_count
+       FROM prompts p
+       WHERE ${usageConditions.join(" AND ")}
+       GROUP BY p.style_ref
+     ) usage ON usage.code = s.code
+     WHERE ${outerConditions.join(" AND ")}
+     ORDER BY (s.rating + MIN(COALESCE(usage.winner_count, 0), 5) * 0.6 + MIN(COALESCE(usage.usage_count, 0), 10) * 0.15) DESC
+     LIMIT ${limit * 2}`,
     values
-  )) as Record<string, unknown>[];
+  )) as (Record<string, unknown> & { usage_count: number; winner_count: number })[];
 
-  return rows.map((row) => {
+  const tagsLower = (ctx.tags ?? []).map((t) => t.toLowerCase());
+  const scored = tagsLower.length > 0
+    ? [...rows].sort((a, b) => {
+        const aMatch = tagsLower.some((tag) => tryParse<string[]>(a.tags, []).some((t) => t.toLowerCase() === tag)) ? 1 : 0;
+        const bMatch = tagsLower.some((tag) => tryParse<string[]>(b.tags, []).some((t) => t.toLowerCase() === tag)) ? 1 : 0;
+        return bMatch - aMatch;
+      })
+    : rows;
+
+  return scored.slice(0, limit).map((row) => {
     const s = rowToSREF(row);
+    const usageCount = row.usage_count ?? 0;
+    const winnerCount = row.winner_count ?? 0;
     return {
       sref: s,
-      reason: s.rating >= 4
-        ? `Rated ${s.rating}/5 — ${ctx.provider ?? "your library"}`
-        : s.best_use
-          ? `Best for: ${s.best_use.slice(0, 40)}`
-          : "High rated style ref",
+      reason: winnerCount > 0
+        ? `Used in ${winnerCount} winning prompt${winnerCount !== 1 ? "s" : ""}`
+        : usageCount >= 2
+          ? `Used in ${usageCount} similar prompts`
+          : s.rating >= 4
+            ? `Rated ${s.rating}/5 — ${ctx.provider ?? "your library"}`
+            : s.best_use
+              ? `Best for: ${s.best_use.slice(0, 40)}`
+              : "High rated style ref",
     };
   });
 }
 
-/** Profile suggestions: same provider, highest rated. */
+/**
+ * Profile (--profile) suggestions: same blend as recommendSREFs — catalog
+ * rating plus real usage mined from `prompts.parameters.profile` (JSON) in
+ * similar, especially winning, prompts.
+ */
 export async function recommendProfiles(ctx: RecommendationContext, limit = 3): Promise<ProfileRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
 
-  const conditions: string[] = ["p.rating > 0"];
   const values: unknown[] = [];
+  let providerParam = "";
+  if (ctx.provider) { values.push(ctx.provider); providerParam = `$${values.length}`; }
 
-  if (ctx.provider) {
-    values.push(ctx.provider);
-    conditions.push(`p.provider = $${values.length}`);
-  }
+  const usageConditions = [
+    "json_extract(pp.parameters, '$.profile') IS NOT NULL",
+    "json_extract(pp.parameters, '$.profile') != ''",
+  ];
+  if (providerParam) usageConditions.push(`pp.provider = ${providerParam}`);
+
+  const outerConditions = ["(pr.rating > 0 OR COALESCE(usage.usage_count, 0) >= 2)"];
+  if (providerParam) outerConditions.push(`pr.provider = ${providerParam}`);
 
   const rows = (await db.select(
-    `SELECT p.* FROM profiles p
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY p.rating DESC
-     LIMIT ${limit}`,
+    `SELECT pr.*, COALESCE(usage.usage_count, 0) AS usage_count, COALESCE(usage.winner_count, 0) AS winner_count
+     FROM profiles pr
+     LEFT JOIN (
+       SELECT json_extract(pp.parameters, '$.profile') AS code, COUNT(*) AS usage_count, SUM(pp.is_winner) AS winner_count
+       FROM prompts pp
+       WHERE ${usageConditions.join(" AND ")}
+       GROUP BY code
+     ) usage ON usage.code = pr.code
+     WHERE ${outerConditions.join(" AND ")}
+     ORDER BY (pr.rating + MIN(COALESCE(usage.winner_count, 0), 5) * 0.6 + MIN(COALESCE(usage.usage_count, 0), 10) * 0.15) DESC
+     LIMIT ${limit * 2}`,
     values
-  )) as Record<string, unknown>[];
+  )) as (Record<string, unknown> & { usage_count: number; winner_count: number })[];
 
-  return rows.map((row) => {
+  const tagsLower = (ctx.tags ?? []).map((t) => t.toLowerCase());
+  const scored = tagsLower.length > 0
+    ? [...rows].sort((a, b) => {
+        const aMatch = tagsLower.some((tag) => tryParse<string[]>(a.tags, []).some((t) => t.toLowerCase() === tag)) ? 1 : 0;
+        const bMatch = tagsLower.some((tag) => tryParse<string[]>(b.tags, []).some((t) => t.toLowerCase() === tag)) ? 1 : 0;
+        return bMatch - aMatch;
+      })
+    : rows;
+
+  return scored.slice(0, limit).map((row) => {
     const p = rowToProfile(row);
+    const usageCount = row.usage_count ?? 0;
+    const winnerCount = row.winner_count ?? 0;
     return {
       profile: p,
-      reason: p.rating >= 4
-        ? `Rated ${p.rating}/5`
-        : p.best_use
-          ? `Best for: ${p.best_use.slice(0, 40)}`
-          : "Highly rated profile",
+      reason: winnerCount > 0
+        ? `Used in ${winnerCount} winning prompt${winnerCount !== 1 ? "s" : ""}`
+        : usageCount >= 2
+          ? `Used in ${usageCount} similar prompts`
+          : p.rating >= 4
+            ? `Rated ${p.rating}/5`
+            : p.best_use
+              ? `Best for: ${p.best_use.slice(0, 40)}`
+              : "Highly rated profile",
     };
   });
 }

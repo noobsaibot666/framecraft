@@ -2965,6 +2965,86 @@ export function CraftPrompt() {
             )}
           </CollapsibleCard>
 
+          {/* Prompt Output — editable */}
+          <CollapsibleCard
+            title="PROMPT OUTPUT"
+            gap="gap-3"
+            headerExtra={
+              <span className={cn("font-mono text-[10px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
+                {charCount} chars
+              </span>
+            }
+          >
+            {/* Provider formatting hints */}
+            {(() => {
+              const hints = getProviderHints(fields.provider);
+              if (!hints.length) return null;
+              return (
+                <div className="flex flex-col gap-1">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
+                  {hints.map((h) => (
+                    <span key={h} className="font-mono text-[10px] text-dim/60">· {h}</span>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Editable textarea */}
+            <textarea
+              value={assembled}
+              onChange={(e) => setOutputOverride(e.target.value)}
+              placeholder="Assembled prompt will appear here…"
+              rows={7}
+              className="w-full px-3 py-2 font-mono text-[11px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
+              style={{ border: "var(--border-dim)" }}
+            />
+
+            {outputOverride !== null && (
+              <button
+                type="button"
+                onClick={() => setOutputOverride(null)}
+                className="font-mono text-[10px] text-dim/60 hover:text-white transition-precise text-left"
+              >
+                ↺ Reset to assembled
+              </button>
+            )}
+
+            {formatChanges.length > 0 && (
+              <div
+                className="flex items-start gap-2 px-2.5 py-2 rounded-sm"
+                style={{ background: "rgba(0,255,200,0.05)", border: "1px solid rgba(0,255,200,0.15)" }}
+              >
+                <Check size={9} className="text-cyan shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/70">Formatted</span>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {formatChanges.map((c) => (
+                      <li key={c} className="font-mono text-[10px] text-soft-white/70">· {c}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Avoidance toggle */}
+            {fields.avoidance_text && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={includeAvoidance}
+                  onChange={(e) => setIncludeAvoidance(e.target.checked)}
+                  className="accent-white/60"
+                />
+                <span className="system-label text-[9px]">INCLUDE AVOIDANCE ON COPY</span>
+              </label>
+            )}
+
+            <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">
+              {copied ? <Check size={10} /> : <Copy size={10} />}
+              {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
+            </Button>
+          </CollapsibleCard>
+
           {/* Thumbnail & Version */}
           <CollapsibleCard title="THUMBNAIL & VERSION">
             <div className="flex flex-col gap-3">
@@ -3129,86 +3209,6 @@ export function CraftPrompt() {
                 <span className="system-label text-dim/60">FAILED</span>
               </label>
             </div>
-          </CollapsibleCard>
-
-          {/* Prompt Output — editable */}
-          <CollapsibleCard
-            title="PROMPT OUTPUT"
-            gap="gap-3"
-            headerExtra={
-              <span className={cn("font-mono text-[10px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
-                {charCount} chars
-              </span>
-            }
-          >
-            {/* Provider formatting hints */}
-            {(() => {
-              const hints = getProviderHints(fields.provider);
-              if (!hints.length) return null;
-              return (
-                <div className="flex flex-col gap-1">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
-                  {hints.map((h) => (
-                    <span key={h} className="font-mono text-[10px] text-dim/60">· {h}</span>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* Editable textarea */}
-            <textarea
-              value={assembled}
-              onChange={(e) => setOutputOverride(e.target.value)}
-              placeholder="Assembled prompt will appear here…"
-              rows={7}
-              className="w-full px-3 py-2 font-mono text-[11px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
-              style={{ border: "var(--border-dim)" }}
-            />
-
-            {outputOverride !== null && (
-              <button
-                type="button"
-                onClick={() => setOutputOverride(null)}
-                className="font-mono text-[10px] text-dim/60 hover:text-white transition-precise text-left"
-              >
-                ↺ Reset to assembled
-              </button>
-            )}
-
-            {formatChanges.length > 0 && (
-              <div
-                className="flex items-start gap-2 px-2.5 py-2 rounded-sm"
-                style={{ background: "rgba(0,255,200,0.05)", border: "1px solid rgba(0,255,200,0.15)" }}
-              >
-                <Check size={9} className="text-cyan shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-cyan/70">Formatted</span>
-                  <ul className="mt-0.5 space-y-0.5">
-                    {formatChanges.map((c) => (
-                      <li key={c} className="font-mono text-[10px] text-soft-white/70">· {c}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {/* Avoidance toggle */}
-            {fields.avoidance_text && (
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeAvoidance}
-                  onChange={(e) => setIncludeAvoidance(e.target.checked)}
-                  className="accent-white/60"
-                />
-                <span className="system-label text-[9px]">INCLUDE AVOIDANCE ON COPY</span>
-              </label>
-            )}
-
-            <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">
-              {copied ? <Check size={10} /> : <Copy size={10} />}
-              {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
-            </Button>
           </CollapsibleCard>
 
           {/* Image Description AI — upload a reference image, ask the AI to

@@ -126,7 +126,7 @@ function EmptyState({
 
 function ResultThumb({ result, promptId }: { result: Result & { prompt_title: string }; promptId: string }) {
   const navigate = useNavigate();
-  const thumb = useImageDisplaySrc(result.thumbnail_path);
+  const thumb = useImageDisplaySrc(result.thumbnail_path ?? result.file_path);
   return (
     <button
       onClick={() => navigate(`/library/${promptId}`)}

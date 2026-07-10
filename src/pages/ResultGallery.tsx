@@ -21,20 +21,20 @@ function DimBars({ result }: { result: GalleryResult }) {
     { label: "RISK", value: result.score_ai_risk, invert: true },
   ];
   return (
-    <div className="flex flex-col gap-1 px-3 pb-2 pt-1">
+    <div className="flex flex-col gap-1.5 px-3 pb-3 pt-2" style={{ borderTop: "var(--border-dim)" }}>
       {dims.map((d) => (
-        <div key={d.label} className="flex items-center gap-1.5">
-          <span className="font-mono text-[7px] text-dim/40 w-8 shrink-0">{d.label}</span>
-          <div className="flex-1 h-0.5 rounded-full bg-white/8 overflow-hidden">
+        <div key={d.label} className="flex items-center gap-2">
+          <span className="font-mono text-[9px] text-muted w-10 shrink-0">{d.label}</span>
+          <div className="flex-1 h-1.5 rounded-full bg-white/8 overflow-hidden">
             <div
               className={d.invert
-                ? `h-full rounded-full ${d.value >= 4 ? "bg-red/60" : d.value >= 2 ? "bg-amber/50" : "bg-white/20"}`
-                : `h-full rounded-full ${d.value >= 4 ? "bg-cyan/70" : d.value >= 2 ? "bg-white/40" : "bg-white/15"}`
+                ? `h-full rounded-full ${d.value >= 4 ? "bg-red/75" : d.value >= 2 ? "bg-amber/60" : "bg-white/20"}`
+                : `h-full rounded-full ${d.value >= 4 ? "bg-cyan/90" : d.value >= 2 ? "bg-amber/55" : "bg-white/20"}`
               }
               style={{ width: `${(d.value / 5) * 100}%` }}
             />
           </div>
-          <span className="font-mono text-[7px] text-dim/30 w-3 text-right">{d.value}</span>
+          <span className="font-mono text-[9px] text-readable w-3 text-right">{d.value}</span>
         </div>
       ))}
     </div>
@@ -44,7 +44,7 @@ function DimBars({ result }: { result: GalleryResult }) {
 // ─── Top Shot Card ────────────────────────────────────────────
 
 function TopShotCard({ result, onClick }: { result: GalleryResult; onClick: () => void }) {
-  const thumb = useImageDisplaySrc(result.thumbnail_path);
+  const thumb = useImageDisplaySrc(result.thumbnail_path ?? result.file_path);
   return (
     <button
       type="button"
@@ -77,7 +77,7 @@ function TopShotCard({ result, onClick }: { result: GalleryResult; onClick: () =
 // ─── Card ─────────────────────────────────────────────────────
 
 function GalleryCard({
-  result, onClick, batchMode, selected, onSelect, onToggleWinner,
+  result, onClick, batchMode, selected, onSelect, onToggleWinner, onDelete,
 }: {
   result: GalleryResult;
   onClick: () => void;
@@ -85,9 +85,17 @@ function GalleryCard({
   selected: boolean;
   onSelect: (id: string) => void;
   onToggleWinner?: (id: string) => void;
+  onDelete?: (id: string) => void;
 }) {
-  const thumb = useImageDisplaySrc(result.thumbnail_path);
+  const thumb = useImageDisplaySrc(result.thumbnail_path ?? result.file_path);
   const hasDims = result.score_realism > 0 || result.score_composition > 0 || result.score_lighting > 0;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    onDelete?.(result.id);
+  };
 
   return (
     <div
@@ -147,24 +155,36 @@ function GalleryCard({
       </div>
 
       {/* Meta */}
-      <div className="px-3 py-2.5 flex flex-col gap-0.5">
-        <span className="font-sans text-[12px] font-medium text-white/80 truncate text-left">{result.prompt_title}</span>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] text-dim/60 uppercase tracking-wider">
-            {result.score_overall > 0 ? `${result.score_overall}/5` : "Unrated"}
-          </span>
-          {result.provider && (
-            <span className="font-mono text-[8px] text-dim/40 uppercase tracking-widest">{result.provider}</span>
-          )}
+      <div className="px-3 py-2.5 flex items-center justify-between gap-2">
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <span className="font-sans text-[12px] font-medium text-white/80 truncate text-left">{result.prompt_title}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[9px] text-readable uppercase tracking-wider">
+              {result.score_overall > 0 ? `${result.score_overall}/5` : "Unrated"}
+            </span>
+            {result.provider && (
+              <span className="font-mono text-[8px] text-muted uppercase tracking-widest">{result.provider}</span>
+            )}
+          </div>
         </div>
+        {!batchMode && onDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            onBlur={() => setConfirmDelete(false)}
+            className={cn(
+              "shrink-0 p-1.5 rounded-sm transition-precise",
+              confirmDelete ? "text-red bg-red/15 opacity-100" : "text-dim/50 opacity-0 group-hover:opacity-100 hover:text-red"
+            )}
+            title={confirmDelete ? "Click again to delete" : "Delete result"}
+          >
+            <Trash2 size={11} />
+          </button>
+        )}
       </div>
 
-      {/* Dimension bars — revealed on hover */}
-      {hasDims && (
-        <div className="opacity-0 group-hover:opacity-100 transition-precise">
-          <DimBars result={result} />
-        </div>
-      )}
+      {/* Dimension bars — always visible (previously hover-only) */}
+      {hasDims && <DimBars result={result} />}
     </div>
   );
 }
@@ -257,6 +277,16 @@ export function ResultGallery() {
     setResults((prev) => prev.map((r) => r.id === id ? { ...r, is_winner: next, is_failed: next ? false : r.is_failed } : r));
   };
 
+  const handleDeleteResult = async (id: string) => {
+    try {
+      await deleteResult(id);
+      setResults((prev) => prev.filter((r) => r.id !== id));
+      toast.success("Result deleted");
+    } catch {
+      toast.error("Failed to delete result");
+    }
+  };
+
   const handleBatchScore = async (score: number) => {
     if (selectedIds.size === 0 || batchWorking) return;
     setBatchWorking(true);
@@ -321,6 +351,7 @@ export function ResultGallery() {
     <PageContainer
       title="Results"
       subtitle="ALL OUTPUT"
+      description="Score, mark winners, and correct results here — this is what trains the app's token quality and recommendation signals."
       action={
         <div className="flex items-center gap-2">
           <Button
@@ -351,16 +382,16 @@ export function ResultGallery() {
         {/* Controls */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
-            <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-readable pointer-events-none" />
             <input
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               placeholder="Search by prompt…"
-              className="h-8 pl-8 pr-3 w-44 font-mono text-[10px] text-soft-white placeholder:text-dim/40 bg-transparent rounded-sm focus:outline-none"
-              style={{ border: "var(--border-dim)" }}
+              className="h-8 pl-8 pr-3 w-44 font-mono text-[11px] text-soft-white placeholder:text-muted bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+              style={{ border: "var(--border-default)" }}
             />
           </div>
-          <SlidersHorizontal size={13} className="text-dim/60 shrink-0" />
+          <SlidersHorizontal size={13} className="text-readable shrink-0" />
 
           {/* Filter */}
           <div className="flex items-center gap-1">
@@ -370,29 +401,29 @@ export function ResultGallery() {
                 type="button"
                 onClick={() => setFilter(opt.value)}
                 className={cn(
-                  "px-3 py-1.5 rounded-sm font-mono text-[10px] uppercase tracking-widest transition-precise",
+                  "px-3 py-1.5 rounded-sm font-mono text-[11px] uppercase tracking-widest transition-precise",
                   filter === opt.value
-                    ? "text-white bg-white/10"
-                    : "text-muted hover:text-white"
+                    ? "text-white bg-cyan/15"
+                    : "text-readable hover:text-white hover:bg-white/5"
                 )}
-                style={{ border: filter === opt.value ? "var(--border-strong)" : "var(--border-dim)" }}
+                style={{ border: filter === opt.value ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)" }}
               >
                 {opt.label}
               </button>
             ))}
           </div>
 
-          <div className="w-px h-4 bg-white/12" />
+          <div className="w-px h-4 bg-white/16" />
 
           {/* Sort */}
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as GallerySort)}
-            className="h-8 px-2 font-mono text-[10px] text-muted bg-transparent rounded-sm focus:outline-none"
-            style={{ border: "var(--border-dim)" }}
+            className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+            style={{ border: "var(--border-default)" }}
           >
             {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <option key={opt.value} value={opt.value} className="bg-panel text-white">{opt.label}</option>
             ))}
           </select>
 
@@ -400,16 +431,16 @@ export function ResultGallery() {
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            className="h-8 px-2 font-mono text-[10px] text-muted bg-transparent rounded-sm focus:outline-none"
-            style={{ border: "var(--border-dim)" }}
+            className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+            style={{ border: "var(--border-default)" }}
           >
-            <option value="">All Providers</option>
+            <option value="" className="bg-panel text-white">All Providers</option>
             {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
-              <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")}>{p}</option>
+              <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")} className="bg-panel text-white">{p}</option>
             ))}
           </select>
 
-          <div className="w-px h-4 bg-white/12" />
+          <div className="w-px h-4 bg-white/16" />
 
           {/* Score filter */}
           <div className="flex items-center gap-1">
@@ -419,17 +450,17 @@ export function ResultGallery() {
                 type="button"
                 onClick={() => setMinScore(n)}
                 className={cn(
-                  "px-2 py-1 rounded-sm font-mono text-[9px] uppercase tracking-widest transition-precise",
-                  minScore === n ? "text-white bg-white/10" : "text-muted hover:text-white"
+                  "px-2.5 py-1 rounded-sm font-mono text-[10px] uppercase tracking-widest transition-precise",
+                  minScore === n ? "text-white bg-amber/15" : "text-readable hover:text-white hover:bg-white/5"
                 )}
-                style={{ border: minScore === n ? "var(--border-strong)" : "var(--border-dim)" }}
+                style={{ border: minScore === n ? "1px solid rgba(223,168,58,0.6)" : "var(--border-default)" }}
               >
                 {n === 0 ? "Any ★" : `${n}+★`}
               </button>
             ))}
           </div>
 
-          <span className="ml-auto font-mono text-[10px] text-dim/50">{displayResults.length} result{displayResults.length !== 1 ? "s" : ""}</span>
+          <span className="ml-auto font-mono text-[10px] text-muted">{displayResults.length} result{displayResults.length !== 1 ? "s" : ""}</span>
         </div>
 
         {/* Batch action bar */}
@@ -570,7 +601,7 @@ export function ResultGallery() {
                         <GalleryCard key={r.id} result={r}
                           onClick={() => navigate(`/results/view/${r.id}`)}
                           batchMode={batchMode} selected={selectedIds.has(r.id)} onSelect={toggleSelect}
-                          onToggleWinner={handleToggleWinner} />
+                          onToggleWinner={handleToggleWinner} onDelete={handleDeleteResult} />
                       ))}
                     </div>
                   </div>
@@ -589,6 +620,7 @@ export function ResultGallery() {
                 selected={selectedIds.has(r.id)}
                 onSelect={toggleSelect}
                 onToggleWinner={handleToggleWinner}
+                onDelete={handleDeleteResult}
               />
             ))}
           </div>

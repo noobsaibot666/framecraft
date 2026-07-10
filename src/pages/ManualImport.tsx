@@ -11,6 +11,7 @@ import { getProjects, addPromptToProject } from "@/lib/projects";
 import { validateImageFile } from "@/lib/imageUtils";
 import { runManualBatchImport, type ManualBatchItem } from "@/lib/manualBatchImport";
 import { toast } from "@/lib/toast";
+import { parseNanoBananaJson } from "@/lib/nanoBananaImport";
 import { findSimilarPrompts } from "@/lib/memoryEngine";
 import {
   analyzeImportedPromptLearning,
@@ -684,47 +685,22 @@ export function ManualImport() {
                 <div className="flex items-center justify-between">
                   <span className="system-label">PASTE NANO BANANA JSON</span>
                   <Button variant="ghost" size="sm" disabled={!nbJson.trim()} onClick={() => {
-                    try {
-                      const obj = JSON.parse(nbJson) as Record<string, unknown>;
-                      const priority = obj.priority as Record<string, unknown> | undefined;
-                      const technical = obj.technical as Record<string, unknown> | undefined;
-                      const constraints = obj.constraints as Record<string, unknown> | undefined;
-                      const style = obj.style as Record<string, unknown> | undefined;
-                      const env = obj.environment as Record<string, unknown> | undefined;
-                      const subject = obj.subject as Record<string, unknown> | undefined;
-
-                      const promptText = (
-                        (priority?.primary as string | undefined) ||
-                        (obj.prompt as string | undefined) ||
-                        (obj.prompt_text as string | undefined) ||
-                        (obj.text as string | undefined) ||
-                        (subject?.main ? `${String(subject.main)}${env?.setting ? ` in ${String(env.setting)}` : ""}` : "") ||
-                        ""
-                      );
-                      const ar = (technical?.aspect_ratio ?? obj.aspect_ratio ?? obj.ar ?? "") as string;
-                      const exclusions = constraints?.exclusions;
-                      const avoidance = Array.isArray(exclusions)
-                        ? exclusions.join(", ")
-                        : typeof exclusions === "string" ? exclusions : "";
-                      const cameraObj = style?.camera as Record<string, unknown> | undefined;
-                      const camera = (cameraObj?.angle ?? "") as string;
-                      const lens = (cameraObj?.lens ?? "") as string;
-                      const lightingObj = env?.lighting as Record<string, unknown> | undefined;
-                      const lighting = (lightingObj?.direction ?? "") as string;
-                      const mood = (style?.mood ?? "") as string;
-
-                      if (promptText) {
-                        setRaw(promptText);
-                        if (ar) setDetected((d) => ({ ...d, aspect_ratio: ar }));
-                        setNbCamera(camera);
-                        setNbLens(lens);
-                        setNbLighting(lighting);
-                        setNbMood(mood);
-                        setNbAvoidance(avoidance);
-                        setProvider("nano_banana");
-                        setAnalyzed(true);
-                      }
-                    } catch { /* invalid JSON */ }
+                    const result = parseNanoBananaJson(nbJson);
+                    if (!result.ok) {
+                      toast.error(result.error);
+                      return;
+                    }
+                    const { data } = result;
+                    setRaw(data.promptText);
+                    if (data.aspectRatio) setDetected((d) => ({ ...d, aspect_ratio: data.aspectRatio! }));
+                    setNbCamera(data.camera ?? "");
+                    setNbLens(data.lens ?? "");
+                    setNbLighting(data.lighting ?? "");
+                    setNbMood(data.mood ?? "");
+                    setNbAvoidance(data.avoidance ?? "");
+                    setProvider("nano_banana");
+                    setAnalyzed(true);
+                    toast.success("Prompt extracted from JSON.");
                   }}>
                     Extract Prompt
                   </Button>

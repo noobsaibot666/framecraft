@@ -13,6 +13,8 @@ export function CollapsibleCard({
   icon,
   headerExtra,
   defaultOpen = true,
+  open: controlledOpen,
+  onOpenChange,
   gap = "gap-4",
   style,
   titleClassName,
@@ -22,12 +24,22 @@ export function CollapsibleCard({
   icon?: React.ReactNode;
   headerExtra?: React.ReactNode;
   defaultOpen?: boolean;
+  /** Controlled open state — when provided, the card no longer manages its own state internally. Omit for the original uncontrolled behavior. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   gap?: string;
   style?: React.CSSProperties;
   titleClassName?: string;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const toggle = () => {
+    const next = !open;
+    if (!isControlled) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   return (
     <div className={cn("flex flex-col p-5 rounded-card", gap)} style={style ?? { border: "var(--border-default)", background: "var(--surface-card)" }}>
       {/* role="button" div, not a real <button> — headerExtra often carries its
@@ -36,8 +48,8 @@ export function CollapsibleCard({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((o) => !o); } }}
+        onClick={toggle}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } }}
         className="flex items-center justify-between w-full group text-left cursor-pointer"
       >
         <span className={cn("flex items-center gap-2 system-label", titleClassName ?? "text-soft-white")}>

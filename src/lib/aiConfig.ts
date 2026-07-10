@@ -100,12 +100,17 @@ export function pickAvailableModel(): AIModel | undefined {
   return undefined;
 }
 
-/** Like pickAvailableModel, but only providers whose models accept image input (DeepSeek has no vision endpoint). */
+/**
+ * Like pickAvailableModel, for image-description/vision tasks. DeepSeek is
+ * included by explicit user choice — its public API's image-input support is
+ * unverified from here, so selecting it may surface a normal request error
+ * rather than a description if its endpoint doesn't accept image content.
+ */
 export function pickVisionModel(): AIModel | undefined {
   const preferred = preferredConnectedModel();
-  if (preferred && preferred.provider !== "deepseek") return preferred;
+  if (preferred) return preferred;
 
-  for (const provider of ["openai", "anthropic"] as const) {
+  for (const provider of ["openai", "anthropic", "deepseek"] as const) {
     if (validateApiKey(provider, getApiKey(provider)).valid) {
       return AI_MODELS.find((m) => m.provider === provider && m.tier === "fast")
         ?? AI_MODELS.find((m) => m.provider === provider);

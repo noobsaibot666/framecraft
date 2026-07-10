@@ -55,12 +55,12 @@ describe("pickAvailableModel", () => {
 });
 
 describe("pickVisionModel", () => {
-  it("excludes DeepSeek even when it's the saved standard model", () => {
+  it("honors DeepSeek as the saved standard model (included by explicit choice)", () => {
     localStorage.setItem(AI_KEY_DEEPSEEK, "sk-deepseek-test");
     localStorage.setItem(AI_KEY_ANTHROPIC, "sk-ant-test");
     setDefaultAiModelId("deepseek-chat");
 
-    expect(pickVisionModel()?.provider).toBe("anthropic");
+    expect(pickVisionModel()?.provider).toBe("deepseek");
   });
 
   it("honors a saved vision-capable standard model", () => {

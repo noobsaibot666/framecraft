@@ -1,7 +1,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon, Lightbulb } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon, Lightbulb, Info, Star } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +25,7 @@ import { analyzePromptDraft, generateTagSuggestions, validatePromptForAnalysis, 
 import { FormulaBar } from "@/components/ui/FormulaBar";
 import { ShotListEditor, formatShotsForAssembly, type Shot } from "@/components/ui/ShotListEditor";
 import { formatFormulaForAI, getFormulaForProvider, getNarrativeArc, NARRATIVE_FORMATS } from "@/lib/promptFormula";
+import { buildFieldContext, getFieldRecommendations, type BuilderFieldKey } from "@/lib/fieldGuidance";
 import { formatStrategyForContext, readStoredStrategy } from "@/lib/creativeDirectorMode";
 import { CONSISTENCY_FACTOR_PRESETS, buildConsistencySuffix, suggestConsistencyFactors } from "@/lib/consistencyFactors";
 import { getHighImpactReferences, type ImpactReference } from "@/lib/referenceImpact";
@@ -118,23 +119,127 @@ function FieldInput({
   );
 }
 
+/** Provider formatting hints — hidden by default, shown on hover/click of the info icon (cyan-accented popover). */
+function ProviderTipsInfo({ hints }: { hints: string[] }) {
+  const [open, setOpen] = useState(false);
+  if (!hints.length) return null;
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="flex items-center justify-center w-5 h-5 rounded-full text-cyan/70 hover:text-cyan transition-precise"
+        style={{ border: "1px solid rgba(56,183,200,0.35)" }}
+        aria-label="Provider formatting tips"
+      >
+        <Info size={10} />
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          className="absolute z-50 top-full left-0 mt-2 w-64 px-3 py-2.5 rounded-sm flex flex-col gap-1.5"
+          style={{ background: "var(--color-panel)", border: "1px solid rgba(56,183,200,0.4)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}
+        >
+          {hints.map((h) => (
+            <span key={h} className="font-mono text-[10px] text-soft-white leading-relaxed">· {h}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FIELD_GUIDANCE_LABELS: Partial<Record<BuilderFieldKey, string>> = {
+  subject: "Subject", character: "Character", environment: "Environment", composition: "Composition",
+  camera: "Camera", lighting: "Lighting", mood: "Mood", realism: "Realism",
+  product_interaction: "Product Interaction", direction_notes: "Direction & Craft", wardrobe_notes: "Wardrobe & Styling",
+};
+
+/**
+ * Field-level craft guidance — a director's checklist for whichever Builder
+ * field is currently focused, distinct from the historical "what's worked
+ * before" recommendations below it. See src/lib/fieldGuidance.ts.
+ */
+function FieldGuidancePanel({
+  activeField,
+  contextFields,
+  onInsert,
+}: {
+  activeField: BuilderFieldKey | null;
+  contextFields: Partial<Record<BuilderFieldKey, string>>;
+  onInsert: (field: BuilderFieldKey, value: string) => void;
+}) {
+  if (!activeField) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-3 rounded-sm" style={{ border: "var(--border-dim)" }}>
+        <Lightbulb size={11} className="text-dim/40 shrink-0" />
+        <span className="font-mono text-[10.5px] text-muted">Click into a Builder field to see craft guidance for it.</span>
+      </div>
+    );
+  }
+  const context = buildFieldContext(contextFields);
+  const dimensions = getFieldRecommendations(activeField, context);
+  if (dimensions.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-3 p-3 rounded-sm" style={{ border: "1px solid rgba(56,183,200,0.3)", background: "rgba(56,183,200,0.04)" }}>
+      <div className="flex items-center gap-1.5">
+        <Lightbulb size={11} className="text-cyan shrink-0" />
+        <span className="font-mono text-[9px] uppercase tracking-widest text-cyan">
+          {FIELD_GUIDANCE_LABELS[activeField] ?? activeField} — things to consider
+        </span>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {dimensions.map((dim) => (
+          <div key={dim.key} className="flex flex-col gap-1">
+            <span className="font-mono text-[9.5px] uppercase tracking-widest text-readable">{dim.label}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {dim.examples.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => onInsert(activeField, example)}
+                  className="font-mono text-[10.5px] px-2.5 py-1.5 rounded-sm text-soft-white hover:text-cyan hover:border-cyan/45 transition-precise"
+                  style={{ border: "var(--border-dim)" }}
+                  title={`Add "${example}" to ${FIELD_GUIDANCE_LABELS[activeField] ?? activeField}`}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RatingPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <label className="system-label text-[13px] text-muted">RATING</label>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-1">
         {Array.from({ length: 5 }).map((_, i) => (
           <button
             key={i}
             type="button"
             onClick={() => onChange(i + 1 === value ? 0 : i + 1)}
-            className={cn(
-              "w-4 h-4 rounded-full border transition-precise",
-              i < value ? "bg-amber/70 border-amber/60" : "bg-transparent border-white/18 hover:border-amber/55"
-            )}
-          />
+            className="p-1.5 -m-1.5 group"
+            aria-label={`Rate ${i + 1}`}
+          >
+            <span
+              className={cn(
+                "block w-5 h-5 rounded-full border transition-precise",
+                i < value
+                  ? "bg-amber border-amber shadow-[0_0_8px_rgba(223,168,58,0.4)]"
+                  : "bg-transparent border-white/20 group-hover:border-amber/60"
+              )}
+            />
+          </button>
         ))}
-        <span className="font-mono text-[12px] text-readable ml-1">{value}/5</span>
+        <span className="font-mono text-[13px] text-readable ml-1.5">{value}/5</span>
       </div>
     </div>
   );
@@ -143,7 +248,7 @@ function RatingPicker({ value, onChange }: { value: number; onChange: (n: number
 function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const colorClass = value >= 8 ? "text-red" : value >= 6 ? "text-red/80" : value >= 4 ? "text-amber" : "text-readable";
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <label className="system-label text-[13px] text-muted">AI-LOOK RISK</label>
         <span className={cn("font-mono text-[13px]", colorClass)}>{value}/10</span>
@@ -151,8 +256,8 @@ function RiskSlider({ value, onChange }: { value: number; onChange: (n: number) 
       <input
         type="range" min={0} max={10} value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-px cursor-pointer accent-amber"
-        style={{ background: `linear-gradient(to right, rgba(255,255,255,0.4) ${value * 10}%, rgba(255,255,255,0.08) ${value * 10}%)` }}
+        className="risk-slider w-full h-1 cursor-pointer"
+        style={{ background: `linear-gradient(to right, rgba(255,255,255,0.45) ${value * 10}%, rgba(255,255,255,0.1) ${value * 10}%)` }}
       />
     </div>
   );
@@ -780,9 +885,11 @@ const PROVIDERS: { value: Provider; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// Image Description AI (right column, under Prompt Output) — only vision-capable
-// providers (DeepSeek has no vision endpoint, matches pickVisionModel's set).
-const VISION_MODELS: AIModel[] = AI_MODELS.filter((m) => m.provider === "anthropic" || m.provider === "openai");
+// Image Description AI (right column, under Recommendations) — matches
+// pickVisionModel's set. DeepSeek included by explicit user choice; its
+// image-input support is unverified from here (see pickVisionModel's doc
+// comment in aiConfig.ts) — selecting it may error rather than describe.
+const VISION_MODELS: AIModel[] = AI_MODELS.filter((m) => m.provider === "anthropic" || m.provider === "openai" || m.provider === "deepseek");
 
 const CATEGORIES: { value: string; label: string }[] = [
   { value: "", label: "Select category…" },
@@ -1247,6 +1354,37 @@ export function CraftPrompt() {
   const [duplicates, setDuplicates] = useState<SimilarPrompt[]>([]);
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
   const [relatedPrompts, setRelatedPrompts] = useState<Prompt[]>([]);
+
+  // Right-column section fold state — everything loads folded except
+  // Parameters; toggling during the session sticks for as long as the page
+  // stays mounted (state resets on navigating away and back, same as every
+  // other in-page UI state here — full cross-navigation persistence would
+  // need sessionStorage, intentionally out of scope).
+  const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>({
+    parameters: true,
+    promptOutput: false,
+    recommendations: false,
+    imageDescription: false,
+    aiAdvisor: false,
+    thumbnailVersion: false,
+    related: false,
+    recipes: false,
+    inspirations: false,
+    impactRefs: false,
+    scoring: false,
+  });
+  const setSectionOpenFor = (key: string) => (v: boolean) => setSectionOpen((s) => ({ ...s, [key]: v }));
+
+  // Field Guidance (Recommendations section) — tracks which Builder field was
+  // last focused so the director's-checklist panel can react live. No onBlur
+  // clear: clearing immediately on blur would hide the panel before a click
+  // on one of its suggestion chips (elsewhere in the DOM) could register —
+  // it simply shows the most-recently-focused field's guidance instead.
+  const [activeGuidanceField, setActiveGuidanceField] = useState<BuilderFieldKey | null>(null);
+  const handleInsertFieldGuidance = (field: BuilderFieldKey, value: string) => {
+    const current = (fields[field] as string) ?? "";
+    setF(field, (current.trim() ? `${current}, ${value}` : value) as Fields[typeof field]);
+  };
 
   // For editable assembled output
   const [outputOverride, setOutputOverride] = useState<string | null>(null);
@@ -2530,6 +2668,7 @@ export function CraftPrompt() {
                   <input
                     value={fields.subject}
                     onChange={(e) => setF("subject", e.target.value)}
+                    onFocus={() => setActiveGuidanceField("subject")}
                     placeholder="woman running through field"
                     className="w-full h-13 px-3 font-mono text-[14px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                     style={{ border: "1px solid rgba(255,255,255,0.16)" }}
@@ -2541,6 +2680,7 @@ export function CraftPrompt() {
                     <input
                       value={fields[key] as string}
                       onChange={(e) => setF(key, e.target.value)}
+                      onFocus={() => setActiveGuidanceField(key as BuilderFieldKey)}
                       placeholder={placeholder}
                       className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                       style={{ border: "1px solid rgba(255,255,255,0.16)" }}
@@ -2552,6 +2692,7 @@ export function CraftPrompt() {
                   <input
                     value={fields.realism}
                     onChange={(e) => setF("realism", e.target.value)}
+                    onFocus={() => setActiveGuidanceField("realism")}
                     placeholder="authentic skin texture, real terrain imperfections…"
                     className="w-full h-10 px-3 font-mono text-[13px] text-soft-white placeholder:text-dim bg-dark rounded-sm focus:outline-none focus:border-cyan/55 transition-precise"
                     style={{ border: "1px solid rgba(255,255,255,0.16)" }}
@@ -3043,6 +3184,8 @@ export function CraftPrompt() {
           <CollapsibleCard
             title="PARAMETERS"
             headerExtra={<span className="font-mono text-[11px] text-readable uppercase tracking-widest">{fields.provider}</span>}
+            open={sectionOpen.parameters}
+            onOpenChange={setSectionOpenFor("parameters")}
           >
             {fields.provider === "midjourney" && (
               <MidjourneyParams
@@ -3086,25 +3229,16 @@ export function CraftPrompt() {
             title="PROMPT OUTPUT"
             gap="gap-3"
             headerExtra={
-              <span className={cn("font-mono text-[10px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
-                {charCount} chars
-              </span>
+              <div className="flex items-center gap-2.5">
+                <ProviderTipsInfo hints={getProviderHints(fields.provider)} />
+                <span className={cn("font-mono text-[10px]", charCount > 1500 ? "text-red/70" : "text-dim/60")}>
+                  {charCount} chars
+                </span>
+              </div>
             }
+            open={sectionOpen.promptOutput}
+            onOpenChange={setSectionOpenFor("promptOutput")}
           >
-            {/* Provider formatting hints */}
-            {(() => {
-              const hints = getProviderHints(fields.provider);
-              if (!hints.length) return null;
-              return (
-                <div className="flex flex-col gap-1">
-                  <span className="font-mono text-[9px] uppercase tracking-widest text-dim/50">{fields.provider} tips</span>
-                  {hints.map((h) => (
-                    <span key={h} className="font-mono text-[10px] text-dim/60">· {h}</span>
-                  ))}
-                </div>
-              );
-            })()}
-
             {/* Editable textarea — tall enough to actually preview a full
                 prompt (these routinely run long), and resizable for the rare
                 one that runs longer still. */}
@@ -3172,137 +3306,18 @@ export function CraftPrompt() {
             </Button>
           </CollapsibleCard>
 
-          {/* Thumbnail & Version */}
-          <CollapsibleCard title="THUMBNAIL & VERSION">
-            <div className="flex flex-col gap-3">
-              <PromptThumbnailField
-                thumbnailData={fields.thumbnail_data}
-                sourceUrl={fields.source_url}
-                onThumbnailChange={(v) => setF("thumbnail_data", v)}
-                onSourceUrlChange={(v) => setF("source_url", v)}
-              />
-              {isEdit ? (
-                <>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-[11px] text-soft-white">Version {originalVersion}</span>
-                    {parentId && (
-                      <button type="button" onClick={() => navigate(`/craft/${parentId}`)}
-                        className="font-mono text-[9px] text-dim/50 hover:text-cyan transition-precise">
-                        ↑ view the version this was forked from
-                      </button>
-                    )}
-                  </div>
-                  <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
-                    Testing a change? Save it as a new version to keep this one intact and compare results side by side.
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSaveNewVersion}
-                    disabled={saving || savingNewVersion}
-                    className="w-fit"
-                  >
-                    <Save size={10} /> {savingNewVersion ? "Saving…" : `+ Add Version v${originalVersion + 1}`}
-                  </Button>
-                </>
-              ) : (
-                <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
-                  Version history and the "Add Version" fork become available once this prompt is saved.
-                </p>
-              )}
-            </div>
-          </CollapsibleCard>
-
-          {/* Related Prompts */}
-          {relatedPrompts.length > 0 && (
-            <CollapsibleCard title="RELATED" icon={<Zap size={11} className="text-cyan" />} gap="gap-3">
-              {relatedPrompts.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => navigate(`/library/${p.id}`)}
-                  className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
-                  style={{ border: "var(--border-dim)" }}
-                >
-                  <span className="font-mono text-[13px] text-readable truncate">{p.title}</span>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </CollapsibleCard>
-          )}
-
-          {/* Recipes */}
-          {availableRecipes.length > 0 && (
-            <CollapsibleCard title="RECIPES" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-3">
-              {availableRecipes.map((recipe) => (
-                <button
-                  key={recipe.id}
-                  type="button"
-                  onClick={() => handleApplyRecipe(recipe)}
-                  className="flex items-start justify-between gap-3 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
-                  style={{ border: appliedRecipeId === recipe.id ? "1px solid rgba(72,229,232,0.35)" : "var(--border-dim)" }}
-                >
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <span className="font-mono text-[13px] text-readable truncate">{recipe.title}</span>
-                    <span className="font-mono text-[10px] text-muted truncate">{recipe.provider}</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-cyan shrink-0">Use</span>
-                </button>
-              ))}
-            </CollapsibleCard>
-          )}
-
-          {/* Project inspirations — full visual reference board */}
-          {projectRefs.length > 0 && (
-            <CollapsibleCard
-              title="INSPIRATIONS"
-              gap="gap-3"
-              headerExtra={<span className="font-mono text-[10px] text-muted">{projectRefs.length} project ref{projectRefs.length !== 1 ? "s" : ""}</span>}
-            >
-              <div className="grid grid-cols-4 gap-2">
-                {projectRefs.map((ref) => (
-                  <button
-                    key={ref.id}
-                    type="button"
-                    onClick={() => navigate(`/references/${ref.id}`)}
-                    className="group relative aspect-square rounded-sm overflow-hidden"
-                    style={{ border: "var(--border-dim)" }}
-                    title={ref.title}
-                  >
-                    <InspirationThumb src={ref.thumbnail_data} />
-                    <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[9px] text-white/80 truncate opacity-0 group-hover:opacity-100 transition-precise"
-                      style={{ background: "rgba(0,0,0,0.75)" }}>
-                      {ref.title}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </CollapsibleCard>
-          )}
-
-          {/* High-impact references */}
-          {insightsReady && impactRefs.length > 0 && (
-            <CollapsibleCard
-              title="IMPACT REFS"
-              gap="gap-3"
-              headerExtra={<span className="font-mono text-[10px] text-muted">linked to winners</span>}
-            >
-              <div className="flex flex-col gap-1.5">
-                {impactRefs.map((ref) => (
-                  <ImpactRefRow key={ref.id} ref_={ref} />
-                ))}
-              </div>
-            </CollapsibleCard>
-          )}
-
           {/* Recommendations — hideHeader since the panel would otherwise
               render its own second "RECOMMENDATIONS" label right below
               this card's fold header. */}
-          <CollapsibleCard title="RECOMMENDATIONS" icon={<Lightbulb size={11} className="text-cyan" />}>
+          <CollapsibleCard title="RECOMMENDATIONS" icon={<Lightbulb size={11} className="text-cyan" />} open={sectionOpen.recommendations} onOpenChange={setSectionOpenFor("recommendations")}>
+            <FieldGuidancePanel
+              activeField={activeGuidanceField}
+              contextFields={{
+                subject: fields.subject, character: fields.character, environment: fields.environment,
+                mood: fields.mood, lighting: fields.lighting,
+              }}
+              onInsert={handleInsertFieldGuidance}
+            />
             {insightsReady ? (
               <RecommendationPanel
                 hideHeader
@@ -3322,25 +3337,9 @@ export function CraftPrompt() {
             )}
           </CollapsibleCard>
 
-          {/* Scoring */}
-          <CollapsibleCard title="SCORING" gap="gap-5">
-            <RatingPicker value={fields.rating} onChange={(n) => setF("rating", n)} />
-            <RiskSlider value={fields.ai_look_risk} onChange={(n) => setF("ai_look_risk", n)} />
-            <div className="flex items-center gap-4 pt-1">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={fields.is_winner} onChange={(e) => setF("is_winner", e.target.checked)} className="accent-white" />
-                <span className="system-label">WINNER</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={fields.is_failed} onChange={(e) => setF("is_failed", e.target.checked)} className="accent-red" />
-                <span className="system-label text-dim/60">FAILED</span>
-              </label>
-            </div>
-          </CollapsibleCard>
-
           {/* Image Description AI — upload a reference image, ask the AI to
               describe it, and copy the description back into the prompt. */}
-          <CollapsibleCard title="IMAGE DESCRIPTION AI" icon={<ScanEye size={11} className="text-cyan" />} gap="gap-3">
+          <CollapsibleCard title="IMAGE DESCRIPTION AI" icon={<ScanEye size={11} className="text-cyan" />} gap="gap-3" open={sectionOpen.imageDescription} onOpenChange={setSectionOpenFor("imageDescription")}>
             <div
               {...getDescribeRootProps()}
               className={cn(
@@ -3524,7 +3523,7 @@ export function CraftPrompt() {
             const canAnalyze = analyzeCheck.valid;
             const hasAdvice = (advice.suggestions.length > 0 || advice.risks.length > 0 || advice.improvements.length > 0) && !adviceDismissed;
             return (
-              <CollapsibleCard title="AI PROMPT ADVISOR" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-2">
+              <CollapsibleCard title="AI PROMPT ADVISOR" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-2" open={sectionOpen.aiAdvisor} onOpenChange={setSectionOpenFor("aiAdvisor")}>
                 <input
                   type="text"
                   value={analyzeDirection}
@@ -3605,6 +3604,168 @@ export function CraftPrompt() {
               </CollapsibleCard>
             );
           })()}
+
+          {/* Thumbnail & Version */}
+          <CollapsibleCard title="THUMBNAIL & VERSION" open={sectionOpen.thumbnailVersion} onOpenChange={setSectionOpenFor("thumbnailVersion")}>
+            <div className="flex flex-col gap-3">
+              <PromptThumbnailField
+                thumbnailData={fields.thumbnail_data}
+                sourceUrl={fields.source_url}
+                onThumbnailChange={(v) => setF("thumbnail_data", v)}
+                onSourceUrlChange={(v) => setF("source_url", v)}
+              />
+              {isEdit ? (
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[11px] text-soft-white">Version {originalVersion}</span>
+                    {parentId && (
+                      <button type="button" onClick={() => navigate(`/craft/${parentId}`)}
+                        className="font-mono text-[9px] text-dim/50 hover:text-cyan transition-precise">
+                        ↑ view the version this was forked from
+                      </button>
+                    )}
+                  </div>
+                  <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                    Testing a change? Save it as a new version to keep this one intact and compare results side by side.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSaveNewVersion}
+                    disabled={saving || savingNewVersion}
+                    className="w-fit"
+                  >
+                    <Save size={10} /> {savingNewVersion ? "Saving…" : `+ Add Version v${originalVersion + 1}`}
+                  </Button>
+                </>
+              ) : (
+                <p className="font-mono text-[10px] text-dim/50 leading-relaxed">
+                  Version history and the "Add Version" fork become available once this prompt is saved.
+                </p>
+              )}
+            </div>
+          </CollapsibleCard>
+
+          {/* Related Prompts */}
+          {relatedPrompts.length > 0 && (
+            <CollapsibleCard title="RELATED" icon={<Zap size={11} className="text-cyan" />} gap="gap-3" open={sectionOpen.related} onOpenChange={setSectionOpenFor("related")}>
+              {relatedPrompts.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => navigate(`/library/${p.id}`)}
+                  className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
+                  style={{ border: "var(--border-dim)" }}
+                >
+                  <span className="font-mono text-[13px] text-readable truncate">{p.title}</span>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
+                    ))}
+                  </div>
+                </button>
+              ))}
+            </CollapsibleCard>
+          )}
+
+          {/* Recipes */}
+          {availableRecipes.length > 0 && (
+            <CollapsibleCard title="RECIPES" icon={<Wand2 size={11} className="text-cyan" />} gap="gap-3" open={sectionOpen.recipes} onOpenChange={setSectionOpenFor("recipes")}>
+              {availableRecipes.map((recipe) => (
+                <button
+                  key={recipe.id}
+                  type="button"
+                  onClick={() => handleApplyRecipe(recipe)}
+                  className="flex items-start justify-between gap-3 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
+                  style={{ border: appliedRecipeId === recipe.id ? "1px solid rgba(72,229,232,0.35)" : "var(--border-dim)" }}
+                >
+                  <div className="flex flex-col gap-0.5 min-w-0">
+                    <span className="font-mono text-[13px] text-readable truncate">{recipe.title}</span>
+                    <span className="font-mono text-[10px] text-muted truncate">{recipe.provider}</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-cyan shrink-0">Use</span>
+                </button>
+              ))}
+            </CollapsibleCard>
+          )}
+
+          {/* Project inspirations — full visual reference board */}
+          {projectRefs.length > 0 && (
+            <CollapsibleCard
+              title="INSPIRATIONS"
+              gap="gap-3"
+              headerExtra={<span className="font-mono text-[10px] text-muted">{projectRefs.length} project ref{projectRefs.length !== 1 ? "s" : ""}</span>}
+              open={sectionOpen.inspirations}
+              onOpenChange={setSectionOpenFor("inspirations")}
+            >
+              <div className="grid grid-cols-4 gap-2">
+                {projectRefs.map((ref) => (
+                  <button
+                    key={ref.id}
+                    type="button"
+                    onClick={() => navigate(`/references/${ref.id}`)}
+                    className="group relative aspect-square rounded-sm overflow-hidden"
+                    style={{ border: "var(--border-dim)" }}
+                    title={ref.title}
+                  >
+                    <InspirationThumb src={ref.thumbnail_data} />
+                    <span className="absolute inset-x-0 bottom-0 px-1 py-0.5 font-mono text-[9px] text-white/80 truncate opacity-0 group-hover:opacity-100 transition-precise"
+                      style={{ background: "rgba(0,0,0,0.75)" }}>
+                      {ref.title}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </CollapsibleCard>
+          )}
+
+          {/* High-impact references */}
+          {insightsReady && impactRefs.length > 0 && (
+            <CollapsibleCard
+              title="IMPACT REFS"
+              gap="gap-3"
+              headerExtra={<span className="font-mono text-[10px] text-muted">linked to winners</span>}
+              open={sectionOpen.impactRefs}
+              onOpenChange={setSectionOpenFor("impactRefs")}
+            >
+              <div className="flex flex-col gap-1.5">
+                {impactRefs.map((ref) => (
+                  <ImpactRefRow key={ref.id} ref_={ref} />
+                ))}
+              </div>
+            </CollapsibleCard>
+          )}
+
+          {/* Scoring */}
+          <CollapsibleCard title="SCORING" gap="gap-6" open={sectionOpen.scoring} onOpenChange={setSectionOpenFor("scoring")}>
+            <RatingPicker value={fields.rating} onChange={(n) => setF("rating", n)} />
+            <RiskSlider value={fields.ai_look_risk} onChange={(n) => setF("ai_look_risk", n)} />
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setF("is_winner", !fields.is_winner)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-sm font-mono text-[11px] uppercase tracking-widest transition-precise",
+                  fields.is_winner ? "text-white bg-cyan/15" : "text-readable hover:text-white hover:bg-white/5"
+                )}
+                style={{ border: fields.is_winner ? "1px solid rgba(56,183,200,0.6)" : "var(--border-default)" }}
+              >
+                <Star size={12} className={fields.is_winner ? "fill-cyan/40" : ""} />
+                Winner
+              </button>
+              <button
+                type="button"
+                onClick={() => setF("is_failed", !fields.is_failed)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-sm font-mono text-[11px] uppercase tracking-widest transition-precise",
+                  fields.is_failed ? "text-red bg-red/10" : "text-readable hover:text-white hover:bg-white/5"
+                )}
+                style={{ border: fields.is_failed ? "1px solid rgba(215,25,33,0.55)" : "var(--border-default)" }}
+              >
+                Failed
+              </button>
+            </div>
+          </CollapsibleCard>
 
           {/* Save */}
           <div className="flex flex-col gap-2">

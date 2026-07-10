@@ -44,6 +44,7 @@ import {
   getComparisonRoles,
 } from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
+import { recordComparisonApply, recordComparisonLesson } from "@/lib/intelligenceEngine";
 import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
@@ -850,6 +851,14 @@ export function ComparisonLab() {
     setApplyError("");
     try {
       await syncDecisionsToResults(activeSessionId);
+      // Results' is_winner/is_failed are synced above — recompute each touched
+      // prompt's summary too, so prompt-level winner status reflects the
+      // decision the same way every other result-mutation flow already does
+      // (previously only the result rows updated; the prompts never did).
+      const touchedPromptIds = slots
+        .filter((slot): slot is SlotState => Boolean(slot))
+        .map((slot) => slot.result.prompt_id);
+      await recordComparisonApply(touchedPromptIds);
       await updateSession(activeSessionId, { outcome_summary: outcome });
       setOutcomeSummary(outcome);
       setSynced(true);
@@ -910,6 +919,10 @@ export function ComparisonLab() {
     const text = formatDecisionOutcome(decision);
     if (!text) return;
     await updateSession(activeSessionId, { outcome_summary: text });
+    // Previously the AI's "what to avoid" judgment lived only in this text
+    // blob. Turn it into structured, reusable avoidance guidance so it
+    // actually resurfaces in future Prompt Craft sessions.
+    recordComparisonLesson(decision).catch(() => {});
     setOutcomeSummary(text);
     setDecision(null);
     reloadSessions();

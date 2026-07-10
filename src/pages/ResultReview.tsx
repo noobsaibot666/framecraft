@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { createResult, recomputePromptResultSummary, updateTokenQualityFromResult } from "@/lib/db";
-import { scoreToQualityDelta } from "@/lib/memoryEngine";
-import { updateCoOccurrences } from "@/lib/tokenPatterns";
+import { createResult, recomputePromptResultSummary } from "@/lib/db";
+import { recordResultOutcome } from "@/lib/intelligenceEngine";
 import { fileToDataUrl, fileToPreviewUrl, isVideoFile, validateMediaFile } from "@/lib/imageUtils";
 import { importReferenceImage, importResultImage } from "@/lib/sharedImport";
 import { addResultToProject, getProjectsForPrompt } from "@/lib/projects";
@@ -238,11 +237,9 @@ export function ResultReview() {
         .then((owners) => Promise.all(owners.map((project) => addResultToProject(project.id, resultId))))
         .catch(() => {});
 
-      // Update token quality scores and co-occurrence patterns (fire-and-forget — non-blocking)
+      // Record the scored outcome's learning signal (fire-and-forget — non-blocking)
       if (prompt?.prompt_text) {
-        const delta = scoreToQualityDelta(scores.overall, isFailed);
-        updateTokenQualityFromResult(prompt.prompt_text, delta).catch(() => {});
-        updateCoOccurrences(prompt.prompt_text, scores.overall).catch(() => {});
+        recordResultOutcome(prompt.prompt_text, scores.overall, isFailed).catch(() => {});
       }
 
       // importResultImage applies queued (portable-library) jobs immediately on

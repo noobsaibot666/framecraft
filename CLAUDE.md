@@ -75,3 +75,48 @@ Nothing OS-inspired: monochrome, hardware-like. **Red (#D71921) is signal only**
 `npm test` → 142+ tests, 14+ files. All pure/in-memory — no Tauri required. Run before every build.
 
 `cargo check` → must be clean before `npm run tauri build`.
+
+---
+
+## Application intelligence — current state (as of this writing, verify before relying on it)
+
+Full detail with file:line citations: `docs/features/intelligence.md`. Summary below.
+
+**`src/lib/intelligenceEngine.ts` is the required entry point for new "learns from usage" features.** It's a facade over the underlying storage modules (`memoryEngine.ts`, `tokenPatterns.ts`, `referenceImpact.ts`, `inconsistencyIntelligence.ts`, `db.ts`'s avoidance-pattern functions), not a replacement for them — those stay where they are. Data is still scoped per-library (each portable SQLite file keeps its own learned scores); what's unified is the code path pages call through, by decision (not a cross-library store — that was considered and explicitly rejected to preserve the NAS-portable-library model).
+
+Use the vocabulary below when discussing or extending this area, so it's explicit whether a feature is real:
+
+- **WIRED** — real trigger → compute → store → consumer loop, confirmed by tracing all four steps.
+- **ISOLATED** — computes/stores but nothing downstream reads it (a dead end), or reads real data but shares no storage/scoring with anything else.
+- **STATIC** — deterministic/rule-based, no memory of past usage even though it may look adaptive.
+- **SPLIT** — part of the loop is wired, part is a dead end.
+
+**Confirmed subsystems:**
+
+- **Token quality scoring** — WIRED, and now behind `intelligenceEngine.recordResultOutcome()`. Trigger: saving a scored result (`ResultReview.tsx`) → `recordResultOutcome()` → `scoreToQualityDelta()` (`memoryEngine.ts`) + `updateTokenQualityFromResult()` + `updateCoOccurrences()` (`db.ts`, `tokenPatterns.ts`) → `tokens.quality_score`, `token_patterns` table. Read by Dashboard (Proven/Winner Tokens), Token Cloud, Token Detail, `recommendations.ts:recommendTokens`, and the sequence-builder's "proven combinations" hint. Note: editing an *existing* result's score in `ResultDetail.tsx` does **not** go through this loop — only the initial Add Result save does. Spotted, not yet fixed.
+- **Reference impact** — WIRED. `referenceImpact.ts` (60/40 result-win/project-win weighting) powers Reference Library, Reference Detail, and Prompt Craft's "Impact Refs." `recommendations.ts:recommendReferences` is a separate query (different filtering needs — category/tag matching `referenceImpact.ts` doesn't do) but now includes the same `project_references → project_prompts → prompts.is_winner` signal `referenceImpact.ts` uses, closing the gap where project-attached references were invisible to it. The two still aren't one function — a full merge remains a reasonable follow-up once both are observed working correctly.
+- **Recommendations engine** (`recommendations.ts`) — an aggregator + cache, not a hub. Seven independent scorers (tokens/prompts/recipes/srefs/profiles/references/avoidance), each with its own bespoke SQL against raw tables. `invalidateRecommendationCache()` is called on every mutation across `db.ts` and `references.ts` (30+ sites) and has a dedicated wiring test (`recommendationInvalidationWiring.test.ts`) — this part is disciplined and any new mutator on a table the recommender reads must follow the same pattern.
+- **Recurring inconsistency conflicts** — WIRED, and the only subsystem the codebase's own comments explicitly call "App Intelligence" (`tokenConsistency.ts`). A static keyword rule fires in the live draft → `recordConsistencyEvent()` → `inconsistency_events` table → `getTopConsistencyConflicts()` promotes a conflict into a personal "watch out for" entry in `recommendAvoidance` once it recurs ≥2×.
+- **Comparison decisions** — WIRED (was SPLIT). Clicking **Apply** calls `syncDecisionsToResults` then `intelligenceEngine.recordComparisonApply()`, which recomputes every touched prompt's summary — closing the old gap where only `results.is_winner` updated, never `prompts.is_winner`. Saving an AI decision as the session outcome now also calls `intelligenceEngine.recordComparisonLesson()`, which turns `decision.avoid[]` into deduped `avoidance_patterns` rows (`is_builtin = 0`) instead of a text blob nothing re-reads — these rows flow straight into `recommendAvoidance` (see next item), no new table needed.
+- **Avoidance patterns** — WIRED (bug fixed). `recommendAvoidance` used to filter `avoidance_patterns.category` against a prompt's category — two unrelated taxonomies (artifact-defect categories like "texture"/"anatomy" vs. prompt categories like "advertising"/"fashion") that could never match, so the 16 built-in seeded patterns never surfaced through recommendations at all (only patterns manually added via `createAvoidancePattern`, which hardcodes `category = 'all'`, ever did). Fixed to filter on `provider` instead (genuinely the same vocabulary on both sides) and order learned (`is_builtin = 0`) patterns first.
+- **Provider success formulas** (`promptFormula.ts`) — WIRED, but still siloed in browser `localStorage` (`framecraft_learned_formulas_v1`), not SQLite — outside the NAS/portable-library backup path described above. Learned from paste-imports (`ManualImport.tsx`) when ≥3 structural steps are recognized; consumed by Prompt Craft's Formula Bar and the Project Assistant. **Known follow-up, not done today**: migrate this into a real per-library table so it's consistent with everything else and travels with the library on handoff.
+- **AI-look risk score** — STATIC. Pure keyword-trigger matching (`avoidanceEngine.ts`); never learns from whether high-risk prompts actually failed more often. Used only as a minor tiebreaker in `recommendPrompts`.
+- **Recipe use count** — WIRED (was a dead end). `recommendRecipes` now factors `prompts.recipe_use_count` into its ORDER BY and reason text; a frequently-applied recipe outranks an equally-rated but unused one.
+- **Duplicate detection** (`memoryEngine.ts:findSimilarPrompts`) — STATIC, Jaccard token-overlap, no memory of which suggested duplicates were accepted or dismissed. Unrelated to `recommendPrompts`'s separate "related prompts" logic.
+- **Import learning** (`importLearning.ts`) — STATIC, one-shot regex/keyword extraction per pasted prompt; nothing aggregates across imports despite the name.
+- **Project Assistant** (`assistant.ts`) — does **not** consume any learned scoring table (`tokens.quality_score`, `token_patterns`, reference impact). It recomputes its own deterministic suggestions from raw row counts on every call; its only link to the rest is pulling comparison `outcome_summary` text as prose context.
+
+**When asked to add or extend an "app intelligence" feature:**
+
+1. Start in `src/lib/intelligenceEngine.ts` — add a new orchestration function there, or extend an existing one, rather than wiring 2-3 lib calls inline in a page component.
+2. Name the trigger (the exact user action that should fire it) before writing code.
+3. Prefer writing into an existing table/loop (`tokens.quality_score`, `token_patterns`, `inconsistency_events`, `avoidance_patterns` with `is_builtin = 0`, the reference-impact join tables) over inventing a new parallel one — check the list above first for something that already answers a similar question.
+4. If it mutates a table `recommendations.ts` reads, call `invalidateRecommendationCache()` — follow the pattern in `recommendationInvalidationWiring.test.ts`. (Reusing an existing mutator like `createAvoidancePattern`, which already does this, is preferable to writing a new one.)
+5. Trace all four steps (trigger → compute → store → consumer) before calling it done — a feature that computes and stores but nothing reads is the most common failure mode here.
+6. State plainly in the PR/commit whether the result is WIRED, ISOLATED, STATIC, or SPLIT, and update this section if it changes the map.
+
+---
+
+## Feature documentation
+
+After shipping a significant feature or page-level change, ask the user whether to add/update that page's doc in `docs/features/<page-name>.md` — don't update it unprompted. One file per page; keep entries short, succinct, and actionable (what the page is about, what you can do, features in operational order for multi-panel pages) — no verbose field-by-field explanations. See `docs/features/prompt-craft.md` for the format.

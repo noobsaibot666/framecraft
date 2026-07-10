@@ -373,7 +373,7 @@ export async function recommendRecipes(ctx: RecommendationContext, limit = 3): P
      LEFT JOIN results res ON res.prompt_id = r.id
      WHERE r.is_recipe = 1 AND ${conditions.join(" AND ")}
      GROUP BY r.id
-     ORDER BY win_count DESC, avg_score DESC, r.rating DESC, r.reuse_potential DESC
+     ORDER BY win_count DESC, avg_score DESC, r.rating DESC, r.reuse_potential DESC, r.recipe_use_count DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
@@ -381,11 +381,14 @@ export async function recommendRecipes(ctx: RecommendationContext, limit = 3): P
   return rows.map((row) => {
     const p = rowToPrompt(row);
     const winCount = (row.win_count as number) ?? 0;
+    const useCount = p.recipe_use_count ?? 0;
     const reason = winCount > 0
       ? `Generated ${winCount} winning result${winCount !== 1 ? "s" : ""}`
-      : p.rating >= 4
-        ? `Rated ${p.rating}/5 — ${ctx.category ?? "all"}`
-        : "Frequently reused structure";
+      : useCount > 0
+        ? `Applied ${useCount} time${useCount !== 1 ? "s" : ""}`
+        : p.rating >= 4
+          ? `Rated ${p.rating}/5 — ${ctx.category ?? "all"}`
+          : "Frequently reused structure";
     return {
       recipe: {
         id: p.id,
@@ -407,26 +410,29 @@ export async function recommendRecipes(ctx: RecommendationContext, limit = 3): P
   });
 }
 
-/** Avoidance suggestions: built-in patterns + failure artifacts from same category. */
+/** Avoidance suggestions: built-in + learned patterns, filtered by provider, plus failure artifacts from same category. */
 export async function recommendAvoidance(ctx: RecommendationContext, limit = 4): Promise<AvoidanceRec[]> {
   if (!isTauri) return [];
   const db = await getDb();
 
-  // Pull avoidance patterns relevant to category/provider
+  // Pull avoidance patterns relevant to provider. Patterns' own `category`
+  // column is an artifact-defect taxonomy (texture/anatomy/lighting/…), not
+  // the prompt category in ctx — the two were never comparable, and
+  // filtering on it meant the built-in seeded patterns (which use that
+  // artifact taxonomy) never matched anything. `provider` is genuinely the
+  // same vocabulary on both sides, so filter on that instead.
   const conditions: string[] = [];
   const values: unknown[] = [];
 
-  if (ctx.category) {
-    values.push(ctx.category);
-    conditions.push(`(ap.category = $${values.length} OR ap.category = 'all')`);
-  } else {
-    conditions.push("ap.category = 'all'");
+  if (ctx.provider) {
+    values.push(ctx.provider);
+    conditions.push(`(ap.provider IS NULL OR ap.provider = $${values.length})`);
   }
 
   const patternRows = (await db.select(
     `SELECT ap.* FROM avoidance_patterns ap
-     WHERE ${conditions.join(" AND ")}
-     ORDER BY CASE ap.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
+     ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
+     ORDER BY ap.is_builtin ASC, CASE ap.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
@@ -434,7 +440,7 @@ export async function recommendAvoidance(ctx: RecommendationContext, limit = 4):
   const recs: AvoidanceRec[] = patternRows.map((row) => ({
     label: row.label as string,
     correction: row.correction_prompt as string | undefined,
-    reason: row.category === "all" ? "Common AI artifact" : `Common in ${ctx.category} work`,
+    reason: row.is_builtin ? "Common AI artifact" : "Learned from your comparisons",
     severity: (row.severity as AvoidanceRec["severity"]) ?? "medium",
   }));
 
@@ -659,11 +665,15 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
       })()
     : "0";
 
-  // Include refs with rating >= 2 OR proven by any winning gallery/prompt link
+  // Include refs with rating >= 2 OR proven by any winning gallery/prompt/project link.
+  // The project-level signal mirrors referenceImpact.ts's project_references path —
+  // previously only that module saw a reference attached to a winning project but
+  // never directly linked to a prompt; this query didn't.
   const qualityFilter = "("
     + "r.rating >= 2"
     + " OR COALESCE(rr_agg.result_win_count, 0) > 0"
     + " OR COALESCE(pr_agg.prompt_win_count, 0) > 0"
+    + " OR COALESCE(proj_agg.project_win_count, 0) > 0"
     + ")";
 
   const whereClause = [qualityFilter, ...whereConditions].join(" AND ");
@@ -673,6 +683,7 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
        COALESCE(rr_agg.result_win_count,  0) AS result_win_count,
        COALESCE(rr_agg.result_appearances, 0) AS result_appearances,
        COALESCE(pr_agg.prompt_win_count,  0) AS prompt_win_count,
+       COALESCE(proj_agg.project_win_count, 0) AS project_win_count,
        ${tagMatchExpr} AS tag_match
      FROM "references" r
      LEFT JOIN (
@@ -690,8 +701,16 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
        JOIN prompts p ON p.id = pr.prompt_id
        GROUP BY pr.reference_id
      ) pr_agg ON pr_agg.reference_id = r.id
+     LEFT JOIN (
+       SELECT pjr.reference_id,
+         COUNT(DISTINCT CASE WHEN p.is_winner = 1 THEN p.id END) AS project_win_count
+       FROM project_references pjr
+       JOIN project_prompts pp ON pp.project_id = pjr.project_id
+       JOIN prompts p ON p.id = pp.prompt_id
+       GROUP BY pjr.reference_id
+     ) proj_agg ON proj_agg.reference_id = r.id
      WHERE ${whereClause}
-     ORDER BY tag_match DESC, result_win_count DESC, prompt_win_count DESC, r.rating DESC, r.created_at DESC
+     ORDER BY tag_match DESC, result_win_count DESC, prompt_win_count DESC, project_win_count DESC, r.rating DESC, r.created_at DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];
@@ -700,18 +719,21 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
     const ref = rowToReference(row);
     const resultWins   = (row.result_win_count  as number) ?? 0;
     const promptWins   = (row.prompt_win_count  as number) ?? 0;
+    const projectWins  = (row.project_win_count as number) ?? 0;
     const tagMatch     = Boolean(row.tag_match);
     const reason = resultWins > 0
       ? `In ${resultWins} winning result${resultWins !== 1 ? "s" : ""} in gallery`
       : promptWins > 0
         ? `Used in ${promptWins} high-rated prompt${promptWins !== 1 ? "s" : ""}`
-        : tagMatch
-          ? "Matches current tags"
-          : ref.best_use
-            ? `Best for: ${ref.best_use.slice(0, 50)}`
-            : ref.rating >= 4
-              ? `Rated ${ref.rating}/5`
-              : "In your reference library";
+        : projectWins > 0
+          ? `Attached to ${projectWins} winning project${projectWins !== 1 ? "s" : ""}`
+          : tagMatch
+            ? "Matches current tags"
+            : ref.best_use
+              ? `Best for: ${ref.best_use.slice(0, 50)}`
+              : ref.rating >= 4
+                ? `Rated ${ref.rating}/5`
+                : "In your reference library";
     return { reference: ref, reason };
   });
 }

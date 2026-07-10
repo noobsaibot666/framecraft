@@ -11,13 +11,15 @@ import {
   FolderOpen,
   FolderPlus,
   HardDrive,
-  Info,
+  Image as ImageIcon,
+  Keyboard,
   RotateCcw,
   Settings2,
   Upload,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
 import { exportPromptTransfer, parsePromptTransfer, importPromptTransfer } from "@/lib/promptTransfer";
@@ -62,26 +64,46 @@ import {
 } from "@/lib/userPreferences";
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
 import { getLibraryHealth, EMPTY_LIBRARY_HEALTH, type LibraryHealth } from "@/lib/libraryHealth";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast";
 import { getRegisteredShortcuts, formatShortcutKeys } from "@/lib/shortcuts";
 
-function Section({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+// ─── Section anchor nav ────────────────────────────────────────
+
+const SECTIONS = [
+  { id: "preferences", label: "Preferences" },
+  { id: "library-health", label: "Library Health" },
+  { id: "keyboard-shortcuts", label: "Shortcuts" },
+  { id: "database", label: "Database" },
+  { id: "library", label: "Library" },
+  { id: "ai-integration", label: "AI Integration" },
+  { id: "release-diagnostics", label: "Diagnostics" },
+  { id: "backup", label: "Backup" },
+  { id: "media", label: "Media" },
+  { id: "danger-zone", label: "Danger Zone" },
+] as const;
+
+function SectionNav() {
   return (
-    <div className={cn("flex flex-col gap-7", className)}>
-      <div className="flex items-center gap-3">
-        <span className="system-label text-[14px] text-white">{label}</span>
-        <div className="flex-1 h-px bg-white/22" />
-      </div>
-      {children}
-    </div>
+    <nav className="flex flex-wrap items-center gap-1.5">
+      {SECTIONS.map((s) => (
+        <a
+          key={s.id}
+          href={`#${s.id}`}
+          className="font-mono text-[10px] uppercase tracking-widest px-2.5 py-1.5 rounded-sm text-readable hover:text-cyan hover:border-cyan/40 transition-precise"
+          style={{ border: "var(--border-dim)" }}
+        >
+          {s.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="grid grid-cols-[180px_minmax(0,1fr)] items-baseline gap-7">
+    <div className="grid grid-cols-1 sm:grid-cols-[180px_minmax(0,1fr)] items-baseline gap-1 sm:gap-7">
       <span className="system-label text-[11.5px] text-readable">{label}</span>
       <span className="font-mono text-[13.5px] leading-relaxed text-white wrap-break-word">{value}</span>
     </div>
@@ -203,7 +225,27 @@ export function Settings() {
   const [confirmCleanup, setConfirmCleanup] = useState(false);
   const [keysVersion, setKeysVersion] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
   const connectedModels = useMemo(() => getConnectedModels(), [keysVersion]);
+
+  // Section fold state — the section matching the URL hash (e.g. #library,
+  // reached via the Menu's "Manage Libraries" entry) opens automatically;
+  // Preferences opens by default with no hash; everything else starts folded.
+  const [sectionOpen, setSectionOpen] = useState<Record<string, boolean>>(() => {
+    const hash = window.location.hash.slice(1);
+    return Object.fromEntries(SECTIONS.map((s) => [s.id, hash ? s.id === hash : s.id === "preferences"]));
+  });
+  const setSectionOpenFor = (id: string) => (v: boolean) => setSectionOpen((s) => ({ ...s, [id]: v }));
+
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    setSectionOpen((s) => ({ ...s, [id]: true }));
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [location.hash]);
 
   const canRepairLibraryPackage =
     libraryState?.selection.mode === "portable" &&
@@ -453,22 +495,18 @@ export function Settings() {
 
   return (
     <PageContainer title="Settings" subtitle="APP CONFIGURATION">
-      <div className="flex flex-col gap-14 max-w-5xl">
+      <div className="flex flex-col gap-6 max-w-5xl">
+        <SectionNav />
 
         {/* Preferences */}
-        <Section label="PREFERENCES" className="order-05">
-          <div className="flex flex-col gap-6 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center gap-3">
-              <Settings2 size={15} className="text-readable" />
-              <span className="font-sans text-[15px] font-semibold text-white tracking-wide">CRAFT DEFAULTS</span>
-            </div>
-            <p className="font-mono text-[13px] text-readable leading-relaxed -mt-2">
+        <div id="preferences">
+          <CollapsibleCard title="PREFERENCES" icon={<Settings2 size={12} className="text-cyan" />} gap="gap-6"
+            open={sectionOpen.preferences} onOpenChange={setSectionOpenFor("preferences")}>
+            <p className="font-mono text-[13px] text-readable leading-relaxed">
               Applied when starting a new prompt with no project context.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Default provider */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Default Provider</span>
                 <select
@@ -483,7 +521,6 @@ export function Settings() {
                 </select>
               </div>
 
-              {/* Default aspect ratio */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Default Aspect Ratio</span>
                 <select
@@ -498,7 +535,6 @@ export function Settings() {
                 </select>
               </div>
 
-              {/* Default category */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Default Category</span>
                 <select
@@ -515,7 +551,6 @@ export function Settings() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Library page size */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Prompts per Page</span>
                 <select
@@ -531,7 +566,6 @@ export function Settings() {
                 <span className="font-mono text-[9px] text-dim/50">Applies to Prompt Library pagination</span>
               </div>
 
-              {/* Auto-analyze */}
               <div className="flex flex-col gap-1.5">
                 <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Auto-Analyze Draft</span>
                 <label className="flex items-center gap-3 cursor-pointer h-10">
@@ -562,19 +596,13 @@ export function Settings() {
                 Reset to Defaults
               </Button>
             </div>
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* Library Health */}
-        <Section label="LIBRARY HEALTH" className="order-06">
-          <div className="flex flex-col gap-5 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center gap-3">
-              <Database size={15} className="text-readable" />
-              <span className="font-sans text-[15px] font-semibold text-white tracking-wide">PRODUCTION QUALITY</span>
-            </div>
-
-            {/* Stats grid */}
+        <div id="library-health">
+          <CollapsibleCard title="LIBRARY HEALTH" icon={<Database size={12} className="text-cyan" />} gap="gap-5"
+            open={sectionOpen["library-health"]} onOpenChange={setSectionOpenFor("library-health")}>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
                 { label: "PROMPTS", value: health.totalPrompts },
@@ -591,7 +619,6 @@ export function Settings() {
               ))}
             </div>
 
-            {/* Top tokens */}
             {health.topTokens.length > 0 && (
               <div className="flex flex-col gap-2">
                 <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Top Performing Tokens</span>
@@ -610,7 +637,6 @@ export function Settings() {
               </div>
             )}
 
-            {/* Negative tokens */}
             {health.negativeTokens.length > 0 && (
               <div className="flex flex-col gap-2">
                 <span className="font-mono text-[10px] tracking-widest uppercase text-readable">Flagged Tokens</span>
@@ -628,7 +654,6 @@ export function Settings() {
               </div>
             )}
 
-            {/* Action buttons */}
             <div className="flex items-center gap-3 pt-1">
               {health.unreviewedResults > 0 && (
                 <Button variant="ghost" size="sm" onClick={() => navigate("/results?filter=unreviewed")}>
@@ -643,90 +668,62 @@ export function Settings() {
                 </Button>
               )}
             </div>
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* Keyboard Shortcuts */}
-        <Section label="KEYBOARD SHORTCUTS" className="order-45">
-          <div
-            className="flex flex-col gap-0 rounded-card overflow-hidden"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            {getRegisteredShortcuts().map(({ keys, description }) => (
-              <div
-                key={keys}
-                className="flex items-center justify-between px-5 py-3"
-                style={{ borderBottom: "var(--border-dim)" }}
-              >
-                <span className="font-mono text-[12px] text-readable">{description}</span>
-                <kbd className="font-mono text-[12px] text-cyan/80 px-2 py-0.5 rounded-sm"
-                  style={{ background: "rgba(0,255,200,0.06)", border: "1px solid rgba(0,255,200,0.18)" }}>
-                  {formatShortcutKeys(keys)}
-                </kbd>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        {/* App Info */}
-        <Section label="APPLICATION" className="order-50">
-          <div
-            className="flex flex-col gap-5 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Info size={15} className="text-readable" />
-              <span className="font-sans text-[15px] font-semibold text-white tracking-wide">FRAMECRAFT</span>
+        <div id="keyboard-shortcuts">
+          <CollapsibleCard title="KEYBOARD SHORTCUTS" icon={<Keyboard size={12} className="text-cyan" />}
+            open={sectionOpen["keyboard-shortcuts"]} onOpenChange={setSectionOpenFor("keyboard-shortcuts")}>
+            <div
+              className="flex flex-col gap-0 rounded-sm overflow-hidden"
+              style={{ border: "var(--border-dim)" }}
+            >
+              {getRegisteredShortcuts().map(({ keys, description }) => (
+                <div
+                  key={keys}
+                  className="flex items-center justify-between px-4 py-3"
+                  style={{ borderBottom: "var(--border-dim)" }}
+                >
+                  <span className="font-mono text-[12px] text-readable">{description}</span>
+                  <kbd className="font-mono text-[12px] text-cyan/80 px-2 py-0.5 rounded-sm"
+                    style={{ background: "rgba(0,255,200,0.06)", border: "1px solid rgba(0,255,200,0.18)" }}>
+                    {formatShortcutKeys(keys)}
+                  </kbd>
+                </div>
+              ))}
             </div>
-            <InfoRow label="VERSION" value="1.0.0" />
-            <InfoRow label="BUILD" value="Sprint 29 · Performance Sprint" />
-            <InfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
-            <InfoRow label="MODE" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "Native (Tauri)" : "Browser (Dev)"} />
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* Database Stats */}
-        <Section label="DATABASE" className="order-60">
-          <div
-            className="flex flex-col gap-5 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Database size={15} className="text-readable" />
-              <span className="font-sans text-[15px] font-semibold text-white tracking-wide">STORAGE</span>
-            </div>
+        <div id="database">
+          <CollapsibleCard title="DATABASE" icon={<Database size={12} className="text-cyan" />} gap="gap-4"
+            open={sectionOpen.database} onOpenChange={setSectionOpenFor("database")}>
             <InfoRow label="LOCATION" value={typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? "~/.local/share/framecraft/framecraft.db" : "localStorage (dev)"} />
             <InfoRow label="TOTAL PROMPTS" value={stats.total_prompts} />
             <InfoRow label="TOTAL RESULTS" value={stats.total_results} />
             <InfoRow label="TOTAL RECIPES" value={stats.total_recipes} />
             <InfoRow label="WINNERS" value={stats.total_winners} />
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
-        <Section label="LIBRARY" className="order-10">
-          <div
-            className="flex flex-col gap-7 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
+        {/* Library */}
+        <div id="library">
+          <CollapsibleCard title="LIBRARY" icon={<HardDrive size={12} className="text-cyan" />} gap="gap-6"
+            open={sectionOpen.library} onOpenChange={setSectionOpenFor("library")}>
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <HardDrive size={15} className="text-readable mt-0.5 shrink-0" />
-                <div className="flex flex-col gap-2 min-w-0">
-                  <span className="font-sans text-[15px] font-semibold text-white tracking-wide">ACTIVE STORAGE</span>
-                  <span className="font-mono text-[13px] text-readable leading-relaxed">
-                    Use a `.framecraftlib` folder to move work between machines or store it on shared storage.
-                  </span>
-                </div>
-              </div>
+              <span className="font-mono text-[13px] text-readable leading-relaxed">
+                Use a `.framecraftlib` folder to move work between machines or store it on shared storage.
+              </span>
               {libraryState?.selection.mode === "portable" && (
-                <span className="font-mono text-[8.5px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable"
+                <span className="font-mono text-[8.5px] tracking-widest uppercase px-2 py-1 rounded-sm text-readable shrink-0"
                   style={{ border: "1px solid rgba(255,255,255,0.22)" }}>
                   Restart required
                 </span>
               )}
             </div>
 
-            {/* Connection state banner */}
             {libraryState?.selection.mode === "portable" ? (
               <div
                 className="flex items-center gap-3 px-4 py-3 rounded-sm"
@@ -743,7 +740,7 @@ export function Settings() {
               </div>
             ) : libraryState?.nativeAvailable ? (
               <div
-                className="flex items-start gap-3 px-4 py-4 rounded-sm"
+                className="flex flex-col sm:flex-row items-start gap-3 px-4 py-4 rounded-sm"
                 style={{ background: "rgba(255,255,255,0.03)", border: "var(--border-dim)" }}
               >
                 <div className="flex-1 min-w-0">
@@ -918,18 +915,14 @@ export function Settings() {
             {libraryError && (
               <CopyableError message={libraryError} />
             )}
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* AI Integration */}
-        <Section label="AI INTEGRATION" className="order-30">
-          <div className="flex flex-col gap-6 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center gap-3">
-              <Cpu size={15} className="text-readable" />
-              <span className="font-sans text-[15px] font-semibold text-white tracking-wide">API KEYS</span>
-            </div>
-            <p className="font-mono text-[13px] text-readable leading-relaxed -mt-2">
+        <div id="ai-integration">
+          <CollapsibleCard title="AI INTEGRATION" icon={<Cpu size={12} className="text-cyan" />} gap="gap-6"
+            open={sectionOpen["ai-integration"]} onOpenChange={setSectionOpenFor("ai-integration")}>
+            <p className="font-mono text-[13px] text-readable leading-relaxed">
               Keys are stored locally and never leave your device.
             </p>
             <ApiKeyField
@@ -966,7 +959,7 @@ export function Settings() {
               {connectedModels.length === 0 ? (
                 <div className="flex items-center gap-2 h-10 px-3 rounded-sm font-mono text-[12px] text-dim/50"
                   style={{ border: "1px dashed rgba(255,255,255,0.16)" }}>
-                  <AlertTriangle size={11} className="text-amber/70" />
+                  <AlertTriangle size={11} className="text-red/70" />
                   Add an API key above to choose a standard model.
                 </div>
               ) : (
@@ -991,19 +984,17 @@ export function Settings() {
                 </select>
               )}
             </div>
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
-        <Section label="RELEASE DIAGNOSTICS" className="order-20">
-          <div className="flex flex-col gap-6 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+        {/* Release Diagnostics */}
+        <div id="release-diagnostics">
+          <CollapsibleCard title="RELEASE DIAGNOSTICS" gap="gap-6"
+            open={sectionOpen["release-diagnostics"]} onOpenChange={setSectionOpenFor("release-diagnostics")}>
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-col gap-2 min-w-0">
-                <span className="font-sans text-[15px] font-semibold text-white tracking-wide">NATIVE READINESS</span>
-                <span className="font-mono text-[13px] text-readable leading-relaxed">
-                  Checks runtime, SQLite schema, file storage, dialogs, active library, and shared-library folders.
-                </span>
-              </div>
+              <span className="font-mono text-[13px] text-readable leading-relaxed">
+                Checks runtime, SQLite schema, file storage, dialogs, active library, and shared-library folders.
+              </span>
               <Button variant="accent" size="md" onClick={handleRunDiagnostics} disabled={diagnosticsRunning} className="shrink-0 min-w-37.5">
                 {diagnosticsRunning ? "Running..." : "Run Checks"}
               </Button>
@@ -1021,7 +1012,7 @@ export function Settings() {
                 </div>
                 <div className="flex flex-col gap-2">
                   {diagnostics.checks.map((check) => (
-                    <div key={check.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-4 px-4 py-3.5 rounded-sm"
+                    <div key={check.id} className="grid grid-cols-1 sm:grid-cols-[110px_minmax(0,1fr)] gap-2 sm:gap-4 px-4 py-3.5 rounded-sm"
                       style={{ border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.035)" }}>
                       <span className={`font-mono text-[10px] tracking-widest uppercase ${
                         check.status === "pass" ? "text-readable" : check.status === "fail" ? "text-red" : "text-muted"
@@ -1041,15 +1032,13 @@ export function Settings() {
                 </div>
               </div>
             )}
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
-        {/* Export / Import */}
-        <Section label="BACKUP" className="order-40">
-          <div
-            className="flex flex-col gap-6 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
+        {/* Backup */}
+        <div id="backup">
+          <CollapsibleCard title="BACKUP" icon={<Download size={12} className="text-cyan" />} gap="gap-6"
+            open={sectionOpen.backup} onOpenChange={setSectionOpenFor("backup")}>
             <p className="font-mono text-[13px] text-readable leading-relaxed">
               Transfer your prompt library to another device using the Framecraft Prompt Transfer format (.json). Full-library snapshots use the library export action above.
             </p>
@@ -1076,15 +1065,13 @@ export function Settings() {
                   : `Importing… ${importStatus.done} / ${importStatus.total}`}
               </div>
             )}
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* Media Reconciliation */}
-        <Section label="MEDIA" className="order-45">
-          <div
-            className="flex flex-col gap-6 p-7 rounded-card"
-            style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-          >
+        <div id="media">
+          <CollapsibleCard title="MEDIA" icon={<ImageIcon size={12} className="text-cyan" />} gap="gap-6"
+            open={sectionOpen.media} onOpenChange={setSectionOpenFor("media")}>
             <p className="font-mono text-[13px] text-readable leading-relaxed">
               Scan for orphaned media files in the active library that are no longer referenced by any result or reference record.
             </p>
@@ -1104,6 +1091,10 @@ export function Settings() {
                   {confirmCleanup ? `Confirm — Remove ${orphanScan.orphanPaths.length} Files` : `Clean Up ${orphanScan.orphanPaths.length} Files`}
                 </Button>
               )}
+              <Button variant="ghost" size="sm" onClick={handleRevealLibrary} disabled={!!libraryBusy || !libraryState?.nativeAvailable}>
+                <FolderOpen size={11} />
+                Open in Folder
+              </Button>
             </div>
             {orphanScan && (
               <div className="font-mono text-[12px] text-readable">
@@ -1112,24 +1103,23 @@ export function Settings() {
                   : `${orphanScan.orphanPaths.length} orphaned media file${orphanScan.orphanPaths.length === 1 ? "" : "s"} detected.`}
               </div>
             )}
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
 
         {/* Danger Zone */}
-        <Section label="DANGER ZONE" className="order-70">
-          <div
-            className="flex flex-col gap-6 p-7 rounded-card"
+        <div id="danger-zone">
+          <CollapsibleCard
+            title="DANGER ZONE"
+            icon={<AlertTriangle size={12} className="text-red" />}
+            titleClassName="text-red/80"
+            gap="gap-6"
             style={{ border: "1px solid rgba(215,25,33,0.25)", background: "rgba(215,25,33,0.04)" }}
+            open={sectionOpen["danger-zone"]}
+            onOpenChange={setSectionOpenFor("danger-zone")}
           >
-            <div className="flex items-start gap-2">
-              <AlertTriangle size={12} className="text-red/60 mt-0.5 shrink-0" />
-              <div className="flex flex-col gap-2">
-                <span className="font-sans text-[15px] font-semibold text-red">CLEAR ALL DATA</span>
-                <p className="font-mono text-[13px] text-readable leading-relaxed">
-                  This will permanently delete all prompts, results, recipes, and SREFs. This action cannot be undone.
-                </p>
-              </div>
-            </div>
+            <p className="font-mono text-[13px] text-readable leading-relaxed">
+              This will permanently delete all prompts, results, recipes, and SREFs. This action cannot be undone.
+            </p>
 
             {cleared && (
               <div className="font-mono text-[12px] text-readable">
@@ -1156,8 +1146,8 @@ export function Settings() {
               <AlertTriangle size={10} />
               {clearing ? "Clearing…" : confirmClear ? "Confirm — Clear All Data" : "Clear All Data"}
             </Button>
-          </div>
-        </Section>
+          </CollapsibleCard>
+        </div>
       </div>
     </PageContainer>
   );

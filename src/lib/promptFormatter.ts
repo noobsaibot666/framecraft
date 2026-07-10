@@ -50,6 +50,7 @@ const PROVIDERS: Partial<Record<Provider, {
       "Parameters (--ar, --v, --style, etc.) must appear at the end",
       "Comma-separated descriptors work well",
       "Avoid markdown — use plain descriptive language",
+      "AVOIDANCE tokens auto-fill --no unless you set NEGATIVE --no directly",
     ],
     format: (text) => {
       const changes: string[] = [];

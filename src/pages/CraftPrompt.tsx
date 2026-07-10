@@ -486,7 +486,7 @@ function hasFlag(text: string, flag: string): boolean {
   return new RegExp(`--${flag}\\b`, "i").test(text);
 }
 
-function appendMJParams(base: string, f: Pick<Fields, "aspect_ratio">, mj: MJParams): string {
+function appendMJParams(base: string, f: Pick<Fields, "aspect_ratio" | "avoidance_text">, mj: MJParams): string {
   let out = base;
   if (f.aspect_ratio && !hasFlag(base, "ar"))      out += ` --ar ${f.aspect_ratio}`;
   if (mj.model_version && !hasFlag(base, "v"))     out += ` --v ${mj.model_version}`;
@@ -509,14 +509,39 @@ function appendMJParams(base: string, f: Pick<Fields, "aspect_ratio">, mj: MJPar
   if (mj.fast && !hasFlag(base, "fast"))           out += ` --fast`;
   if (mj.relax && !hasFlag(base, "relax"))         out += ` --relax`;
   if (mj.exp && !/-{1,2}exp\b/i.test(base))        out += ` -exp`;
-  if (mj.no_prompt && !hasFlag(base, "no"))        out += ` --no ${mj.no_prompt}`;
+  // AVOIDANCE-category tokens (fields.avoidance_text) double as Midjourney's
+  // native --no negative-prompt flag whenever the user hasn't typed something
+  // more specific directly into NEGATIVE --no — no reason to make the user
+  // duplicate the same "avoid" list in two separate fields.
+  const noValue = mj.no_prompt || f.avoidance_text;
+  if (noValue && !hasFlag(base, "no"))             out += ` --no ${noValue}`;
   return out;
 }
 
-function assembleMJ(f: Fields, mj: MJParams): string {
+// Midjourney requires --ar/--v/--no/etc. to be the very last tokens in the
+// prompt (see the MIDJOURNEY TIPS note above the Prompt Output field) — a
+// prompt with descriptive text appended *after* the flags block can read as
+// malformed or oddly emphasized to Midjourney's moderator, which is very
+// plausibly what was tripping "AI Moderator is unsure about this prompt" for
+// Consistency Factor text that used to be tacked on after assembly. Finds the
+// first flag token and inserts `extra` immediately before it, so appended
+// content (extra sequence tokens, variation, consistency notes) always lands
+// inside the descriptive portion instead of trailing the flags.
+function insertBeforeMJFlags(text: string, extra: string): string {
+  const trimmedExtra = extra.trim();
+  if (!trimmedExtra) return text;
+  const match = text.match(/\s--[a-z]|\s-exp\b/i);
+  if (!match || match.index === undefined) {
+    return text ? `${text}, ${trimmedExtra}` : trimmedExtra;
+  }
+  return `${text.slice(0, match.index)}, ${trimmedExtra}${text.slice(match.index)}`;
+}
+
+function assembleMJ(f: Fields, mj: MJParams, extras = ""): string {
   const parts = [f.subject, f.character, f.environment, f.composition, f.camera, f.lens, f.lighting, f.mood, f.realism, f.product_interaction, f.direction_notes, f.wardrobe_notes]
     .map((s) => s.trim()).filter(Boolean);
-  return appendMJParams(parts.join(", "), f, mj);
+  const base = extras.trim() ? [parts.join(", "), extras.trim()].filter(Boolean).join(", ") : parts.join(", ");
+  return appendMJParams(base, f, mj);
 }
 
 function appendDalleParams(base: string, dalle: DalleParams): string {
@@ -1619,9 +1644,13 @@ export function CraftPrompt() {
         default: return fields.prompt_text;
       }
     }
-    const extras = extraTokenTexts.length ? `, ${extraTokenTexts.join(", ")}` : "";
+    // assembleMJ folds extras in before its trailing --flags block (Midjourney
+    // requires flags to be the very last tokens); the other providers don't
+    // enforce flag position, so they keep the simpler post-append.
+    const rawExtras = extraTokenTexts.join(", ");
+    const extras = extraTokenTexts.length ? `, ${rawExtras}` : "";
     switch (fields.provider) {
-      case "midjourney": return assembleMJ(fields, mjParams) + extras;
+      case "midjourney": return assembleMJ(fields, mjParams, rawExtras);
       case "dalle": return assembleDalle(fields, dalleParams) + extras;
       case "stable_diffusion": return assembleSD(fields, sdParams) + extras;
       default: return assembleGeneric(fields, shots) + extras;
@@ -1853,13 +1882,23 @@ export function CraftPrompt() {
     }
   };
 
-  const varSuffix = fields.variation.trim() ? `, ${fields.variation.trim()}` : "";
   // Consistency factors ride along on copy so variations hold them stable (V2 §2).
   const consistencySuffix = buildConsistencySuffix(consistencyFactors);
-  const consistencyBlock = consistencySuffix ? `\n${consistencySuffix}` : "";
-  const fullCopyText = includeAvoidance && fields.avoidance_text
-    ? `${assembled}${varSuffix}${consistencyBlock}\n\n${fields.avoidance_text}`
-    : `${assembled}${varSuffix}${consistencyBlock}`;
+  // For Midjourney, avoidance_text already rides the assembled --no flag (see
+  // appendMJParams), so appending it again as a floating paragraph would just
+  // duplicate it — only the other providers, which have no --no equivalent,
+  // still need the floating "avoid" paragraph on copy.
+  const isMidjourney = fields.provider === "midjourney";
+  const variationAndConsistency = [fields.variation.trim(), consistencySuffix].filter(Boolean).join(". ");
+  const fullCopyText = isMidjourney
+    ? insertBeforeMJFlags(assembled, variationAndConsistency)
+    : (() => {
+        const varSuffix = fields.variation.trim() ? `, ${fields.variation.trim()}` : "";
+        const consistencyBlock = consistencySuffix ? `\n${consistencySuffix}` : "";
+        return includeAvoidance && fields.avoidance_text
+          ? `${assembled}${varSuffix}${consistencyBlock}\n\n${fields.avoidance_text}`
+          : `${assembled}${varSuffix}${consistencyBlock}`;
+      })();
 
   const charCount = assembled.length;
 
@@ -3066,14 +3105,16 @@ export function CraftPrompt() {
               );
             })()}
 
-            {/* Editable textarea */}
+            {/* Editable textarea — tall enough to actually preview a full
+                prompt (these routinely run long), and resizable for the rare
+                one that runs longer still. */}
             <textarea
               value={assembled}
               onChange={(e) => setOutputOverride(e.target.value)}
               placeholder="Assembled prompt will appear here…"
-              rows={7}
-              className="w-full px-3 py-2 font-mono text-[11px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-none leading-relaxed"
-              style={{ border: "var(--border-dim)" }}
+              rows={18}
+              className="w-full px-3 py-2 font-mono text-[11px] text-soft-white/90 placeholder:text-dim/40 bg-black/30 rounded-sm focus:outline-none focus:border-red/40 transition-precise resize-y leading-relaxed"
+              style={{ border: "var(--border-dim)", minHeight: "18rem" }}
             />
 
             {outputOverride !== null && (
@@ -3104,7 +3145,10 @@ export function CraftPrompt() {
             )}
 
             {/* Avoidance toggle */}
-            {fields.avoidance_text && (
+            {/* Midjourney already folds avoidance_text into the assembled --no
+                flag (appendMJParams) — this toggle would be a no-op there, so
+                it only applies to providers with no --no equivalent. */}
+            {fields.avoidance_text && fields.provider !== "midjourney" && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -3118,7 +3162,13 @@ export function CraftPrompt() {
 
             <Button variant="ghost" size="sm" onClick={handleCopy} disabled={!assembled} className="w-full justify-center">
               {copied ? <Check size={10} /> : <Copy size={10} />}
-              {copied ? "Copied!" : fields.variation ? "Copy with Variation" : includeAvoidance ? "Copy with Avoidance" : "Copy Prompt"}
+              {copied
+                ? "Copied!"
+                : fields.variation
+                  ? "Copy with Variation"
+                  : fields.provider !== "midjourney" && includeAvoidance
+                    ? "Copy with Avoidance"
+                    : "Copy Prompt"}
             </Button>
           </CollapsibleCard>
 

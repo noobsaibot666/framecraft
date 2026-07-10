@@ -1,8 +1,24 @@
-import { Search } from "lucide-react";
+import { Circle, Search } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { StatusDot } from "@/components/ui/StatusDot";
+import { getActiveLibrarySelection } from "@/lib/libraryConfig";
 import { AppMenu } from "./AppMenu";
 
+function ActiveLibraryChip() {
+  const librarySelection = getActiveLibrarySelection();
+  const isPortable = librarySelection.mode === "portable";
+  const libraryLabel = isPortable ? (librarySelection.path?.split("/").pop() ?? "Portable") : "Local App Data";
+  return (
+    <div className="flex items-center gap-2">
+      <Circle size={6} className="shrink-0 fill-green-400/80 text-green-400/80" />
+      <span className="font-mono text-[10px] text-readable truncate max-w-40">{libraryLabel}</span>
+      <span className="system-label text-[9px] text-muted">{isPortable ? "Portable" : "Local"}</span>
+    </div>
+  );
+}
+
 export function TopBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
+  const isDashboard = useLocation().pathname === "/";
   return (
     <header
       className="h-12 flex items-center justify-between px-5 shrink-0"
@@ -35,10 +51,16 @@ export function TopBar({ onSearchOpen }: { onSearchOpen?: () => void }) {
         </kbd>
       </button>
 
-      {/* Right: System Ready → Menu */}
+      {/* Right: (Dashboard-only) Active Library → System Ready → Menu */}
       <div className="flex items-center gap-4">
+        {isDashboard && (
+          <>
+            <ActiveLibraryChip />
+            <div className="w-px h-3 bg-white/10" />
+          </>
+        )}
         <div className="flex items-center gap-2">
-          <StatusDot active />
+          <StatusDot active color="blue" />
           <span className="system-label text-[10px] text-readable">SYSTEM READY</span>
         </div>
         <div className="w-px h-3 bg-white/10" />

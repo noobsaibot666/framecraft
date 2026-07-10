@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Check, Info, MonitorCog, Settings, X, FolderPlus, Upload, Layers, Circle } from "lucide-react";
+import { Check, Info, MonitorCog, Settings, X, Layers } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   type AppMenuItemId,
   SUPPORTED_CREATIVE_PROVIDERS,
   SUPPORTED_SYSTEM_PROVIDERS,
 } from "@/lib/appInfo";
-import { getActiveLibrarySelection } from "@/lib/libraryConfig";
 import {
   getPreferences,
   PREF_ASPECT_RATIOS,
@@ -160,13 +159,29 @@ function PreferencesModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function AboutInfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid grid-cols-[90px_minmax(0,1fr)] items-baseline gap-3">
+      <span className="font-mono text-[9.5px] uppercase tracking-widest text-soft-white/50">{label}</span>
+      <span className="font-mono text-[12px] text-soft-white wrap-break-word">{value}</span>
+    </div>
+  );
+}
+
 function AboutModal({ onClose }: { onClose: () => void }) {
+  const isNative = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   return (
     <NativeModal title="Framecraft" eyebrow="About" onClose={onClose}>
       <div className="flex flex-col gap-5">
         <p className="font-mono text-[13px] leading-relaxed text-readable">
           Creative prompt workspace for projects, references, recipes, comparison, analysis, and portable libraries.
         </p>
+
+        <div className="flex flex-col gap-2">
+          <AboutInfoRow label="VERSION" value="0.1.0" />
+          <AboutInfoRow label="ENGINE" value="Tauri 2 · React 19 · SQLite" />
+          <AboutInfoRow label="MODE" value={isNative ? "Native (Tauri)" : "Browser (Dev)"} />
+        </div>
 
         <div className="grid gap-3">
           <span className="font-mono text-[10px] uppercase tracking-widest text-soft-white/65">
@@ -232,9 +247,6 @@ export function AppMenu() {
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<AppMenuItemId | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const librarySelection = getActiveLibrarySelection();
-  const isPortable = librarySelection.mode === "portable";
-  const libraryLabel = isPortable ? (librarySelection.path?.split("/").pop() ?? "Portable") : "Local App Data";
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -252,7 +264,7 @@ export function AppMenu() {
       <button
         type="button"
         className={cn(
-          "flex h-8 items-center gap-2 rounded-[6px] border px-3 transition-precise",
+          "flex h-8 min-w-23 items-center justify-center gap-2 rounded-[6px] border px-4 transition-precise",
           "font-mono text-[10.5px] uppercase tracking-[0.12em]",
           open
             ? "border-cyan/45 bg-cyan/8 text-white"
@@ -270,36 +282,16 @@ export function AppMenu() {
           role="menu"
           className="absolute right-0 top-10 z-40 w-64 rounded-card border border-white/14 bg-[#121212] py-1.5 shadow-2xl"
         >
-          {/* Library group */}
+          {/* Library group — active-library status chip now lives on the Dashboard's TopBar instead */}
           <MenuGroup label="Library">
-            {/* Active library status chip */}
-            <div className="flex items-center gap-2.5 px-3 py-2 mx-1.5 mb-0.5 rounded-[5px]"
-              style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}>
-              <Circle size={6} className="shrink-0 fill-green-400/80 text-green-400/80" />
-              <div className="flex flex-col gap-0 min-w-0">
-                <span className="font-mono text-[9px] text-soft-white/80 truncate">{libraryLabel}</span>
-                <span className="font-mono text-[8px] text-soft-white/35 uppercase tracking-widest">
-                  {isPortable ? "Portable / Shared" : "Local"} · Connected
-                </span>
-              </div>
-            </div>
-            <MenuItem icon={<Layers size={12} />} label="Manage Libraries" onClick={() => go("/settings")} />
-          </MenuGroup>
-
-          <div className="my-1.5 mx-3 h-px bg-white/7" />
-
-          {/* File group */}
-          <MenuGroup label="File">
-            <MenuItem icon={<FolderPlus size={12} />} label="New Project" onClick={() => go("/projects/new")} />
-            <MenuItem icon={<Upload size={12} />} label="Import" onClick={() => go("/import")} />
-            <MenuItem icon={<Upload size={12} />} label="Batch Import" onClick={() => go("/import?batch=1")} />
-          </MenuGroup>
-
-          <div className="my-1.5 mx-3 h-px bg-white/7" />
-
-          {/* Preferences / About */}
-          <MenuGroup label="App">
+            <MenuItem icon={<Layers size={12} />} label="Manage Libraries" onClick={() => go("/settings#library")} />
             <MenuItem icon={<Settings size={12} />} label="Preferences" onClick={() => go("/settings")} />
+          </MenuGroup>
+
+          <div className="my-1.5 mx-3 h-px bg-white/7" />
+
+          {/* About */}
+          <MenuGroup label="App">
             <MenuItem icon={<Info size={12} />} label="About Framecraft" onClick={() => openModal("about")} />
           </MenuGroup>
         </div>

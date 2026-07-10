@@ -19,7 +19,7 @@ registerShortcutLabel("cmd+/", "Show keyboard shortcuts");
 // colliding with bare Ctrl+P/F/N (print/find/new) browser accelerators.
 registerShortcutLabel("cmd+shift+d", "Go to Dashboard");
 registerShortcutLabel("cmd+shift+p", "Go to Prompt Craft");
-registerShortcutLabel("cmd+shift+l", "Go to Library");
+registerShortcutLabel("cmd+shift+l", "Go to Assets");
 registerShortcutLabel("cmd+shift+i", "Go to Import");
 registerShortcutLabel("cmd+shift+t", "Go to Tokens");
 registerShortcutLabel("cmd+shift+c", "Go to Campaigns");

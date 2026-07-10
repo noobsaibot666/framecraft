@@ -61,6 +61,9 @@
   --color-cyan:        #38B7C8;
   --color-cyan-muted:  rgba(56, 183, 200, 0.12);
   --color-cyan-border: rgba(56, 183, 200, 0.55);
+  --color-blue:        #2D7FF9;
+  --color-blue-muted:  rgba(45, 127, 249, 0.13);
+  --color-blue-border: rgba(45, 127, 249, 0.55);
 
   /* Fonts — Tailwind v4 uses --font-* for font-family utilities */
   --font-ndot:    "Ndot55", monospace;
@@ -297,4 +300,38 @@
     transparent 1px
   );
   background-size: 20px 20px;
+}
+
+/* ─── Range slider thumb (CraftPrompt AI-Look Risk) ─────────
+   Native range thumbs render large/chunky by default — override to a small
+   on-brand square that reads correctly against the thin custom-filled track. */
+.risk-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 2px;
+}
+
+.risk-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--color-amber);
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.risk-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--color-amber);
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.risk-slider::-moz-range-track {
+  background: transparent;
+  border-radius: 2px;
 }

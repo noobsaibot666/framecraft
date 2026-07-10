@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { getResultById, updateResult, deleteResult, recomputePromptResultSummary, getPromptById, setPromptThumbnail } from "@/lib/db";
+import { recordResultRescore } from "@/lib/intelligenceEngine";
 import { getProjectsForPrompt } from "@/lib/projects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { isVideoPath } from "@/lib/fileStore";
@@ -187,6 +188,13 @@ export function ResultDetail() {
         notes: notes || undefined,
       });
       await recomputePromptResultSummary(result.prompt_id);
+      // Feed the net rating change into the learning loop — previously only
+      // the initial Add Result save did this, so correcting a score here
+      // never adjusted token quality. Uses result's as-loaded values (not
+      // yet overwritten) as the "old" side of the comparison.
+      if (prompt?.prompt_text) {
+        recordResultRescore(prompt.prompt_text, result.score_overall, result.is_failed, scores.overall, isFailed).catch(() => {});
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
     } catch {

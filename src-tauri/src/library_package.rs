@@ -730,7 +730,7 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 31] = [
+const REQUIRED_RELEASE_TABLES: [&str; 32] = [
     "app_meta",
     "assistant_messages",
     "assistant_threads",
@@ -744,6 +744,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 31] = [
     "export_presets",
     "generation_queue",
     "inconsistency_events",
+    "learned_formulas",
     "profiles",
     "project_deliverables",
     "project_prompts",
@@ -1248,6 +1249,7 @@ const INCONSISTENCY_COLUMNS: &[&str] = &[
     "created_at",
 ];
 const APP_META_COLUMNS: &[&str] = &["key", "value", "updated_at"];
+const LEARNED_FORMULA_COLUMNS: &[&str] = &["provider", "steps", "updated_at"];
 
 const MERGE_MANIFEST: &[MergeTableSpec] = &[
     MergeTableSpec {
@@ -1487,6 +1489,14 @@ const MERGE_MANIFEST: &[MergeTableSpec] = &[
         columns: INCONSISTENCY_COLUMNS,
         identity: MergeIdentity::Id(&[]),
         foreign_keys: FK_INCONSISTENCY,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "learned_formulas",
+        columns: LEARNED_FORMULA_COLUMNS,
+        identity: MergeIdentity::TargetOwned(&["provider"]),
+        foreign_keys: &[],
         media_columns: &[],
         user_only: false,
     },
@@ -3060,7 +3070,7 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
             !matches!(
                 **table,
                 "campaigns" | "creative_directions" | "shot_sequence" | "inconsistency_events"
-                    | "direction_storyboards"
+                    | "direction_storyboards" | "learned_formulas"
             )
         })
         .all(|table| connection_table_exists(&conn, table)))
@@ -3220,6 +3230,15 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
         .map_err(|error| error.to_string())?;
 
     tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS learned_formulas (
+           provider   TEXT PRIMARY KEY NOT NULL,
+           steps      TEXT NOT NULL,
+           updated_at TEXT NOT NULL
+         );",
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
          CREATE INDEX IF NOT EXISTS idx_prompts_recipe_use
@@ -3261,7 +3280,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 31] {
+fn migration_sql() -> [&'static str; 32] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3294,6 +3313,7 @@ fn migration_sql() -> [&'static str; 31] {
         include_str!("../migrations/029_color_grade_category.sql"),
         include_str!("../migrations/030_direction_storyboards.sql"),
         include_str!("../migrations/031_creative_strategy.sql"),
+        include_str!("../migrations/035_learned_formulas.sql"),
     ]
 }
 
@@ -4997,6 +5017,7 @@ mod tests {
              INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');
              INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',1,'Shot 01','Source shot',1,'p',2,'t','t');
              INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Source rule','fix it','p','midjourney','used','t');
+             INSERT INTO learned_formulas(provider,steps,updated_at) VALUES('midjourney','[\"Subject\"]','t');
              UPDATE app_meta SET value='source-must-not-overwrite' WHERE key='schema_version';
              INSERT INTO app_meta(key,value,updated_at) VALUES('source_custom_setting','kept','t');"
         ).unwrap();
@@ -5982,6 +6003,7 @@ mod tests {
             "shot_sequence" => (&["id"], vec![Value::Text("shot".into())]),
             "direction_storyboards" => (&["id"], vec![Value::Text("storyboard".into())]),
             "inconsistency_events" => (&["id"], vec![Value::Text("event".into())]),
+            "learned_formulas" => (&["provider"], vec![Value::Text("midjourney".into())]),
             "app_meta" => (&["key"], vec![Value::Text("source_custom_setting".into())]),
             _ => panic!("missing complete graph identity for {table}"),
         }

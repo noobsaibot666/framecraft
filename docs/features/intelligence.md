@@ -16,9 +16,10 @@ Use this doc before adding a new "intelligence" feature — to find whether some
 
 ## The engine — `src/lib/intelligenceEngine.ts`
 
-Three orchestration functions today, each replacing what used to be 2-3 lib calls hand-wired inline in a page component:
+Four orchestration functions today, each replacing what used to be 2-3 lib calls hand-wired inline in a page component:
 
-- **`recordResultOutcome(promptText, scoreOverall, isFailed)`** — called once from `ResultReview.tsx` on save. Internally runs `scoreToQualityDelta()` → `updateTokenQualityFromResult()` + `updateCoOccurrences()` (see Token Quality Scoring below). Previously these were three separate fire-and-forget calls inlined in the page.
+- **`recordResultOutcome(promptText, scoreOverall, isFailed)`** — called once from `ResultReview.tsx` on save (a *new* result). Internally runs `scoreToQualityDelta()` → `updateTokenQualityFromResult()` + `updateCoOccurrences()` (see Token Quality Scoring below). Previously these were three separate fire-and-forget calls inlined in the page.
+- **`recordResultRescore(promptText, oldScore, oldIsFailed, newScore, newIsFailed)`** — called from `ResultDetail.tsx` on save (editing an *existing* result). Applies only the *net* delta between the old and new score's quality delta — not the new delta on its own, which would re-add the full amount on every re-save and let a token's quality be farmed upward by repeatedly saving. A no-op when the score didn't actually change.
 - **`recordComparisonApply(promptIds)`** — called from `ComparisonLab.tsx`'s Apply flow, right after `syncDecisionsToResults()`. Recomputes every touched prompt's summary via the existing `recomputePromptResultSummary()` (the same function every other result-mutation flow already calls) — closes the gap where Apply updated `results.is_winner` but never `prompts.is_winner`.
 - **`recordComparisonLesson(decision)`** — called from `ComparisonLab.tsx`'s "Save as Outcome" flow. Turns a saved AI decision's `avoid[]` array into deduped `avoidance_patterns` rows (`is_builtin = 0`) via the existing `createAvoidancePattern()`, so the AI's judgment about what to avoid actually resurfaces later instead of living only in a text blob (see Comparison Decisions below).
 
@@ -40,16 +41,15 @@ The most complete loop in the app, now behind `intelligenceEngine.recordResultOu
   - `recommendations.ts:recommendTokens` — ranks by `quality_score` + recurrence bonus, surfaces in the Recommendation Panel's "Proven Tokens"
   - Prompt Craft's sequence builder — "proven combinations" hint pulls `getProvenCombos()`
 - **Every write invalidates the recommendation cache** (`invalidateRecommendationCache()`).
-- **Known gap, not fixed** — this only fires from the *initial* Add Result save (`ResultReview.tsx`). Editing an existing result's score later in `ResultDetail.tsx` does **not** go through `recordResultOutcome()` — token quality doesn't adjust if you re-rate a result after the fact.
+- **Now also covers re-scoring** — `ResultDetail.tsx` (editing an existing result) calls `intelligenceEngine.recordResultRescore()`, which applies only the net delta between the old and new score. Previously this path fired nothing at all; a naive fix that called `recordResultOutcome()` again here would have double-counted on every re-save (and every unrelated edit — notes, artifacts), since re-saving with the same score would keep re-adding the full delta. `recordResultRescore` guards against both: no-op when the score is unchanged, and applies the difference (`scoreToQualityDelta(new) - scoreToQualityDelta(old)`), not the new value's delta in isolation. Co-occurrence patterns (`updateCoOccurrences`) still just re-run against the corrected score on change — that function is a running average, not a delta accumulator, so a re-score is a real additional data point but not a perfectly-weighted "undo the old value, apply the new one." Documented limitation, not silently ignored.
 
 ---
 
-## Reference Impact Scoring — WIRED
+## Reference Impact Scoring — WIRED, unified formula
 
-- **Signal** — `referenceImpact.ts`: `getHighImpactReferences()` / `getReferenceImpactScore()`. Pure read-time aggregation (no cached score column) over `result_references` → `results.is_winner` (60% weight) and `project_references` → `project_prompts` → `prompts.is_winner` (40% weight).
+- **Signal** — `referenceImpact.ts`: `getHighImpactReferences()` / `getReferenceImpactScore()`, both now built on an exported `computeImpactScore(resultWins, resultAppearances, projectWins, projectCount)` plus exported `RESULT_IMPACT_WEIGHT`/`PROJECT_IMPACT_WEIGHT` constants (60/40) — the composite math used to be duplicated inline in each function; now there's one implementation.
 - **Consumers** — Reference Library (badges the whole grid), Reference Detail (per-item score), Prompt Craft's "Impact Refs" panel (project-scoped) — all three call the *same* function, so they agree with each other.
-- **`recommendations.ts:recommendReferences`** is a separate query with its own filtering needs (category/tag matching, a direct `prompt_references` signal `referenceImpact.ts` doesn't have) — not a pure duplicate, but it was missing `referenceImpact.ts`'s project-level signal entirely. Fixed: added the same `project_references → project_prompts → prompts.is_winner` join, so a reference attached to a winning project but never directly linked to a prompt is no longer invisible to recommendations.
-- **Remaining follow-up**: the two still aren't one function — a full merge is a reasonable next step once both are observed working correctly with today's fix, but wasn't done now to avoid rewriting working filtering/ranking logic under time pressure.
+- **`recommendations.ts:recommendReferences`** is still a separate query (its own filtering needs: category/tag matching, a direct `prompt_references` signal `referenceImpact.ts` doesn't have) — a full merge into one function remains undone, since the two answer genuinely different-shaped questions (global impact badge vs. context-filtered recommendation). What's fixed: `recommendReferences` now imports `RESULT_IMPACT_WEIGHT`/`PROJECT_IMPACT_WEIGHT` and interpolates them directly into its own SQL's `ORDER BY` (an `impact_score` expression computed the identical way, in SQL, since the ranking needs to happen inside the same query), replacing the old raw-unweighted-counts ordering. A reference can no longer rank differently between the Reference Library and the Recommendation Panel — the formula is shared even though the queries aren't.
 
 ---
 
@@ -88,14 +88,16 @@ The one subsystem the codebase's own comments explicitly label "App Intelligence
 
 ---
 
-## Provider Success Formulas — WIRED, siloed outside SQLite
+## Provider Success Formulas — WIRED, now per-library
 
-`promptFormula.ts`.
+`promptFormula.ts` + migration 035 (`learned_formulas` table).
 
 - **Trigger** — `learnFormulaFromImport(text, provider)`, called from Manual Import on paste, when the pasted prompt demonstrates ≥3 recognized structural steps (`STEP_SIGNALS` keyword detection).
-- **Storage** — browser `localStorage["framecraft_learned_formulas_v1"]`. **Not SQLite** — outside the NAS-portable-library backup/sync mechanism the rest of the app's data goes through (see CLAUDE.md's portable SQLite notes). Not backed up, not scoped per-library.
+- **Storage** — moved off browser `localStorage["framecraft_learned_formulas_v1"]` onto `learned_formulas` (`provider TEXT PRIMARY KEY, steps TEXT, updated_at TEXT`), so learned formulas now travel with the portable library like everything else in the app.
+- **Why it's still synchronous** — every call site (`CraftPrompt.tsx` ×6, `ManualImport.tsx`, `describeFormula.ts`, `assistant.ts`) calls `getFormulaForProvider()` synchronously, several from `useState` initializers where an async signature isn't an option. Rather than making the whole call chain async (a much larger, riskier change), the module keeps an in-memory cache as the source of truth: hydrated from SQLite once on module load (`ensureHydrated()`, fire-and-forget, guards against clobbering anything already learned this session), and written through on every `learnFormulaFromImport()` call (`persistLearned()`, fire-and-forget, same pattern as every other non-critical mutator in this codebase). The synchronous API surface didn't change; only what backs it did.
 - **Consumers** — `getFormulaForProvider()` powers Prompt Craft's Formula Bar (multiple call sites) and is pulled into the Project Assistant's context via `formatFormulaForAI()`.
-- **Note** — this is a real, working learn→store→consume loop; it's just structurally disconnected from everything else, living in a different persistence layer entirely.
+- **Migration registration** — a brand-new standalone table needs 4 separate spots in `src-tauri/src/library_package.rs` beyond the `lib.rs` migration list, or it silently won't exist in freshly-created or repaired/merged libraries: `REQUIRED_RELEASE_TABLES`, `migration_sql()`, the inline `CREATE TABLE` in `upgrade_supported_release_schema`, and a `MergeTableSpec` in `MERGE_MANIFEST` (identity `TargetOwned(&["provider"])`, matching `app_meta`'s pattern for a natural-key singleton-per-key table) — plus a `complete_graph_identity()` match arm and a fixture row for the merge round-trip test. See CLAUDE.md's SQLite migration rules section; this has caused two real production incidents before when missed.
+- **Test isolation** — the in-memory cache is a module-level singleton, so tests need `resetLearnedFormulaCacheForTests()` (exported for exactly this) in `beforeEach`, mirroring `dbConnection.ts`'s existing `resetFramecraftDbConnectionForTests()` convention. The old `localStorage` mock in `promptFormula.test.ts` is gone — nothing in the implementation touches `localStorage` anymore.
 
 ---
 
@@ -150,23 +152,23 @@ Despite being the component most directly named for this concept, the Assistant 
 
 ## What "unified" means here, precisely
 
-`intelligenceEngine.ts` is a real, callable hub now — `ResultReview.tsx` and `ComparisonLab.tsx` both route through it instead of orchestrating 2-3 lib calls inline. But it's worth being precise about what did and didn't change, so the map stays honest:
+`intelligenceEngine.ts` is a real, callable hub now — `ResultReview.tsx`, `ResultDetail.tsx`, and `ComparisonLab.tsx` all route through it instead of orchestrating lib calls inline. But it's worth being precise about what did and didn't change, so the map stays honest:
 
-- It **wraps** `memoryEngine.ts`, `tokenPatterns.ts`, `db.ts`'s mutators — it doesn't replace or merge them. `recommendations.ts` still doesn't import from it or from `tokenPatterns.ts`/`referenceImpact.ts`; it remains its own aggregator with its own bespoke SQL per scorer (recommendReferences and recommendAvoidance were edited directly, not rerouted through a shared function).
-- `promptFormula.ts` still lives in `localStorage`, structurally cut off from everything else — deliberately out of scope for this pass (see the follow-up note under Provider Success Formulas above).
-- `assistant.ts` (Project Assistant) still doesn't call `intelligenceEngine.ts` or any of the scoring tables — it wasn't touched.
-- Data storage is **unchanged**: still one SQLite file per portable library, no cross-library store. Unifying the *code path* was the explicit, decided scope — see CLAUDE.md's Application intelligence section for why.
+- It **wraps** `memoryEngine.ts`, `tokenPatterns.ts`, `db.ts`'s mutators — it doesn't replace or merge them. `recommendations.ts` still doesn't import from it; it remains its own aggregator with its own bespoke SQL per scorer (`recommendReferences` and `recommendAvoidance` were edited directly, and `recommendReferences` now imports the weight *constants* from `referenceImpact.ts`, but the query itself still isn't rerouted through a shared function).
+- `assistant.ts` (Project Assistant) still doesn't call `intelligenceEngine.ts` or any of the scoring tables — it wasn't touched. Still the one component named for this concept that doesn't participate in it.
+- Data storage is **still per-library**: one SQLite file per portable library, no cross-library store — `promptFormula.ts`'s migration onto `learned_formulas` follows the same model, not a global one. Unifying the *code path*, not the data, was the explicit, decided scope — see CLAUDE.md's Application intelligence section for why.
+- `recommendations.ts`'s seven scorers are still seven independent SQL queries — that aggregator itself wasn't restructured, only two of its scorers (`recommendReferences`, `recommendAvoidance`, `recommendRecipes`) were fixed in place.
 
-So: real unification of the trigger points that existed as scattered inline orchestration (token learning, comparison outcomes), plus two confirmed bugs fixed (the avoidance-pattern category filter, the recipe-use-count dead end) and one gap closed with a targeted join (reference project-signal). Not a rewrite of the whole map — `recommendations.ts`'s seven scorers are still seven independent SQL queries, and Project Assistant and the formula learner are still their own islands.
+So: real unification of the trigger points that existed as scattered inline orchestration (token learning — both new-result and re-score paths now — and comparison outcomes), three confirmed bugs fixed (the avoidance-pattern category filter, the recipe-use-count dead end, the re-score gap), one formula unified across two call sites (reference impact scoring), and one subsystem moved onto the per-library model it was always supposed to follow (provider formulas). Not a rewrite of the whole map — the Recommendations Engine's aggregator structure and Project Assistant's isolation are both unchanged by design.
 
 ---
 
 ## Checklist for adding or extending an intelligence feature
 
-1. Start in `src/lib/intelligenceEngine.ts` — add a new orchestration function there, or extend `recordResultOutcome`/`recordComparisonApply`/`recordComparisonLesson`, rather than wiring lib calls inline in a page component.
-2. Name the trigger (the exact user action that should fire it) before writing code.
+1. Start in `src/lib/intelligenceEngine.ts` — add a new orchestration function there, or extend an existing one (`recordResultOutcome`, `recordResultRescore`, `recordComparisonApply`, `recordComparisonLesson`), rather than wiring lib calls inline in a page component.
+2. Name the trigger (the exact user action that should fire it) before writing code. If the same underlying data can be edited more than once (a score, a rating), design for the *re-edit* case up front — see `recordResultRescore`'s net-delta approach — not just the first-write case.
 3. Check the subsystems above for something that already answers a similar question — extend it rather than adding a parallel implementation.
-4. Prefer writing into an existing table/loop (`tokens.quality_score`, `token_patterns`, `inconsistency_events`, `avoidance_patterns` with `is_builtin = 0`, the reference-impact join tables) over inventing a new one.
+4. Prefer writing into an existing table/loop (`tokens.quality_score`, `token_patterns`, `inconsistency_events`, `avoidance_patterns` with `is_builtin = 0`, the reference-impact join tables) over inventing a new one. If a genuinely new table is needed, it's still per-library SQLite, not `localStorage` — and needs the 4-spot `library_package.rs` registration described in CLAUDE.md's migration rules, not just the `lib.rs` migration list.
 5. If it mutates a table `recommendations.ts` reads, call `invalidateRecommendationCache()` — follow the pattern in `recommendationInvalidationWiring.test.ts`. Reusing an existing mutator (like `createAvoidancePattern`, which already does this) beats writing a new one.
 6. Trace all four steps (trigger → compute → store → consumer) before calling it done. A feature that computes and stores but nothing reads is the most common failure mode here.
 7. Record the result as WIRED, ISOLATED, STATIC, or SPLIT, and update this doc if it changes the map.

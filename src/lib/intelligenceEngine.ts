@@ -30,6 +30,35 @@ export async function recordResultOutcome(
 }
 
 /**
+ * Fires when an *existing* result's score is edited (ResultDetail.tsx) —
+ * previously only the initial Add Result save (recordResultOutcome above)
+ * fed the learning loop, so correcting a rating afterward silently did
+ * nothing. Applies only the net difference between the old and new score's
+ * quality delta, not the new delta on its own — calling recordResultOutcome
+ * again here would re-add the full delta on every re-save (and every
+ * unrelated edit — notes, artifacts) and let a token's quality score be
+ * farmed upward just by re-saving. A no-op when the score didn't change.
+ */
+export async function recordResultRescore(
+  promptText: string,
+  oldScoreOverall: number,
+  oldIsFailed: boolean,
+  newScoreOverall: number,
+  newIsFailed: boolean
+): Promise<void> {
+  if (oldScoreOverall === newScoreOverall && oldIsFailed === newIsFailed) return;
+  const netDelta = scoreToQualityDelta(newScoreOverall, newIsFailed) - scoreToQualityDelta(oldScoreOverall, oldIsFailed);
+  await Promise.all([
+    Math.abs(netDelta) >= 0.001 ? updateTokenQualityFromResult(promptText, netDelta) : Promise.resolve(),
+    // co-occurrence is a running average, not a delta accumulator — re-running
+    // it against the corrected score is a reasonable additional data point,
+    // just not a perfectly weighted "undo the old value" (no decrement API
+    // exists for it). Documented limitation, not silently ignored.
+    updateCoOccurrences(promptText, newScoreOverall),
+  ]);
+}
+
+/**
  * Fires after a Comparison Lab decision is applied (results' is_winner/
  * is_failed already synced by syncDecisionsToResults). Recomputes each
  * touched prompt's summary so prompt-level winner status — not just the

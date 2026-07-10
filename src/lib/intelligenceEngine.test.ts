@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recordResultOutcome, recordComparisonApply, recordComparisonLesson } from "./intelligenceEngine";
+import { recordResultOutcome, recordResultRescore, recordComparisonApply, recordComparisonLesson } from "./intelligenceEngine";
 import { EMPTY_DECISION, type ComparisonDecision } from "./comparisonDecision";
 
 // Vitest runs in dev mode (no Tauri) — every underlying store call is a no-op,
@@ -18,6 +18,28 @@ describe("recordResultOutcome", () => {
 
   it("resolves without throwing for an unrated result", async () => {
     await expect(recordResultOutcome("", 0, false)).resolves.toBeUndefined();
+  });
+});
+
+describe("recordResultRescore", () => {
+  it("is a no-op when score and failed status are unchanged", async () => {
+    await expect(recordResultRescore("cinematic lighting", 4, false, 4, false)).resolves.toBeUndefined();
+  });
+
+  it("resolves without throwing when a score is corrected upward", async () => {
+    await expect(recordResultRescore("cinematic lighting", 3, false, 5, false)).resolves.toBeUndefined();
+  });
+
+  it("resolves without throwing when a score is corrected downward", async () => {
+    await expect(recordResultRescore("cinematic lighting", 5, false, 2, false)).resolves.toBeUndefined();
+  });
+
+  it("resolves without throwing when a result is retroactively marked failed", async () => {
+    await expect(recordResultRescore("plastic skin", 4, false, 1, true)).resolves.toBeUndefined();
+  });
+
+  it("resolves without throwing when a result is un-failed", async () => {
+    await expect(recordResultRescore("plastic skin", 1, true, 4, false)).resolves.toBeUndefined();
   });
 });
 

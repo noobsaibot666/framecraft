@@ -15,6 +15,7 @@ import type { Prompt, Token, SREF, Profile, Reference, Recipe } from "@/types";
 import { createBoundedAsyncCache } from "./boundedCache";
 import { getFramecraftDb } from "./dbConnection";
 import { getTopConsistencyConflicts } from "./inconsistencyIntelligence";
+import { RESULT_IMPACT_WEIGHT, PROJECT_IMPACT_WEIGHT } from "./referenceImpact";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -634,10 +635,13 @@ export async function recommendProfiles(ctx: RecommendationContext, limit = 3): 
 }
 
 /**
- * Reference suggestions — learned from three signals:
- *   1. result_references: references used in actual winning gallery results (strongest signal)
- *   2. prompt_references: references attached to high-rated/winner prompts
- *   3. user rating + tag overlap with current prompt context
+ * Reference suggestions — learned from three signals, ranked primarily by
+ * impact_score (see referenceImpact.ts:computeImpactScore — same weights,
+ * shared constants) so ranking here matches the Reference Library/Impact Refs
+ * panel:
+ *   1. result_references: references used in actual winning gallery results (60% weight)
+ *   2. project_references: references attached to projects whose prompts won (40% weight)
+ *   3. prompt_references (direct prompt link, not weighted into impact_score) + user rating + tag overlap
  *
  * References with no results yet but a solid rating are still shown,
  * ranked below those proven by gallery data.
@@ -678,12 +682,27 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
 
   const whereClause = [qualityFilter, ...whereConditions].join(" AND ");
 
+  // impact_score mirrors referenceImpact.ts's computeImpactScore() exactly (same
+  // weights, imported as constants) so a reference can't rank differently here
+  // than in the Reference Library/Impact Refs panel — previously this query used
+  // raw unweighted counts, a second implementation of the same question.
+  const impactScoreExpr = `(
+    CASE WHEN COALESCE(rr_agg.result_appearances, 0) > 0
+      THEN CAST(COALESCE(rr_agg.result_win_count, 0) AS REAL) / rr_agg.result_appearances
+      ELSE 0 END * ${RESULT_IMPACT_WEIGHT}
+    + CASE WHEN COALESCE(proj_agg.project_count, 0) > 0
+      THEN CAST(COALESCE(proj_agg.project_win_count, 0) AS REAL) / proj_agg.project_count
+      ELSE 0 END * ${PROJECT_IMPACT_WEIGHT}
+  )`;
+
   const rows = (await db.select(
     `SELECT r.*,
        COALESCE(rr_agg.result_win_count,  0) AS result_win_count,
        COALESCE(rr_agg.result_appearances, 0) AS result_appearances,
        COALESCE(pr_agg.prompt_win_count,  0) AS prompt_win_count,
        COALESCE(proj_agg.project_win_count, 0) AS project_win_count,
+       COALESCE(proj_agg.project_count, 0) AS project_count,
+       ${impactScoreExpr} AS impact_score,
        ${tagMatchExpr} AS tag_match
      FROM "references" r
      LEFT JOIN (
@@ -703,6 +722,7 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
      ) pr_agg ON pr_agg.reference_id = r.id
      LEFT JOIN (
        SELECT pjr.reference_id,
+         COUNT(DISTINCT pjr.project_id) AS project_count,
          COUNT(DISTINCT CASE WHEN p.is_winner = 1 THEN p.id END) AS project_win_count
        FROM project_references pjr
        JOIN project_prompts pp ON pp.project_id = pjr.project_id
@@ -710,7 +730,7 @@ export async function recommendReferences(ctx: RecommendationContext, limit = 4)
        GROUP BY pjr.reference_id
      ) proj_agg ON proj_agg.reference_id = r.id
      WHERE ${whereClause}
-     ORDER BY tag_match DESC, result_win_count DESC, prompt_win_count DESC, project_win_count DESC, r.rating DESC, r.created_at DESC
+     ORDER BY tag_match DESC, impact_score DESC, prompt_win_count DESC, r.rating DESC, r.created_at DESC
      LIMIT ${limit}`,
     values
   )) as Record<string, unknown>[];

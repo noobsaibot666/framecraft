@@ -5,8 +5,9 @@
 // image-prompt structures.
 
 import type { Provider } from "@/types";
+import { getFramecraftDb } from "./dbConnection";
 
-const LEARNED_KEY = "framecraft_learned_formulas_v1";
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 const IMAGE_DEFAULT = [
   "Subject",
@@ -174,30 +175,72 @@ export function getNarrativeArc(value: string): string {
 
 type LearnedStore = Partial<Record<string, string[]>>;
 
-function readLearned(): LearnedStore {
-  try {
-    if (typeof localStorage === "undefined") return {};
-    const raw = localStorage.getItem(LEARNED_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as LearnedStore;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+// In-memory cache — authoritative for the synchronous getFormulaForProvider()
+// API every call site relies on. Backed by the per-library `learned_formulas`
+// table (migration 035) instead of localStorage, so learned formulas travel
+// with the portable library like everything else in the app — previously
+// this was the one subsystem whose learned data lived outside any library.
+// Dev/test mode (no Tauri) has nothing to hydrate and stays purely in-memory,
+// matching every other lib file's isTauri guard pattern.
+const cache: LearnedStore = {};
+let hydrated = !isTauri;
+let hydratePromise: Promise<void> | null = null;
+
+function ensureHydrated(): void {
+  if (hydrated || hydratePromise) return;
+  hydratePromise = (async () => {
+    try {
+      const db = await getFramecraftDb();
+      const rows = (await db.select(
+        "SELECT provider, steps FROM learned_formulas"
+      )) as { provider: string; steps: string }[];
+      for (const row of rows) {
+        // Don't clobber anything already learned this session (e.g. from an
+        // import that happened before hydration finished) — first write wins.
+        if (row.provider in cache) continue;
+        try {
+          const steps = JSON.parse(row.steps) as string[];
+          if (Array.isArray(steps)) cache[row.provider] = steps;
+        } catch {
+          // corrupt row — skip
+        }
+      }
+    } catch {
+      // no Tauri yet, or DB not ready — cache stays at whatever it already had
+    } finally {
+      hydrated = true;
+    }
+  })();
 }
 
-function writeLearned(store: LearnedStore): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    localStorage.setItem(LEARNED_KEY, JSON.stringify(store));
-  } catch {
-    // storage unavailable — learned formulas are a soft enhancement
-  }
+function persistLearned(provider: Provider, steps: string[]): void {
+  if (!isTauri) return;
+  getFramecraftDb()
+    .then((db) =>
+      db.execute(
+        `INSERT INTO learned_formulas (provider, steps, updated_at) VALUES ($1, $2, $3)
+         ON CONFLICT(provider) DO UPDATE SET steps = excluded.steps, updated_at = excluded.updated_at`,
+        [provider, JSON.stringify(steps), new Date().toISOString()]
+      )
+    )
+    .catch(() => {
+      // best-effort — the in-memory cache already reflects the learned value for this session
+    });
+}
+
+// Kick off hydration as soon as this module loads — it's imported early
+// (CraftPrompt, ManualImport, the Project Assistant), so the cache is warm
+// well before the user reaches a formula-consuming page in real usage.
+ensureHydrated();
+
+/** Test-only: clears the in-memory learned-formula cache between test cases. */
+export function resetLearnedFormulaCacheForTests(): void {
+  for (const key of Object.keys(cache)) delete cache[key];
 }
 
 /** Formula for a provider: learned order when imports have refined it, else the shipped default. */
 export function getFormulaForProvider(provider: Provider): string[] {
-  const learned = readLearned()[provider];
+  const learned = cache[provider];
   if (learned && learned.length >= 3) return [...learned];
   return [...(DEFAULT_FORMULAS[provider] ?? IMAGE_DEFAULT)];
 }
@@ -294,9 +337,8 @@ export function learnFormulaFromImport(promptText: string, provider: Provider): 
   if (observed.length < 3) return null;
   // Keep any default steps the import didn't demonstrate, appended in default order.
   const merged = [...observed, ...defaults.filter((s) => !observed.includes(s))];
-  const store = readLearned();
-  store[provider] = merged;
-  writeLearned(store);
+  cache[provider] = merged;
+  persistLearned(provider, merged);
   return merged;
 }
 

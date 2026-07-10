@@ -2,6 +2,27 @@ import { getFramecraftDb } from "./dbConnection";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+// Shared with recommendations.ts:recommendReferences — both answer "which
+// references correlate with wins," and used to compute it two different,
+// silently divergent ways. These weights (and computeImpactScore) are the
+// single source of truth now; recommendReferences interpolates them directly
+// into its own SQL's ORDER BY so a reference can't rank differently between
+// the Reference Library/Impact Refs panel and the Recommendation Panel.
+export const RESULT_IMPACT_WEIGHT = 0.6;
+export const PROJECT_IMPACT_WEIGHT = 0.4;
+
+/** Composite score weighting result-level wins over project-level wins — see the weights above. Range 0–1. */
+export function computeImpactScore(
+  resultWins: number,
+  resultAppearances: number,
+  projectWins: number,
+  projectCount: number
+): number {
+  const projectRate = projectCount > 0 ? projectWins / projectCount : 0;
+  const resultRate = resultAppearances > 0 ? resultWins / resultAppearances : 0;
+  return Math.round((projectRate * PROJECT_IMPACT_WEIGHT + resultRate * RESULT_IMPACT_WEIGHT) * 100) / 100;
+}
+
 export interface ImpactReference {
   id: string;
   title: string;
@@ -80,9 +101,7 @@ export async function getHighImpactReferences(limit = 5, projectId?: string): Pr
     const resultApps    = (r.result_appearances   as number) ?? 0;
     const resultWins    = (r.result_win_count     as number) ?? 0;
 
-    const projectRate = projectCount > 0 ? projectWins / projectCount : 0;
-    const resultRate  = resultApps   > 0 ? resultWins  / resultApps   : 0;
-    const composite   = Math.round((projectRate * 0.4 + resultRate * 0.6) * 100) / 100;
+    const composite = computeImpactScore(resultWins, resultApps, projectWins, projectCount);
 
     return {
       id:                   r.id            as string,
@@ -136,11 +155,5 @@ export async function getReferenceImpactScore(referenceId: string): Promise<numb
   const resultCount  = (rr.result_count  as number) ?? 0;
   const resultWins   = (rr.win_count     as number) ?? 0;
 
-  const projectRate = projectCount > 0 ? projectWins / projectCount : 0;
-  const resultRate  = resultCount  > 0 ? resultWins  / resultCount  : 0;
-
-  if (projectRate === 0 && resultRate === 0) return 0;
-
-  // Weight result-level correlation more heavily — it's a direct causal signal
-  return Math.round((projectRate * 0.4 + resultRate * 0.6) * 100) / 100;
+  return computeImpactScore(resultWins, resultCount, projectWins, projectCount);
 }

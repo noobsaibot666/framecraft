@@ -214,6 +214,12 @@ pub fn run() {
             sql: include_str!("../migrations/034_category_field_order.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 35,
+            description: "learned_formulas",
+            sql: include_str!("../migrations/035_learned_formulas.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

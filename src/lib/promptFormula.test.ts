@@ -9,21 +9,15 @@ import {
   missingFormulaSteps,
   NARRATIVE_FORMATS,
   PROVIDER_GUIDANCE,
+  resetLearnedFormulaCacheForTests,
 } from "./promptFormula";
 
-const store = new Map<string, string>();
-
+// Learned formulas now live in an in-memory cache backed by the per-library
+// learned_formulas table (dev/test mode has no Tauri to hydrate from, so the
+// cache is purely in-memory) — reset it between tests for isolation, same
+// role localStorage.clear() played before the SQLite migration.
 beforeEach(() => {
-  store.clear();
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => store.set(key, value),
-      removeItem: (key: string) => store.delete(key),
-      clear: () => store.clear(),
-    },
-  });
+  resetLearnedFormulaCacheForTests();
 });
 
 describe("getFormulaForProvider", () => {

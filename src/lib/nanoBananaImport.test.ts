@@ -105,4 +105,45 @@ describe("parseNanoBananaJson", () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.data.lighting).toBeUndefined();
   });
+
+  it("composes a prompt from Nano Banana Pro's cinematic-brief shape (no direct prompt field)", () => {
+    const brief = {
+      generation_settings: { aspect_ratio: "16:9", output_format: "png", fidelity_weight: 1.0 },
+      camera_and_cinematography: {
+        shot_type: "Wide-angle tracking shot",
+        angle: "Low-angle, looking slightly up at the characters",
+        lens_simulation: "35mm anamorphic prime lens, crisp foreground focus",
+        shutter_speed: "Low shutter speed, intentional motion blur on tracking axis",
+        lighting: "Warm golden hour sunlight, strong directional side-lighting, high-contrast chiaroscuro shadows",
+      },
+      aesthetic_and_style: {
+        style_preset: "High-end commercial cinematography",
+        color_grading: "Arri Alexa color science, warm tones",
+        mood: "Sophisticated, urgent, dynamic travel narrative",
+      },
+      subjects: [
+        { role: "Lead Female", appearance: "East Asian woman, sharp features", clothing: "Cream-colored silk blouse", action: "Walking briskly forward" },
+        { role: "Lead Male", appearance: "Caucasian man, wavy light brown hair", clothing: "Unbuttoned tan linen suit", action: "Walking alongside the woman" },
+      ],
+      hero_product: { brand: "Rimowa", item: "Cabin suitcase", material: "Classic silver ribbed aluminum", state: "Rolling smoothly on wheels" },
+      environment_and_composition: {
+        location: "Modern airport terminal exterior drop-off area",
+        architecture: "Massive concrete structural pillars, brutalist minimalist lines",
+      },
+      negative_prompt_weights: { artifacts: "crooked handles, extra limbs, distorted text, static poses" },
+    };
+    const result = parseNanoBananaJson(JSON.stringify(brief));
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.promptText).toContain("Wide-angle tracking shot");
+      expect(result.data.promptText).toContain("Rimowa Cabin suitcase");
+      expect(result.data.promptText).toContain("in Modern airport terminal exterior drop-off area");
+      expect(result.data.aspectRatio).toBe("16:9");
+      expect(result.data.camera).toBe("Low-angle, looking slightly up at the characters");
+      expect(result.data.lens).toBe("35mm anamorphic prime lens, crisp foreground focus");
+      expect(result.data.lighting).toBe("Warm golden hour sunlight, strong directional side-lighting, high-contrast chiaroscuro shadows");
+      expect(result.data.mood).toBe("Sophisticated, urgent, dynamic travel narrative");
+      expect(result.data.avoidance).toBe("crooked handles, extra limbs, distorted text, static poses");
+    }
+  });
 });

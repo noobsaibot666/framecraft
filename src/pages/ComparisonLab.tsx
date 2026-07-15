@@ -45,6 +45,7 @@ import {
 } from "@/lib/comparisonWorkflow";
 import { createPrompt, createResult } from "@/lib/db";
 import { recordComparisonApply, recordComparisonLesson } from "@/lib/intelligenceEngine";
+import { recordSuggestionFeedback } from "@/lib/aiSuggestionFeedback";
 import { saveResultImage } from "@/lib/fileStore";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { addPromptToProject, addResultToProject, getProjectById } from "@/lib/projects";
@@ -923,6 +924,9 @@ export function ComparisonLab() {
     // blob. Turn it into structured, reusable avoidance guidance so it
     // actually resurfaces in future Prompt Craft sessions.
     recordComparisonLesson(decision).catch(() => {});
+    recordSuggestionFeedback({
+      tool: "comparison_decision", field: "bundle", action: "accepted", suggestion: text,
+    }).catch(() => {});
     setOutcomeSummary(text);
     setDecision(null);
     reloadSessions();
@@ -1198,7 +1202,10 @@ export function ComparisonLab() {
                   style={{ border: "1px solid rgba(56,183,200,0.3)" }}>
                   Save as Outcome
                 </button>
-                <button type="button" onClick={() => setDecision(null)}
+                <button type="button" onClick={() => {
+                    recordSuggestionFeedback({ tool: "comparison_decision", field: "bundle", action: "dismissed" }).catch(() => {});
+                    setDecision(null);
+                  }}
                   className="flex items-center justify-center w-6 h-6 rounded-sm text-cyan/60 hover:text-white hover:bg-white/10 transition-precise"
                   title="Dismiss">
                   <X size={11} />

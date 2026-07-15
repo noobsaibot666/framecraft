@@ -730,7 +730,8 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 32] = [
+const REQUIRED_RELEASE_TABLES: [&str; 34] = [
+    "ai_suggestion_events",
     "app_meta",
     "assistant_messages",
     "assistant_threads",
@@ -741,6 +742,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 32] = [
     "creative_directions",
     "deliverable_references",
     "direction_storyboards",
+    "duplicate_dismissals",
     "export_presets",
     "generation_queue",
     "inconsistency_events",
@@ -801,6 +803,7 @@ const UNIQUE_TOKEN_CATEGORY: &[&[&str]] = &[&["name"]];
 const UNIQUE_TOKEN_PATTERN: &[&[&str]] = &[&["token_a_id", "token_b_id"]];
 const UNIQUE_COMPARISON_ITEM: &[&[&str]] = &[&["session_id", "result_id"]];
 const UNIQUE_GENERATION_QUEUE: &[&[&str]] = &[&["prompt_id"]];
+const UNIQUE_DUPLICATE_DISMISSAL: &[&[&str]] = &[&["source_prompt_id", "candidate_prompt_id"]];
 
 #[derive(Clone, Copy)]
 struct MergeForeignKey {
@@ -1004,6 +1007,10 @@ const FK_INCONSISTENCY: &[MergeForeignKey] = &[MergeForeignKey {
     column: "prompt_id",
     table: "prompts",
 }];
+const FK_AI_SUGGESTION_EVENT: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "prompt_id",
+    table: "prompts",
+}];
 const FK_PATTERN: &[MergeForeignKey] = &[
     MergeForeignKey {
         column: "token_a_id",
@@ -1012,6 +1019,16 @@ const FK_PATTERN: &[MergeForeignKey] = &[
     MergeForeignKey {
         column: "token_b_id",
         table: "tokens",
+    },
+];
+const FK_DUPLICATE_DISMISSAL: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "source_prompt_id",
+        table: "prompts",
+    },
+    MergeForeignKey {
+        column: "candidate_prompt_id",
+        table: "prompts",
     },
 ];
 
@@ -1128,6 +1145,7 @@ const TOKEN_PATTERN_COLUMNS: &[&str] = &[
     "avg_rating",
     "last_updated",
 ];
+const DUPLICATE_DISMISSAL_COLUMNS: &[&str] = &["id", "source_prompt_id", "candidate_prompt_id", "created_at"];
 const PROJECT_PROMPT_COLUMNS: &[&str] = &["project_id", "prompt_id"];
 const PROJECT_RESULT_COLUMNS: &[&str] = &["project_id", "result_id"];
 const PROJECT_REFERENCE_COLUMNS: &[&str] = &["project_id", "reference_id"];
@@ -1250,6 +1268,16 @@ const INCONSISTENCY_COLUMNS: &[&str] = &[
 ];
 const APP_META_COLUMNS: &[&str] = &["key", "value", "updated_at"];
 const LEARNED_FORMULA_COLUMNS: &[&str] = &["provider", "steps", "updated_at"];
+const AI_SUGGESTION_EVENT_COLUMNS: &[&str] = &[
+    "id",
+    "tool",
+    "field",
+    "action",
+    "suggestion",
+    "prompt_id",
+    "provider",
+    "created_at",
+];
 
 const MERGE_MANIFEST: &[MergeTableSpec] = &[
     MergeTableSpec {
@@ -1353,6 +1381,14 @@ const MERGE_MANIFEST: &[MergeTableSpec] = &[
         columns: TOKEN_PATTERN_COLUMNS,
         identity: MergeIdentity::Id(UNIQUE_TOKEN_PATTERN),
         foreign_keys: FK_PATTERN,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "duplicate_dismissals",
+        columns: DUPLICATE_DISMISSAL_COLUMNS,
+        identity: MergeIdentity::Id(UNIQUE_DUPLICATE_DISMISSAL),
+        foreign_keys: FK_DUPLICATE_DISMISSAL,
         media_columns: &[],
         user_only: false,
     },
@@ -1489,6 +1525,14 @@ const MERGE_MANIFEST: &[MergeTableSpec] = &[
         columns: INCONSISTENCY_COLUMNS,
         identity: MergeIdentity::Id(&[]),
         foreign_keys: FK_INCONSISTENCY,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "ai_suggestion_events",
+        columns: AI_SUGGESTION_EVENT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_AI_SUGGESTION_EVENT,
         media_columns: &[],
         user_only: false,
     },
@@ -2332,7 +2376,8 @@ fn excluded_foreign_key_policy(table: &str, column: &str) -> ExcludedForeignKeyP
         | ("shot_sequence", "prompt_id")
         | ("shot_sequence", "result_id")
         | ("direction_storyboards", "prompt_id")
-        | ("inconsistency_events", "prompt_id") => ExcludedForeignKeyPolicy::Null,
+        | ("inconsistency_events", "prompt_id")
+        | ("ai_suggestion_events", "prompt_id") => ExcludedForeignKeyPolicy::Null,
         _ => ExcludedForeignKeyPolicy::Exclude,
     }
 }
@@ -3070,7 +3115,8 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
             !matches!(
                 **table,
                 "campaigns" | "creative_directions" | "shot_sequence" | "inconsistency_events"
-                    | "direction_storyboards" | "learned_formulas"
+                    | "direction_storyboards" | "learned_formulas" | "ai_suggestion_events"
+                    | "duplicate_dismissals"
             )
         })
         .all(|table| connection_table_exists(&conn, table)))
@@ -3239,6 +3285,33 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
     .map_err(|error| error.to_string())?;
 
     tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ai_suggestion_events (
+           id         TEXT PRIMARY KEY NOT NULL,
+           tool       TEXT NOT NULL,
+           field      TEXT,
+           action     TEXT NOT NULL,
+           suggestion TEXT,
+           prompt_id  TEXT REFERENCES prompts(id) ON DELETE SET NULL,
+           provider   TEXT,
+           created_at TEXT NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_ai_suggestion_events_tool ON ai_suggestion_events(tool);",
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS duplicate_dismissals (
+           id                  TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+           source_prompt_id    TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+           candidate_prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+           created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+           UNIQUE(source_prompt_id, candidate_prompt_id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_duplicate_dismissals_source ON duplicate_dismissals(source_prompt_id);",
+    )
+    .map_err(|error| error.to_string())?;
+
+    tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
          CREATE INDEX IF NOT EXISTS idx_prompts_recipe_use
@@ -3280,7 +3353,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 32] {
+fn migration_sql() -> [&'static str; 34] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3314,6 +3387,8 @@ fn migration_sql() -> [&'static str; 32] {
         include_str!("../migrations/030_direction_storyboards.sql"),
         include_str!("../migrations/031_creative_strategy.sql"),
         include_str!("../migrations/035_learned_formulas.sql"),
+        include_str!("../migrations/036_ai_suggestion_events.sql"),
+        include_str!("../migrations/037_duplicate_dismissals.sql"),
     ]
 }
 
@@ -5018,6 +5093,8 @@ mod tests {
              INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',1,'Shot 01','Source shot',1,'p',2,'t','t');
              INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Source rule','fix it','p','midjourney','used','t');
              INSERT INTO learned_formulas(provider,steps,updated_at) VALUES('midjourney','[\"Subject\"]','t');
+             INSERT INTO ai_suggestion_events(id,tool,field,action,suggestion,prompt_id,provider,created_at) VALUES('suggestion-event','analyze_prompt','improvement:lighting','accepted','use softer light','p','midjourney','t');
+             INSERT INTO duplicate_dismissals(id,source_prompt_id,candidate_prompt_id,created_at) VALUES('dismissal','p','p','t');
              UPDATE app_meta SET value='source-must-not-overwrite' WHERE key='schema_version';
              INSERT INTO app_meta(key,value,updated_at) VALUES('source_custom_setting','kept','t');"
         ).unwrap();
@@ -5054,7 +5131,9 @@ mod tests {
              INSERT INTO creative_directions(id,project_id,title,created_at,updated_at) VALUES('direction','proj','Target direction','t','t');
              INSERT INTO shot_sequence(id,project_id,prompt_id,result_id,created_at) VALUES('shot','proj','p','res','t');
              INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',9,'Shot 99','Target shot',0,'p',4,'t','t');
-             INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Target rule','ignore','p','kling','dismissed','t');"
+             INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Target rule','ignore','p','kling','dismissed','t');
+             INSERT INTO ai_suggestion_events(id,tool,field,action,suggestion,prompt_id,provider,created_at) VALUES('suggestion-event','comparison_decision','bundle','dismissed','ignore this','p','kling','t');
+             INSERT INTO duplicate_dismissals(id,source_prompt_id,candidate_prompt_id,created_at) VALUES('dismissal','p','p','t');"
         ).unwrap();
         drop(source_conn);
         drop(target_conn);
@@ -6004,6 +6083,8 @@ mod tests {
             "direction_storyboards" => (&["id"], vec![Value::Text("storyboard".into())]),
             "inconsistency_events" => (&["id"], vec![Value::Text("event".into())]),
             "learned_formulas" => (&["provider"], vec![Value::Text("midjourney".into())]),
+            "ai_suggestion_events" => (&["id"], vec![Value::Text("suggestion-event".into())]),
+            "duplicate_dismissals" => (&["id"], vec![Value::Text("dismissal".into())]),
             "app_meta" => (&["key"], vec![Value::Text("source_custom_setting".into())]),
             _ => panic!("missing complete graph identity for {table}"),
         }

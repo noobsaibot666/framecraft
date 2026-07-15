@@ -445,7 +445,10 @@ export type SuggestionKind =
   | "next_action"
   | "avoidance_improvement"
   | "reference_gap"
-  | "winner_interpretation";
+  | "winner_interpretation"
+  | "proven_token"
+  | "recurring_avoidance"
+  | "impact_reference";
 
 export interface AssistantSuggestion {
   kind: SuggestionKind;
@@ -500,6 +503,17 @@ export interface ProjectContextPack {
     decided: number;
     pending: number;
     recentOutcomes: string[];
+  };
+  /** Signals pulled from the app's learned-scoring layer (recommendations.ts, referenceImpact.ts) — see CLAUDE.md's Application intelligence section. */
+  learned: {
+    provenTokens: { token: Token; reason: string; score: number }[];
+    avoidance: { label: string; correction?: string; reason: string; severity: "critical" | "high" | "medium" | "low" }[];
+    highImpactReferences: {
+      id: string; title: string; kind: string; thumbnail_data?: string;
+      project_count: number; project_winner_count: number;
+      result_appearances: number; result_win_count: number;
+      impact_score: number;
+    }[];
   };
 }
 

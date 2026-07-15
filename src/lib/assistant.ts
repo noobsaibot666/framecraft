@@ -2,6 +2,8 @@ import { getProjectById, getPromptsForProject, getResultsForProject, getReferenc
 import { getDeliverablesForProject, isMissingResult } from "./deliverables";
 import { getSessions } from "./comparisons";
 import { summarizeComparisonIntelligence } from "./comparisonIntelligence";
+import { getRecommendations } from "./recommendations";
+import { getHighImpactReferences } from "./referenceImpact";
 import { getApiKey, AI_MODELS } from "./aiConfig";
 import { fetchProviderJson, requireValidApiKey } from "./aiClient";
 import { formatFormulaForAI, getFormulaForProvider } from "./promptFormula";
@@ -37,12 +39,14 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
   const project = await getProjectById(projectId);
   if (!project) return null;
 
-  const [prompts, results, references, deliverables, comparisonSessions] = await Promise.all([
+  const [prompts, results, references, deliverables, comparisonSessions, recs, highImpactRefs] = await Promise.all([
     getPromptsForProject(projectId),
     getResultsForProject(projectId),
     getReferencesForProject(projectId),
     getDeliverablesForProject(projectId),
     getSessions(projectId),
+    getRecommendations({ projectId, category: project.category }),
+    getHighImpactReferences(5, projectId),
   ]);
 
   const avgRating = prompts.length
@@ -89,6 +93,11 @@ export async function buildContextPack(projectId: string): Promise<ProjectContex
     references: { total: references.length, kinds },
     deliverables: { total: deliverables.length, byStatus, missingResults },
     comparisons: summarizeComparisonIntelligence(comparisonSessions),
+    learned: {
+      provenTokens: recs.tokens,
+      avoidance: recs.avoidance,
+      highImpactReferences: highImpactRefs,
+    },
   };
 }
 
@@ -190,6 +199,35 @@ export function generateSuggestions(pack: ProjectContextPack): AssistantSuggesti
     });
   }
 
+  // 5. Proven tokens (learned)
+  if (pack.learned.provenTokens.length > 0 && pack.results.total >= 3) {
+    suggestions.push({
+      kind: "proven_token",
+      label: "Use your proven tokens",
+      body: `${pack.learned.provenTokens.slice(0, 3).map((t) => t.token.text).join(", ")} have scored well in past results — consider working them into your next prompt.`,
+    });
+  }
+
+  // 6. Recurring avoidance pattern (learned)
+  const topAvoidance = pack.learned.avoidance.find((a) => a.severity === "critical" || a.severity === "high");
+  if (topAvoidance) {
+    suggestions.push({
+      kind: "recurring_avoidance",
+      label: "Recurring issue to address",
+      body: `${topAvoidance.label} — ${topAvoidance.reason}${topAvoidance.correction ? ` Try: ${topAvoidance.correction}` : ""}`,
+    });
+  }
+
+  // 7. High-impact reference (learned)
+  const topReference = pack.learned.highImpactReferences[0];
+  if (topReference && topReference.impact_score > 0.5) {
+    suggestions.push({
+      kind: "impact_reference",
+      label: "Lean into your strongest reference",
+      body: `"${topReference.title}" has driven your best results in this project (impact score ${Math.round(topReference.impact_score * 100)}%).`,
+    });
+  }
+
   return suggestions;
 }
 
@@ -235,6 +273,21 @@ export function serializePackToSystem(pack: ProjectContextPack): string {
       ? pack.comparisons.recentOutcomes.map((outcome) => `  - ${outcome}`)
       : ["No saved comparison outcomes."]),
   ];
+  // Learned signals (tokens.quality_score, avoidance_patterns, reference impact) —
+  // see CLAUDE.md's Application intelligence section.
+  if (pack.learned.provenTokens.length > 0 || pack.learned.avoidance.length > 0 || pack.learned.highImpactReferences.length > 0) {
+    lines.push("", "## LEARNED SIGNALS");
+    if (pack.learned.provenTokens.length > 0) {
+      lines.push(`Proven tokens: ${pack.learned.provenTokens.slice(0, 3).map((t) => t.token.text).join(", ")}`);
+    }
+    if (pack.learned.avoidance.length > 0) {
+      lines.push(`Top avoidance pattern: ${pack.learned.avoidance[0].label} — ${pack.learned.avoidance[0].reason}`);
+    }
+    if (pack.learned.highImpactReferences.length > 0) {
+      lines.push(`Highest-impact reference: "${pack.learned.highImpactReferences[0].title}" (impact score ${Math.round(pack.learned.highImpactReferences[0].impact_score * 100)}%)`);
+    }
+  }
+
   // Provider success formulas (doc 03 §1) — when suggesting prompt changes,
   // the assistant should respect each provider's winning structure.
   const providers = pack.prompts.providers ?? [];

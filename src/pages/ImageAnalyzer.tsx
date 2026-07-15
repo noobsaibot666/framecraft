@@ -11,6 +11,7 @@ import { analyzeImage } from "@/lib/analyzeImage";
 import type { AnalysisResult } from "@/lib/analyzeImage";
 import { buildImagePromptAsset } from "@/lib/analysisAssets";
 import { createReference } from "@/lib/references";
+import { recordSuggestionFeedback } from "@/lib/aiSuggestionFeedback";
 import { cn } from "@/lib/utils";
 
 function fileToBase64(file: File): Promise<{ base64: string; mimeType: string }> {
@@ -191,8 +192,12 @@ export function ImageAnalyzer() {
     if (!result) return;
     setImporting(true);
     try {
-      await create(buildImagePromptAsset(result, editableTags));
+      const promptId = await create(buildImagePromptAsset(result, editableTags));
       setImported(true);
+      recordSuggestionFeedback({
+        tool: "analyze_image", field: "suggested_prompt", action: "accepted",
+        suggestion: result.suggested_prompt, prompt_id: promptId, provider: result.provider,
+      }).catch(() => {});
     } finally {
       setImporting(false);
     }
@@ -202,8 +207,12 @@ export function ImageAnalyzer() {
     if (!result?.variation_prompt) return;
     setImportingVariation(true);
     try {
-      await create(buildImagePromptAsset(result, editableTags, result.variation_prompt, `${result.title} - variation`));
+      const promptId = await create(buildImagePromptAsset(result, editableTags, result.variation_prompt, `${result.title} - variation`));
       setImportedVariation(true);
+      recordSuggestionFeedback({
+        tool: "analyze_image", field: "variation_prompt", action: "accepted",
+        suggestion: result.variation_prompt, prompt_id: promptId, provider: result.provider,
+      }).catch(() => {});
     } finally {
       setImportingVariation(false);
     }

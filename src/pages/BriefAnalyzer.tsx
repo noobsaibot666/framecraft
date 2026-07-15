@@ -11,6 +11,7 @@ import { analyzeBrief, type BriefContent } from "@/lib/analyzeBrief";
 import { buildBriefPromptAsset, buildBriefRecipeAsset } from "@/lib/analysisAssets";
 import { getProjects, createProject, addPromptToProject, getProjectById } from "@/lib/projects";
 import { generateCreativeStrategy, saveCreativeStrategy } from "@/lib/creativeDirectorMode";
+import { recordSuggestionFeedback } from "@/lib/aiSuggestionFeedback";
 import type { Project } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -163,8 +164,11 @@ export function BriefAnalyzer() {
 
   const handleImport = async (p: GeneratedPrompt, idx: number) => {
     if (!result) return;
-    await create(buildBriefPromptAsset(p, result));
+    const promptId = await create(buildBriefPromptAsset(p, result));
     setImportedIds((prev) => new Set(prev).add(idx));
+    recordSuggestionFeedback({
+      tool: "analyze_brief", field: "prompt", action: "accepted", suggestion: p.prompt, prompt_id: promptId,
+    }).catch(() => {});
   };
 
   const handleImportAll = async () => {
@@ -184,8 +188,11 @@ export function BriefAnalyzer() {
 
   const handleSaveRecipe = async (recipe: SuggestedRecipe, idx: number) => {
     if (!result) return;
-    await create(buildBriefRecipeAsset(recipe, result));
+    const promptId = await create(buildBriefRecipeAsset(recipe, result));
     setSavedRecipeIds((prev) => new Set(prev).add(idx));
+    recordSuggestionFeedback({
+      tool: "analyze_brief", field: "recipe", action: "accepted", suggestion: recipe.title, prompt_id: promptId,
+    }).catch(() => {});
   };
 
   const handleOpenProjectPicker = async () => {

@@ -13,11 +13,11 @@ describe("page hook dependencies", () => {
     const source = readSource("src/pages/CraftPrompt.tsx");
 
     expect(source).toContain(
-      "}, [deferredAssembled, deferredCategory, deferredProvider, allPrompts.length, id]);"
+      "}, [deferredAssembled, allPrompts.length, id, dismissedDuplicateIds]);"
     );
     expect(source).not.toContain(
       "// eslint-disable-next-line react-hooks/exhaustive-deps\n" +
-      "  }, [deferredAssembled, deferredCategory, deferredProvider, allPrompts.length, id]);"
+      "  }, [deferredAssembled, allPrompts.length, id, dismissedDuplicateIds]);"
     );
   });
 

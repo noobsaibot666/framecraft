@@ -220,6 +220,18 @@ pub fn run() {
             sql: include_str!("../migrations/035_learned_formulas.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 36,
+            description: "ai_suggestion_events",
+            sql: include_str!("../migrations/036_ai_suggestion_events.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 37,
+            description: "duplicate_dismissals",
+            sql: include_str!("../migrations/037_duplicate_dismissals.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

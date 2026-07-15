@@ -75,6 +75,16 @@ export async function recordComparisonApply(promptIds: string[]): Promise<void> 
  * Turns decision.avoid[] into structured, deduped avoidance_patterns rows
  * (is_builtin = 0) via the existing createAvoidancePattern — previously this
  * judgment was captured once and only ever displayed as text, never reused.
+ *
+ * correction_prompt is deliberately left unset here: decision.reuse[] is a
+ * separate, unordered list of elements that worked in the *winning* variant
+ * overall — it has no per-item correspondence to a given decision.avoid[]
+ * entry, so attaching it as "the fix" for that specific risk misrepresents
+ * proven-good content as an avoidance correction (it previously surfaced as
+ * an "Add correction" button on the risk card, appending reuse-worthy,
+ * positive-signal text into the prompt's avoidance notes). reuse[] remains
+ * visible in Comparison Lab's own decision view; it isn't lost by omitting
+ * it here.
  */
 export async function recordComparisonLesson(decision: ComparisonDecision): Promise<void> {
   const items = decision.avoid.map((item) => item.trim()).filter(Boolean);
@@ -87,8 +97,6 @@ export async function recordComparisonLesson(decision: ComparisonDecision): Prom
       .map((p) => (p.description ?? "").trim().toLowerCase())
   );
 
-  const correction = decision.reuse.join("; ") || decision.why_stronger || undefined;
-
   for (const text of items) {
     const key = text.toLowerCase();
     if (seen.has(key)) continue;
@@ -98,7 +106,6 @@ export async function recordComparisonLesson(decision: ComparisonDecision): Prom
       artifact_type: slugify(text).slice(0, 40) || "learned_lesson",
       severity: "medium",
       description: text,
-      correction_prompt: correction,
     }).catch(() => {});
   }
 }

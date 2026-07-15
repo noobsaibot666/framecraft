@@ -1,7 +1,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
-import { ArrowLeft, Save, Copy, Check, AlertCircle, Zap, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon, Lightbulb, Info, Star } from "lucide-react";
+import { ArrowLeft, Save, Copy, Check, AlertCircle, Plus, Wand2, FileCode, Film, RotateCcw, Upload, ScanEye, Settings as SettingsIcon, Lightbulb, Info, Star } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +14,8 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { CodeSuggestField } from "@/components/ui/CodeSuggestField";
 import type { RecommendationContext } from "@/lib/recommendations";
 import { usePromptStore } from "@/stores/usePromptStore";
-import { findSimilarPrompts, findRelatedPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
+import { findSimilarPrompts, type SimilarPrompt } from "@/lib/memoryEngine";
+import { recordDuplicateDismissed, getDismissedDuplicateIds } from "@/lib/duplicateDismissals";
 import { addPromptToProject, getProjectById, getReferencesForProject } from "@/lib/projects";
 import { buildProjectTokenSuggestions, buildSuppressionText } from "@/lib/craftContext";
 import { buildRecipeDraft, getRecipeSuggestions, type RecipeSuggestion } from "@/lib/craftRecipe";
@@ -38,6 +39,7 @@ import { createLatestRequestGuard } from "@/lib/latestRequest";
 import { detectConsistencyIssues, detectProviderMismatch, findConflictingTexts, type ConsistencyMatch, type ProviderMismatch } from "@/lib/tokenConsistency";
 import { isVideoProvider } from "@/lib/providerCapabilities";
 import { recordConsistencyEvent, getAllConsistencyRuleCounts } from "@/lib/inconsistencyIntelligence";
+import { recordSuggestionFeedback } from "@/lib/aiSuggestionFeedback";
 import { useShortcut, registerShortcutLabel } from "@/lib/shortcuts";
 import { toast } from "@/lib/toast";
 import { AI_MODELS, getApiKey, pickVisionModel, type AIModel } from "@/lib/aiConfig";
@@ -1353,7 +1355,7 @@ export function CraftPrompt() {
   // Production Memory (Phase 06)
   const [duplicates, setDuplicates] = useState<SimilarPrompt[]>([]);
   const [duplicatesDismissed, setDuplicatesDismissed] = useState(false);
-  const [relatedPrompts, setRelatedPrompts] = useState<Prompt[]>([]);
+  const [dismissedDuplicateIds, setDismissedDuplicateIds] = useState<Set<string>>(new Set());
 
   // Right-column section fold state — everything loads folded except
   // Parameters; toggling during the session sticks for as long as the page
@@ -1367,7 +1369,6 @@ export function CraftPrompt() {
     imageDescription: false,
     aiAdvisor: false,
     thumbnailVersion: false,
-    related: false,
     recipes: false,
     inspirations: false,
     impactRefs: false,
@@ -1828,20 +1829,28 @@ export function CraftPrompt() {
     setLowQualityDismissed(false);
   }, [tokenSequence, fields.provider]);
 
-  // Debounced duplicate + related prompts detection (Phase 06)
+  // Debounced duplicate detection (Phase 06)
   useEffect(() => {
     if (!allPrompts.length) return;
     const timer = setTimeout(() => {
       if (deferredAssembled.trim().length > 30) {
-        setDuplicates(findSimilarPrompts(deferredAssembled, allPrompts, 0.55, id));
+        const candidates = id ? allPrompts.filter((p) => !dismissedDuplicateIds.has(p.id)) : allPrompts;
+        setDuplicates(findSimilarPrompts(deferredAssembled, candidates, 0.55, id));
         setDuplicatesDismissed(false);
       } else {
         setDuplicates([]);
       }
-      setRelatedPrompts(findRelatedPrompts(deferredCategory, deferredProvider, id, allPrompts));
     }, 600);
     return () => clearTimeout(timer);
-  }, [deferredAssembled, deferredCategory, deferredProvider, allPrompts.length, id]);
+  }, [deferredAssembled, allPrompts.length, id, dismissedDuplicateIds]);
+
+  // Previously-dismissed duplicate candidates for this saved prompt, so a
+  // dismissal survives reopening the prompt later — only meaningful once the
+  // prompt has a stable id (new/unsaved drafts have no persistence target).
+  useEffect(() => {
+    if (!id) { setDismissedDuplicateIds(new Set()); return; }
+    getDismissedDuplicateIds(id).then(setDismissedDuplicateIds).catch(() => {});
+  }, [id]);
 
   // Rule-based inconsistency detection — conflicting camera/lighting/style/subject
   // instructions and image-vs-video provider mismatches (App Intelligence)
@@ -2580,7 +2589,16 @@ export function CraftPrompt() {
               </div>
               <button
                 type="button"
-                onClick={() => setDuplicatesDismissed(true)}
+                onClick={() => {
+                  setDuplicatesDismissed(true);
+                  if (id) {
+                    const ids = duplicates.map((d) => d.prompt.id);
+                    setDismissedDuplicateIds((prev) => new Set([...prev, ...ids]));
+                    for (const candidateId of ids) {
+                      recordDuplicateDismissed(id, candidateId).catch(() => {});
+                    }
+                  }
+                }}
                 className="font-mono text-[9px] text-dim/50 hover:text-white shrink-0 transition-precise"
               >
                 Dismiss
@@ -3563,7 +3581,16 @@ export function CraftPrompt() {
                     style={{ border: "1px solid rgba(255,255,255,0.1)", background: adviceJustIn ? "rgba(72,229,232,0.06)" : "rgba(255,255,255,0.03)" }}>
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-[9px] uppercase tracking-widest text-readable">AI Advice</span>
-                      <button onClick={() => setAdviceDismissed(true)} className="text-readable hover:text-white text-[11px]">×</button>
+                      <button
+                        onClick={() => {
+                          setAdviceDismissed(true);
+                          recordSuggestionFeedback({
+                            tool: "analyze_prompt", field: "bundle", action: "dismissed",
+                            prompt_id: id, provider: fields.provider,
+                          }).catch(() => {});
+                        }}
+                        className="text-readable hover:text-white text-[11px]"
+                      >×</button>
                     </div>
                     {advice.suggestions.map((s, i) => (
                       <div key={i} className="flex items-start gap-1.5">
@@ -3589,6 +3616,10 @@ export function CraftPrompt() {
                               onClick={() => {
                                 setFields((f) => ({ ...f, [imp.field]: imp.value }));
                                 if (mode !== "builder") setMode("builder");
+                                recordSuggestionFeedback({
+                                  tool: "analyze_prompt", field: imp.field, action: "accepted", suggestion: imp.value,
+                                  prompt_id: id, provider: fields.provider,
+                                }).catch(() => {});
                               }}
                               className="font-mono text-[8.5px] uppercase tracking-widest text-cyan/60 hover:text-cyan transition-precise shrink-0 px-1.5 py-0.5 rounded-sm"
                               style={{ border: "1px solid rgba(0,229,255,0.2)" }}
@@ -3645,28 +3676,6 @@ export function CraftPrompt() {
               )}
             </div>
           </CollapsibleCard>
-
-          {/* Related Prompts */}
-          {relatedPrompts.length > 0 && (
-            <CollapsibleCard title="RELATED" icon={<Zap size={11} className="text-cyan" />} gap="gap-3" open={sectionOpen.related} onOpenChange={setSectionOpenFor("related")}>
-              {relatedPrompts.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => navigate(`/library/${p.id}`)}
-                  className="flex items-center justify-between gap-2 text-left px-2.5 py-2 rounded-sm hover:bg-white/5 transition-precise"
-                  style={{ border: "var(--border-dim)" }}
-                >
-                  <span className="font-mono text-[13px] text-readable truncate">{p.title}</span>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <div key={i} className={cn("w-1.5 h-1.5 rounded-full", i < p.rating ? "bg-amber/80" : "bg-white/14")} />
-                    ))}
-                  </div>
-                </button>
-              ))}
-            </CollapsibleCard>
-          )}
 
           {/* Recipes */}
           {availableRecipes.length > 0 && (

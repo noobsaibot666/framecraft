@@ -38,6 +38,7 @@ function makePack(overrides: Partial<ProjectContextPack> = {}): ProjectContextPa
     references: { total: 0, kinds: [] },
     deliverables: { total: 0, byStatus: {}, missingResults: 0 },
     comparisons: { total: 0, decided: 0, pending: 0, recentOutcomes: [] },
+    learned: { provenTokens: [], avoidance: [], highImpactReferences: [] },
     ...overrides,
   };
 }
@@ -123,6 +124,90 @@ describe("generateSuggestions", () => {
     expect(comparison?.action?.payload).toBe("/compare/proj1");
   });
 
+  it("suggests using proven tokens when learned tokens exist and results >= 3", () => {
+    const s = generateSuggestions(makePack({
+      prompts: { total: 3, winners: 0, failed: 0, avgRating: 7, top: [], providers: [] },
+      results: { total: 3, winners: 0, failed: 0, avgScore: 6 },
+      learned: {
+        provenTokens: [{
+          token: { id: "t1", text: "cinematic lighting", category_id: "c1", use_count: 5, quality_score: 0.4, is_builtin: false, is_favorite: false },
+          reason: "high quality score",
+          score: 0.4,
+        }],
+        avoidance: [],
+        highImpactReferences: [],
+      },
+    }));
+    expect(s.some((x) => x.kind === "proven_token" && x.body.includes("cinematic lighting"))).toBe(true);
+  });
+
+  it("does not suggest proven tokens when results are below 3", () => {
+    const s = generateSuggestions(makePack({
+      learned: {
+        provenTokens: [{
+          token: { id: "t1", text: "cinematic lighting", category_id: "c1", use_count: 5, quality_score: 0.4, is_builtin: false, is_favorite: false },
+          reason: "high quality score",
+          score: 0.4,
+        }],
+        avoidance: [],
+        highImpactReferences: [],
+      },
+    }));
+    expect(s.some((x) => x.kind === "proven_token")).toBe(false);
+  });
+
+  it("suggests addressing a recurring high/critical severity avoidance pattern", () => {
+    const s = generateSuggestions(makePack({
+      learned: {
+        provenTokens: [],
+        avoidance: [{ label: "Extra fingers", reason: "seen 4 times", severity: "high", correction: "specify hand pose" }],
+        highImpactReferences: [],
+      },
+    }));
+    expect(s.some((x) => x.kind === "recurring_avoidance" && x.body.includes("Extra fingers"))).toBe(true);
+  });
+
+  it("does not surface low/medium severity avoidance patterns as recurring issues", () => {
+    const s = generateSuggestions(makePack({
+      learned: {
+        provenTokens: [],
+        avoidance: [{ label: "Minor color drift", reason: "seen twice", severity: "low" }],
+        highImpactReferences: [],
+      },
+    }));
+    expect(s.some((x) => x.kind === "recurring_avoidance")).toBe(false);
+  });
+
+  it("suggests leaning into a high-impact reference above the 0.5 threshold", () => {
+    const s = generateSuggestions(makePack({
+      learned: {
+        provenTokens: [],
+        avoidance: [],
+        highImpactReferences: [{
+          id: "r1", title: "Studio Lighting Ref", kind: "style",
+          project_count: 1, project_winner_count: 1, result_appearances: 4, result_win_count: 3,
+          impact_score: 0.72,
+        }],
+      },
+    }));
+    expect(s.some((x) => x.kind === "impact_reference" && x.body.includes("Studio Lighting Ref") && x.body.includes("72%"))).toBe(true);
+  });
+
+  it("does not surface a reference below the impact threshold", () => {
+    const s = generateSuggestions(makePack({
+      learned: {
+        provenTokens: [],
+        avoidance: [],
+        highImpactReferences: [{
+          id: "r1", title: "Weak Ref", kind: "style",
+          project_count: 1, project_winner_count: 0, result_appearances: 4, result_win_count: 1,
+          impact_score: 0.25,
+        }],
+      },
+    }));
+    expect(s.some((x) => x.kind === "impact_reference")).toBe(false);
+  });
+
   it("serializes comparison outcomes and the five-point result scale", () => {
     const context = serializePackToSystem(makePack({
       prompts: { total: 2, winners: 1, failed: 0, avgRating: 4.5, top: [], providers: [] },
@@ -139,6 +224,34 @@ describe("generateSuggestions", () => {
     expect(context).toContain("avg score 4.5/5");
     expect(context).toContain("COMPARISONS (2 total, 1 decided, 1 pending)");
     expect(context).toContain("Winner: Studio A");
+  });
+
+  it("serializes learned signals when present", () => {
+    const context = serializePackToSystem(makePack({
+      learned: {
+        provenTokens: [{
+          token: { id: "t1", text: "cinematic lighting", category_id: "c1", use_count: 5, quality_score: 0.4, is_builtin: false, is_favorite: false },
+          reason: "high quality score",
+          score: 0.4,
+        }],
+        avoidance: [{ label: "Extra fingers", reason: "seen 4 times", severity: "high" }],
+        highImpactReferences: [{
+          id: "r1", title: "Studio Lighting Ref", kind: "style",
+          project_count: 1, project_winner_count: 1, result_appearances: 4, result_win_count: 3,
+          impact_score: 0.72,
+        }],
+      },
+    }));
+
+    expect(context).toContain("## LEARNED SIGNALS");
+    expect(context).toContain("Proven tokens: cinematic lighting");
+    expect(context).toContain("Top avoidance pattern: Extra fingers");
+    expect(context).toContain('Highest-impact reference: "Studio Lighting Ref" (impact score 72%)');
+  });
+
+  it("omits the learned signals section when nothing is learned yet", () => {
+    const context = serializePackToSystem(makePack());
+    expect(context).not.toContain("## LEARNED SIGNALS");
   });
 });
 

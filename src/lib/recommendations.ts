@@ -16,6 +16,7 @@ import { createBoundedAsyncCache } from "./boundedCache";
 import { getFramecraftDb } from "./dbConnection";
 import { getTopConsistencyConflicts } from "./inconsistencyIntelligence";
 import { RESULT_IMPACT_WEIGHT, PROJECT_IMPACT_WEIGHT } from "./referenceImpact";
+import { getPatternFailureCorrelation, type PatternFailureCorrelation } from "./riskCalibration";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -430,20 +431,42 @@ export async function recommendAvoidance(ctx: RecommendationContext, limit = 4):
     conditions.push(`(ap.provider IS NULL OR ap.provider = $${values.length})`);
   }
 
+  // Fetch a wider candidate pool than `limit` so patterns with a confirmed
+  // real-failure correlation (below) can outrank a merely-static severity
+  // ordering, without starving the artifact/conflict sources added later.
   const patternRows = (await db.select(
     `SELECT ap.* FROM avoidance_patterns ap
      ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""}
      ORDER BY ap.is_builtin ASC, CASE ap.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
-     LIMIT ${limit}`,
+     LIMIT ${limit * 3}`,
     values
   )) as Record<string, unknown>[];
 
-  const recs: AvoidanceRec[] = patternRows.map((row) => ({
-    label: row.label as string,
-    correction: row.correction_prompt as string | undefined,
-    reason: row.is_builtin ? "Common AI artifact" : "Learned from your comparisons",
-    severity: (row.severity as AvoidanceRec["severity"]) ?? "medium",
-  }));
+  // AI-look risk detection is otherwise pure static keyword-matching that
+  // never learns from real outcomes — this correlates each pattern against
+  // results.is_failed so a confirmed-predictive rule surfaces above an
+  // unconfirmed one, instead of ordering purely by hardcoded severity.
+  const correlations = await getPatternFailureCorrelation().catch(() => [] as PatternFailureCorrelation[]);
+  const correlationByPattern = new Map(correlations.map((c) => [c.pattern_id, c]));
+  const MIN_CONFIRMED_LIFT = 1.3;
+
+  const recs: AvoidanceRec[] = patternRows
+    .map((row) => {
+      const correlation = correlationByPattern.get(row.id as string);
+      const confirmed = correlation && correlation.lift >= MIN_CONFIRMED_LIFT;
+      return {
+        label: row.label as string,
+        correction: row.correction_prompt as string | undefined,
+        reason: confirmed
+          ? `Confirmed: ${Math.round(correlation.triggered_failure_rate * 100)}% of your results fail when this triggers (vs ${Math.round(correlation.baseline_failure_rate * 100)}% baseline)`
+          : row.is_builtin ? "Common AI artifact" : "Learned from your comparisons",
+        severity: (row.severity as AvoidanceRec["severity"]) ?? "medium",
+        _lift: confirmed ? correlation.lift : 0,
+      };
+    })
+    .sort((a, b) => b._lift - a._lift)
+    .slice(0, limit)
+    .map(({ _lift, ...rec }) => rec);
 
   // Also pull frequent artifacts from failed results in same category
   if (ctx.category || ctx.provider) {

@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { recordResultOutcome, recordResultRescore, recordComparisonApply, recordComparisonLesson } from "./intelligenceEngine";
 import { EMPTY_DECISION, type ComparisonDecision } from "./comparisonDecision";
+import * as db from "./db";
 
 // Vitest runs in dev mode (no Tauri) — every underlying store call is a no-op,
 // so these tests verify the orchestration itself doesn't throw and handles
@@ -79,5 +80,23 @@ describe("recordComparisonLesson", () => {
   it("ignores blank/whitespace-only avoid entries", async () => {
     const decision: ComparisonDecision = { ...EMPTY_DECISION, avoid: ["   ", ""] };
     await expect(recordComparisonLesson(decision)).resolves.toBeUndefined();
+  });
+
+  it("never attaches reuse[] (proven-good, unrelated content) as the correction_prompt of an avoid item", async () => {
+    // Regression: reuse[] and avoid[] have no per-item correspondence — an
+    // earlier version stuffed reuse text into correction_prompt, which then
+    // surfaced as an "Add correction" button inside AI-Look Avoidance,
+    // reading as a recommendation glued onto an unrelated risk card.
+    const createSpy = vi.spyOn(db, "createAvoidancePattern");
+    const decision: ComparisonDecision = {
+      ...EMPTY_DECISION,
+      avoid: ["harsh flash lighting"],
+      reuse: ["genuine skin texture", "natural window light"],
+      why_stronger: "Softer, more believable light.",
+    };
+    await recordComparisonLesson(decision);
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ label: "harsh flash lighting" }));
+    expect(createSpy.mock.calls[0][0]).not.toHaveProperty("correction_prompt");
+    createSpy.mockRestore();
   });
 });

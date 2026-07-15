@@ -10,9 +10,17 @@ import { ProviderBadge } from "@/components/ui/Badge";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults, getRecentWins, getResultStats, getTopTags, getPromptsWithoutResultsCount, getProviderStats } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
+import { getSuggestionAcceptanceStats, type SuggestionAcceptanceStat } from "@/lib/aiSuggestionFeedback";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
 import { formatDate } from "@/lib/utils";
 import type { Prompt, Result } from "@/types";
+
+const SUGGESTION_TOOL_LABEL: Record<SuggestionAcceptanceStat["tool"], string> = {
+  analyze_prompt: "Prompt Advisor",
+  analyze_image: "Image Analyzer",
+  analyze_brief: "Brief Analyzer",
+  comparison_decision: "Comparison Lab",
+};
 
 function StatModule({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
@@ -238,6 +246,7 @@ export function Dashboard() {
   const [promptsWithoutResults, setPromptsWithoutResults] = useState(0);
   const [providerStats, setProviderStats] = useState<{ provider: string; total: number; winners: number; win_rate: number }[]>([]);
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
+  const [suggestionStats, setSuggestionStats] = useState<SuggestionAcceptanceStat[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
   const [search, setSearch] = useState("");
   const [recentPromptsOpen, setRecentPromptsOpen] = useState(true);
@@ -250,6 +259,7 @@ export function Dashboard() {
   useEffect(() => { getPromptsWithoutResultsCount().then(setPromptsWithoutResults).catch(console.error); }, []);
   useEffect(() => { getProviderStats().then(setProviderStats).catch(console.error); }, []);
   useEffect(() => { getDashboardHealth().then(setHealth).catch(console.error); }, []);
+  useEffect(() => { getSuggestionAcceptanceStats().then(setSuggestionStats).catch(console.error); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity).catch(console.error); }, []);
 
   const q = search.trim().toLowerCase();
@@ -674,6 +684,34 @@ export function Dashboard() {
                     >
                       View all tokens →
                     </button>
+                  </div>
+                </CardBody>
+              </Card>
+            )}
+
+            {/* Advisor Accuracy */}
+            {suggestionStats.length > 0 && (
+              <Card>
+                <CardHeader label="Advisor Accuracy" action={<Wand2 size={11} className="text-cyan/60" />} />
+                <CardBody>
+                  <div className="flex flex-col gap-0">
+                    {suggestionStats.map((s) => {
+                      const total = s.accepted + s.dismissed;
+                      const rate = total > 0 ? Math.round((s.accepted / total) * 100) : 0;
+                      return (
+                        <div
+                          key={s.tool}
+                          className="flex items-center justify-between gap-3 px-4 py-2.5"
+                          style={{ borderBottom: "var(--border-dim)" }}
+                        >
+                          <span className="font-mono text-[12px] text-white/80 truncate">{SUGGESTION_TOOL_LABEL[s.tool]}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono text-[9px] text-dim tabular-nums">{s.accepted} accepted / {s.dismissed} dismissed</span>
+                            <span className="font-mono text-[9px] text-cyan/60 tabular-nums">{rate}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardBody>
               </Card>

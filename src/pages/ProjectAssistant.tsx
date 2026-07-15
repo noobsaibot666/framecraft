@@ -69,6 +69,9 @@ const SUGGESTION_ICON: Record<string, string> = {
   avoidance_improvement: "⚠",
   reference_gap: "◻",
   winner_interpretation: "★",
+  proven_token: "◆",
+  recurring_avoidance: "↻",
+  impact_reference: "▣",
 };
 
 function SuggestionCard({

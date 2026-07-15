@@ -39,26 +39,6 @@ export function findSimilarPrompts(
     .slice(0, 3);
 }
 
-// ─── Related Prompts ──────────────────────────────────────────
-
-export function findRelatedPrompts(
-  category: string | undefined,
-  provider: string | undefined,
-  excludeId: string | undefined,
-  prompts: Prompt[],
-  limit = 3
-): Prompt[] {
-  return prompts
-    .filter(
-      (p) =>
-        p.id !== excludeId &&
-        p.rating >= 3 &&
-        (p.category === category || p.provider === provider)
-    )
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, limit);
-}
-
 // ─── Quality Score Delta ──────────────────────────────────────
 
 export function scoreToQualityDelta(scoreOverall: number, isFailed: boolean): number {

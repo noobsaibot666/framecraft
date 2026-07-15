@@ -293,25 +293,35 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="relative">
-        <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
-          onBlur={(e) => handleUrlCommit(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleUrlCommit(sourceUrl); }}
-          placeholder="Paste URL or upload image…"
-          className={cn(
-            "w-full h-8 font-mono text-[12px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
-            isUrl ? "pl-3 pr-8" : "px-3"
+      <div className="flex items-center gap-1.5">
+        <div className="relative flex-1 min-w-0">
+          <input value={sourceUrl} onChange={(e) => onSourceUrl(e.target.value)}
+            onBlur={(e) => handleUrlCommit(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleUrlCommit(sourceUrl); }}
+            placeholder="Paste URL or upload image…"
+            className={cn(
+              "w-full h-8 font-mono text-[12px] text-soft-white placeholder:text-dim/50 bg-dark rounded-sm focus:outline-none transition-precise",
+              isUrl ? "pl-3 pr-8" : "px-3"
+            )}
+            style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
+          {isUrl && (
+            <button type="button" onClick={handleCopy}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise"
+              title="Copy URL">
+              {copied ? <Check size={10} className="text-white/60" /> : <Link size={10} />}
+            </button>
           )}
-          style={{ border: "1px solid rgba(255,255,255,0.10)" }} />
-        {isUrl && (
-          <button type="button" onClick={handleCopy}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-dim/40 hover:text-white transition-precise"
-            title="Copy URL">
-            {copied ? <Check size={10} className="text-white/60" /> : <Link size={10} />}
-          </button>
-        )}
+        </div>
+        <label
+          className="flex items-center justify-center w-8 h-8 shrink-0 rounded-sm text-dim/50 hover:text-cyan cursor-pointer transition-precise"
+          style={{ border: "1px solid rgba(255,255,255,0.10)" }}
+          title="Upload custom thumbnail"
+        >
+          <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+          <Upload size={12} />
+        </label>
       </div>
-      
+
       {fetching && (
         <div className="flex items-center gap-2 p-2 rounded-sm mt-1" style={{ border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
           <div className="w-12 h-12 rounded-sm shrink-0 bg-white/5 animate-pulse" style={{ border: "1px solid rgba(255,255,255,0.08)" }} />
@@ -339,13 +349,6 @@ function DualSourceInput({ sourceUrl, onSourceUrl, thumbnailData, onThumbnailDat
           Thumbnail will be fetched automatically on save
         </p>
       )}
-
-      <label className="flex items-center gap-1 cursor-pointer w-fit mt-0.5">
-        <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-        <span className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-cyan transition-precise">
-          + Upload custom thumbnail
-        </span>
-      </label>
     </div>
   );
 }

@@ -462,6 +462,14 @@ export function ManualImport() {
     setBestUse((prev) => (prev.trim() ? prev : suggestBestUse(raw)));
   }, [raw]);
 
+  // Auto-add the top 4 relevant tags from the pasted prompt text — same
+  // "only while empty" guard as title/bestUse above, so it never overwrites
+  // tags the user typed, removed, or picked from the live suggestions below.
+  useEffect(() => {
+    if (!raw.trim()) return;
+    setTags((prev) => (prev.length ? prev : suggestPromptTags(raw, prev, 4)));
+  }, [raw]);
+
   // Batch import state
   const [batchJson, setBatchJson] = useState("");
   const [batchParsed, setBatchParsed] = useState<BatchItem[]>([]);

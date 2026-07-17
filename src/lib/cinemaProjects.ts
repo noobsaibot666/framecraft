@@ -1,8 +1,30 @@
-import type { CinemaProject, CreateCinemaProjectInput, UpdateCinemaProjectInput } from "@/types";
+import type { CinemaProject, CinemaProjectStatus, CreateCinemaProjectInput, UpdateCinemaProjectInput } from "@/types";
 import { getFramecraftDb } from "./dbConnection";
 import { generateId } from "./utils";
+import { getFoldersForProject } from "./cinemaFolders";
+import { getAssetsForProject } from "./cinemaAssets";
+import { getScenesForProject } from "./cinemaScenes";
+import { getShotsForProject } from "./cinemaShots";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+// Ordered so a caller can ask "bump status forward to at least X" without ever regressing
+// a project that's already further along (e.g. saving a script draft after scenes already
+// exist shouldn't knock status back down to "scripting"). "archived"/"complete" are terminal —
+// only a direct, explicit status write (not this helper) can leave them.
+const STATUS_RANK: Record<CinemaProjectStatus, number> = {
+  draft: 0,
+  scripting: 1,
+  assets: 2,
+  scenes: 3,
+  complete: 4,
+  archived: -1,
+};
+
+export function nextCinemaProjectStatus(current: CinemaProjectStatus, atLeast: CinemaProjectStatus): CinemaProjectStatus {
+  if (current === "archived" || current === "complete") return current;
+  return STATUS_RANK[atLeast] > STATUS_RANK[current] ? atLeast : current;
+}
 
 async function getDb() {
   return getFramecraftDb();
@@ -39,6 +61,20 @@ function rowToCinemaProject(row: Record<string, unknown>): CinemaProject {
 
 // ─── In-memory dev store ──────────────────────────────────────
 const _devStore: CinemaProject[] = [];
+
+// The Tauri path computes folder/asset/scene/shot counts via SQL subqueries; the dev-store
+// path returned the raw stored object with those fields undefined, so the library page's
+// stat row silently showed 0 for everything in dev mode (the only mode this app's own
+// headless-browser verification passes ever run in). Mirror the same counts here.
+async function attachDevCounts(p: CinemaProject): Promise<CinemaProject> {
+  const [folders, assets, scenes, shots] = await Promise.all([
+    getFoldersForProject(p.id),
+    getAssetsForProject(p.id),
+    getScenesForProject(p.id),
+    getShotsForProject(p.id),
+  ]);
+  return { ...p, folder_count: folders.length, asset_count: assets.length, scene_count: scenes.length, shot_count: shots.length };
+}
 
 // ─── CRUD ─────────────────────────────────────────────────────
 
@@ -87,7 +123,7 @@ export async function getCinemaProjects(): Promise<CinemaProject[]> {
     )) as Record<string, unknown>[];
     return rows.map(rowToCinemaProject);
   }
-  return [..._devStore];
+  return Promise.all(_devStore.map(attachDevCounts));
 }
 
 export async function getCinemaProjectById(id: string): Promise<CinemaProject | null> {
@@ -105,7 +141,8 @@ export async function getCinemaProjectById(id: string): Promise<CinemaProject | 
     )) as Record<string, unknown>[];
     return rows[0] ? rowToCinemaProject(rows[0]) : null;
   }
-  return _devStore.find((p) => p.id === id) ?? null;
+  const found = _devStore.find((p) => p.id === id);
+  return found ? attachDevCounts(found) : null;
 }
 
 export async function updateCinemaProject(id: string, data: UpdateCinemaProjectInput): Promise<void> {

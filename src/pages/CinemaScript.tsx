@@ -5,7 +5,7 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
 import { ProTipPanel } from "@/components/cinema/ProTipPanel";
-import { getCinemaProjectById, updateCinemaProject } from "@/lib/cinemaProjects";
+import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
 import { createScriptVersion, getScriptVersions } from "@/lib/cinemaScriptVersions";
 import { generateScriptDraft, refineScript, SCRIPT_QUESTIONS } from "@/lib/cinemaScriptGeneration";
 import { AI_MODELS, getConnectedModels, pickAvailableModel } from "@/lib/aiConfig";
@@ -60,13 +60,16 @@ export function CinemaScript() {
     if (!id) return;
     setSaving(true);
     try {
+      const status = content.trim() && project ? nextCinemaProjectStatus(project.status, "scripting") : project?.status;
       await updateCinemaProject(id, {
         script_idea: idea.trim() || undefined,
         script_runtime_target: runtime.trim() || undefined,
         script_setting: setting.trim() || undefined,
         script_tone: tone.trim() || undefined,
         script_content: content.trim() || undefined,
+        status,
       });
+      if (status) setProject((prev) => (prev ? { ...prev, status } : prev));
       toast("Script saved", "success");
     } catch {
       toast("Failed to save script", "error");
@@ -140,7 +143,7 @@ export function CinemaScript() {
         script_tone: tone.trim() || undefined,
         script_content: content.trim() || undefined,
         script_status: "approved",
-        status: project?.status === "draft" ? "assets" : project?.status,
+        status: nextCinemaProjectStatus(project?.status ?? "draft", "assets"),
       });
       toast("Script approved — Assets stage unlocked", "success");
       load();

@@ -1,14 +1,24 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Clapperboard, Plus, ScanEye } from "lucide-react";
+import { Archive, ArchiveRestore, Clapperboard, Plus, ScanEye, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { NewCinemaProjectModal } from "@/components/cinema/NewCinemaProjectModal";
-import { getCinemaProjects } from "@/lib/cinemaProjects";
+import { deleteCinemaProject, getCinemaProjects, updateCinemaProject } from "@/lib/cinemaProjects";
 import { getProviderCapability } from "@/lib/videoProviderCapabilities";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
-import type { CinemaProject } from "@/types";
+import type { CinemaProject, CinemaProjectStatus } from "@/types";
+
+// Restoring from "archived" has no stored "previous status" to fall back to, so derive the
+// most accurate non-archived status from the project's own real progress signals instead of
+// guessing "draft" (which would be wrong for a project that already has scenes).
+function deriveActiveStatus(project: CinemaProject): CinemaProjectStatus {
+  if ((project.scene_count ?? 0) > 0) return "scenes";
+  if (project.script_status === "approved") return "assets";
+  if (project.script_content?.trim()) return "scripting";
+  return "draft";
+}
 
 const STATUS_DOT: Record<CinemaProject["status"], string> = {
   draft: "bg-readable",
@@ -19,15 +29,44 @@ const STATUS_DOT: Record<CinemaProject["status"], string> = {
   archived: "bg-white/20",
 };
 
-function ProjectCard({ project, onClick }: { project: CinemaProject; onClick: () => void }) {
+function ProjectCard({
+  project,
+  onClick,
+  onToggleArchive,
+  onDelete,
+}: {
+  project: CinemaProject;
+  onClick: () => void;
+  onToggleArchive: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) {
   const videoCapability = getProviderCapability(project.video_provider);
 
   return (
     <div
-      className="flex flex-col gap-4 p-5 rounded-card transition-all duration-150 border border-white/22 bg-white/7 hover:bg-white/10 hover:border-white/30"
+      className="group relative flex flex-col gap-4 p-5 rounded-card transition-all duration-150 border border-white/22 bg-white/7 hover:bg-white/10 hover:border-white/30"
       style={{ cursor: "pointer" }}
       onClick={onClick}
     >
+      <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise z-10">
+        <button
+          type="button"
+          onClick={onToggleArchive}
+          className="p-1.5 rounded-sm bg-black/60 text-muted hover:text-cyan transition-precise"
+          title={project.status === "archived" ? "Restore" : "Archive"}
+        >
+          {project.status === "archived" ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          className="p-1.5 rounded-sm bg-black/60 text-muted hover:text-red transition-precise"
+          title="Delete project"
+        >
+          <Trash2 size={12} />
+        </button>
+      </div>
+
       <div className="aspect-video rounded-sm overflow-hidden flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
         {project.thumbnail_data ? (
           <img src={project.thumbnail_data} alt={project.title} className="w-full h-full object-cover" />
@@ -117,6 +156,33 @@ export function CinemaStudioLibrary() {
     navigate(`/cinema-studio/${id}/script`);
   };
 
+  const handleToggleArchive = async (e: React.MouseEvent, project: CinemaProject) => {
+    e.stopPropagation();
+    const nextStatus: CinemaProjectStatus = project.status === "archived" ? deriveActiveStatus(project) : "archived";
+    try {
+      await updateCinemaProject(project.id, { status: nextStatus });
+      setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, status: nextStatus } : p)));
+      toast(project.status === "archived" ? "Project restored" : "Project archived", "info");
+    } catch {
+      toast("Failed to update project", "error");
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, project: CinemaProject) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete "${project.title}" and everything inside it — script, folders, assets, scenes, shots? This can't be undone.`)) return;
+    try {
+      await deleteCinemaProject(project.id);
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+      toast("Project deleted", "info");
+    } catch {
+      toast("Failed to delete project", "error");
+    }
+  };
+
+  const active = projects.filter((p) => p.status !== "archived");
+  const archived = projects.filter((p) => p.status === "archived");
+
   return (
     <PageContainer
       title="Cinema Studio"
@@ -150,10 +216,35 @@ export function CinemaStudioLibrary() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} onClick={() => navigate(`/cinema-studio/${p.id}/script`)} />
-          ))}
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            {active.map((p) => (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onClick={() => navigate(`/cinema-studio/${p.id}/script`)}
+                onToggleArchive={(e) => handleToggleArchive(e, p)}
+                onDelete={(e) => handleDelete(e, p)}
+              />
+            ))}
+          </div>
+
+          {archived.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <span className="system-label text-[11px]">ARCHIVED ({archived.length})</span>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 opacity-60">
+                {archived.map((p) => (
+                  <ProjectCard
+                    key={p.id}
+                    project={p}
+                    onClick={() => navigate(`/cinema-studio/${p.id}/script`)}
+                    onToggleArchive={(e) => handleToggleArchive(e, p)}
+                    onDelete={(e) => handleDelete(e, p)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

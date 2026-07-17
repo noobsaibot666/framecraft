@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowDown, ArrowUp, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CheckCircle2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
 import { ProTipPanel } from "@/components/cinema/ProTipPanel";
 import { SceneTimeline } from "@/components/cinema/SceneTimeline";
-import { getCinemaProjectById } from "@/lib/cinemaProjects";
+import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
 import {
   createCinemaScene,
   deleteCinemaScene,
@@ -52,6 +52,29 @@ export function CinemaScenes() {
     getScenesForProject(id).then(setScenes).catch(() => {});
   };
 
+  // First scene created for a project means it's genuinely into the Scene Generation stage —
+  // bump status forward (never backward: nextCinemaProjectStatus is a no-op if already further
+  // along, e.g. re-splitting a script into more scenes on an already-"scenes" project).
+  const bumpToScenesStatus = async () => {
+    if (!id || !project) return;
+    const status = nextCinemaProjectStatus(project.status, "scenes");
+    if (status === project.status) return;
+    await updateCinemaProject(id, { status });
+    setProject((prev) => (prev ? { ...prev, status } : prev));
+  };
+
+  const handleToggleComplete = async () => {
+    if (!id || !project) return;
+    const status = project.status === "complete" ? "scenes" : "complete";
+    try {
+      await updateCinemaProject(id, { status });
+      setProject((prev) => (prev ? { ...prev, status } : prev));
+      toast(status === "complete" ? "Project marked complete" : "Project reopened", "success");
+    } catch {
+      toast("Failed to update status", "error");
+    }
+  };
+
   const handleSplit = async () => {
     if (!id || !project?.script_content?.trim()) { toast("Approve a script first", "error"); return; }
     setSplitting(true);
@@ -69,6 +92,7 @@ export function CinemaScenes() {
         accent_index: accentIndexForSortOrder(scenes.length + i),
       })));
       reload();
+      bumpToScenesStatus();
       toast(`${found.length} scene${found.length !== 1 ? "s" : ""} created from script`, "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to split script", "error");
@@ -88,6 +112,7 @@ export function CinemaScenes() {
       });
       setNewTitle("");
       reload();
+      bumpToScenesStatus();
       toast("Scene added", "success");
     } catch {
       toast("Failed to add scene", "error");
@@ -141,7 +166,14 @@ export function CinemaScenes() {
     <PageContainer
       title={project.title}
       subtitle="SCENE GENERATION"
-      action={<CinemaStageTabs projectId={id} active="scenes" />}
+      action={
+        <div className="flex items-center gap-3">
+          <Button variant={project.status === "complete" ? "muted" : "accent"} size="sm" onClick={handleToggleComplete}>
+            <CheckCircle2 size={11} /> {project.status === "complete" ? "Reopen" : "Mark Complete"}
+          </Button>
+          <CinemaStageTabs projectId={id} active="scenes" />
+        </div>
+      }
     >
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
         <div className="flex flex-col gap-6 xl:col-span-3">

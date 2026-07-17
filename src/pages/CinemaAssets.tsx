@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Download, FolderTree as FolderTreeIcon, LayoutGrid, Layers, Plus, Sparkles, SquareStack, Star } from "lucide-react";
+import { Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
@@ -12,10 +12,10 @@ import { MoodboardCanvas } from "@/components/cinema/MoodboardCanvas";
 import { MergeAssetsModal } from "@/components/cinema/MergeAssetsModal";
 import { MIN_MERGE_SOURCES } from "@/lib/assetMerge";
 import { exportAssetsWithNaming } from "@/lib/cinemaExport";
-import { getCinemaProjectById } from "@/lib/cinemaProjects";
+import { getCinemaProjectById, updateCinemaProject } from "@/lib/cinemaProjects";
 import { createCinemaFolder, deleteCinemaFolder, getFoldersForProject, getOrCreateMasterFolder, MASTER_FOLDER_NAMES, updateCinemaFolder } from "@/lib/cinemaFolders";
 import { suggestFoldersFromScript, type SuggestedFolder } from "@/lib/cinemaFolderSuggestions";
-import { computeGridPosition, createCinemaAsset, getAssetsForFolder, getAssetsForProject, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
+import { computeGridPosition, createCinemaAsset, deleteCinemaAsset, getAssetsForFolder, getAssetsForProject, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { ACCENT_COLORS } from "@/lib/storytelling";
 import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
 import { useToastStore } from "@/stores/useToastStore";
@@ -232,6 +232,30 @@ export function CinemaAssets() {
     }
   };
 
+  const handleDeleteAsset = async (asset: CinemaAsset) => {
+    if (!window.confirm(`Delete "${asset.title}"? This can't be undone.`)) return;
+    try {
+      await deleteCinemaAsset(asset.id);
+      if (selectedAssetId === asset.id) setSelectedAssetId(undefined);
+      reloadAssets();
+      toast("Asset deleted", "info");
+    } catch {
+      toast("Failed to delete asset", "error");
+    }
+  };
+
+  const handleSetAsCover = async (asset: CinemaAsset) => {
+    const cover = asset.thumbnail_data ?? asset.file_data;
+    if (!id || !cover) return;
+    try {
+      await updateCinemaProject(id, { thumbnail_data: cover });
+      setProject((prev) => (prev ? { ...prev, thumbnail_data: cover } : prev));
+      toast("Set as project cover", "success");
+    } catch {
+      toast("Failed to set cover", "error");
+    }
+  };
+
   const creatingLabel = creatingUnder === undefined
     ? null
     : creatingUnder === null
@@ -432,15 +456,34 @@ export function CinemaAssets() {
               {assets.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                   {assets.map((a) => (
-                    <button
+                    <div
                       key={a.id}
-                      type="button"
                       onClick={() => setSelectedAssetId(a.id)}
                       className={cn(
-                        "flex flex-col gap-2 p-3 rounded-sm border text-left transition-precise",
+                        "group relative flex flex-col gap-2 p-3 rounded-sm border text-left cursor-pointer transition-precise",
                         selectedAssetId === a.id ? "border-cyan/55 bg-cyan/10" : "border-white/12 hover:border-white/30"
                       )}
                     >
+                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
+                        {(a.thumbnail_data || a.file_data) && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleSetAsCover(a); }}
+                            className="p-1 rounded-sm bg-black/60 text-muted hover:text-cyan transition-precise"
+                            title="Use as project cover"
+                          >
+                            <ImageIcon size={11} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteAsset(a); }}
+                          className="p-1 rounded-sm bg-black/60 text-muted hover:text-red transition-precise"
+                          title="Delete asset"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                       {a.thumbnail_data && (
                         <img src={a.thumbnail_data} alt={a.title} className="w-full aspect-square object-cover rounded-sm" />
                       )}
@@ -452,7 +495,7 @@ export function CinemaAssets() {
                       {a.merged_from && a.merged_from.length > 0 && (
                         <span className="font-mono text-[8px] text-cyan tracking-widest uppercase">MERGED · {a.merged_from.length} sources</span>
                       )}
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}

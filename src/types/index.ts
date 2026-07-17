@@ -583,3 +583,260 @@ export interface UpdateShotInput {
   notes?: string | null;
   sort_order?: number;
 }
+
+// ─── Cinema Studio (Sprint 13) ─────────────────────────────────
+// Independent video-production subsystem: script → folder-organized assets
+// (moodboard) → scene/shot direction. Deliberately separate from Project/
+// Prompt/shot_sequence, which serve the unrelated image-ad workflow.
+
+export type CinemaProjectStatus = "draft" | "scripting" | "assets" | "scenes" | "complete" | "archived";
+export type CinemaScriptStatus = "draft" | "approved";
+export type CinemaFolderKind = "character" | "location" | "prop" | "other";
+export type CinemaAssetType = "character_sheet" | "location" | "prop" | "other";
+export type CinemaShotType = ShotType | "b_roll";
+export type CinemaSceneStatus = "draft" | "directing" | "ready" | "exported";
+export type CinemaShotStatus = "draft" | "ready" | "exported";
+
+export interface CinemaProject {
+  id: string;
+  title: string;
+  status: CinemaProjectStatus;
+  script_model?: string;
+  image_provider?: Provider;
+  video_provider?: Provider;
+  script_content?: string;
+  script_idea?: string;
+  script_runtime_target?: string;
+  script_setting?: string;
+  script_tone?: string;
+  script_status: CinemaScriptStatus;
+  notes?: string;
+  thumbnail_data?: string;
+  created_at: string;
+  updated_at: string;
+  // Counts populated on query
+  folder_count?: number;
+  asset_count?: number;
+  scene_count?: number;
+  shot_count?: number;
+}
+
+export interface CreateCinemaProjectInput {
+  title: string;
+  script_model?: string;
+  image_provider?: Provider;
+  video_provider?: Provider;
+  notes?: string;
+}
+
+export interface UpdateCinemaProjectInput {
+  title?: string;
+  status?: CinemaProjectStatus;
+  script_model?: string;
+  image_provider?: Provider;
+  video_provider?: Provider;
+  script_content?: string;
+  script_idea?: string;
+  script_runtime_target?: string;
+  script_setting?: string;
+  script_tone?: string;
+  script_status?: CinemaScriptStatus;
+  notes?: string;
+  thumbnail_data?: string;
+}
+
+export interface CinemaScriptVersion {
+  id: string;
+  project_id: string;
+  content: string;
+  label?: string;
+  created_at: string;
+}
+
+export interface CinemaShotPromptVersion {
+  id: string;
+  shot_id: string;
+  content: string;
+  label?: string;
+  created_at: string;
+}
+
+export interface CinemaFolder {
+  id: string;
+  project_id: string;
+  parent_id?: string;
+  name: string;
+  kind: CinemaFolderKind;
+  description?: string;
+  accent_color?: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCinemaFolderInput {
+  project_id: string;
+  parent_id?: string;
+  name: string;
+  kind?: CinemaFolderKind;
+  description?: string;
+  accent_color?: string;
+  sort_order?: number;
+}
+
+export interface UpdateCinemaFolderInput {
+  name?: string;
+  kind?: CinemaFolderKind;
+  description?: string | null;
+  accent_color?: string | null;
+  parent_id?: string | null;
+  sort_order?: number;
+}
+
+export interface CinemaAsset {
+  id: string;
+  project_id: string;
+  folder_id: string;
+  tag: string;
+  title: string;
+  asset_type: CinemaAssetType;
+  prompt_text?: string;
+  prompt_id?: string;
+  file_data?: string;
+  thumbnail_data?: string;
+  is_primary: boolean;
+  merged_from?: string[];
+  canvas_x: number;
+  canvas_y: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCinemaAssetInput {
+  project_id: string;
+  folder_id: string;
+  tag: string;
+  title: string;
+  asset_type?: CinemaAssetType;
+  prompt_text?: string;
+  prompt_id?: string;
+  file_data?: string;
+  thumbnail_data?: string;
+  is_primary?: boolean;
+  merged_from?: string[];
+  canvas_x?: number;
+  canvas_y?: number;
+  sort_order?: number;
+}
+
+export interface UpdateCinemaAssetInput {
+  folder_id?: string;
+  tag?: string;
+  title?: string;
+  asset_type?: CinemaAssetType;
+  prompt_text?: string | null;
+  prompt_id?: string | null;
+  file_data?: string | null;
+  thumbnail_data?: string | null;
+  is_primary?: boolean;
+  merged_from?: string[] | null;
+  canvas_x?: number;
+  canvas_y?: number;
+  sort_order?: number;
+}
+
+export interface CinemaScene {
+  id: string;
+  project_id: string;
+  sort_order: number;
+  title: string;
+  script_excerpt?: string;
+  summary?: string;
+  mood?: string;
+  accent_index: number;
+  status: CinemaSceneStatus;
+  created_at: string;
+  updated_at: string;
+  // Count populated on query
+  shot_count?: number;
+}
+
+export interface CreateCinemaSceneInput {
+  project_id: string;
+  sort_order?: number;
+  title: string;
+  script_excerpt?: string;
+  summary?: string;
+  mood?: string;
+  accent_index?: number;
+}
+
+export interface UpdateCinemaSceneInput {
+  sort_order?: number;
+  title?: string;
+  script_excerpt?: string | null;
+  summary?: string | null;
+  mood?: string | null;
+  accent_index?: number;
+  status?: CinemaSceneStatus;
+}
+
+export interface CinemaShot {
+  id: string;
+  scene_id: string;
+  project_id: string;
+  sort_order: number;
+  label: string;
+  shot_type: CinemaShotType;
+  description?: string;
+  director_notes?: string;
+  dop_notes?: string;
+  camera_notes?: string;
+  lighting_notes?: string;
+  sound_notes?: string;
+  linked_asset_ids?: string[];
+  transition_in?: string;
+  transition_out?: string;
+  generated_prompt?: string;
+  prompt_id?: string;
+  is_broll: boolean;
+  status: CinemaShotStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCinemaShotInput {
+  scene_id: string;
+  project_id: string;
+  sort_order?: number;
+  label: string;
+  shot_type?: CinemaShotType;
+  description?: string;
+  director_notes?: string;
+  dop_notes?: string;
+  camera_notes?: string;
+  lighting_notes?: string;
+  sound_notes?: string;
+  linked_asset_ids?: string[];
+  is_broll?: boolean;
+}
+
+export interface UpdateCinemaShotInput {
+  sort_order?: number;
+  label?: string;
+  shot_type?: CinemaShotType;
+  description?: string | null;
+  director_notes?: string | null;
+  dop_notes?: string | null;
+  camera_notes?: string | null;
+  lighting_notes?: string | null;
+  sound_notes?: string | null;
+  linked_asset_ids?: string[] | null;
+  transition_in?: string | null;
+  transition_out?: string | null;
+  generated_prompt?: string | null;
+  prompt_id?: string | null;
+  is_broll?: boolean;
+  status?: CinemaShotStatus;
+}

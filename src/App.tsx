@@ -37,6 +37,11 @@ const CampaignLibrary = lazy(() => import("@/pages/CampaignLibrary").then((m) =>
 const CampaignDetail = lazy(() => import("@/pages/CampaignDetail").then((m) => ({ default: m.CampaignDetail })));
 const TokenDetail = lazy(() => import("@/pages/TokenDetail").then((m) => ({ default: m.TokenDetail })));
 const TokenLibrary = lazy(() => import("@/pages/TokenLibrary").then((m) => ({ default: m.TokenLibrary })));
+const CinemaStudioLibrary = lazy(() => import("@/pages/CinemaStudioLibrary").then((m) => ({ default: m.CinemaStudioLibrary })));
+const CinemaScript = lazy(() => import("@/pages/CinemaScript").then((m) => ({ default: m.CinemaScript })));
+const CinemaAssets = lazy(() => import("@/pages/CinemaAssets").then((m) => ({ default: m.CinemaAssets })));
+const CinemaScenes = lazy(() => import("@/pages/CinemaScenes").then((m) => ({ default: m.CinemaScenes })));
+const CinemaShotEditor = lazy(() => import("@/pages/CinemaShotEditor").then((m) => ({ default: m.CinemaShotEditor })));
 const NotFound = lazy(() => import("@/pages/NotFound").then((m) => ({ default: m.NotFound })));
 
 const queryClient = new QueryClient({
@@ -97,6 +102,11 @@ export default function App() {
               <Route path="/projects/:id/assistant" element={routeElement(<ProjectAssistant />)} />
               <Route path="/projects/:id/export" element={routeElement(<ProjectExport />)} />
               <Route path="/projects/:id/sequence" element={routeElement(<ProjectSequence />)} />
+              <Route path="/cinema-studio" element={routeElement(<CinemaStudioLibrary />)} />
+              <Route path="/cinema-studio/:id/script" element={routeElement(<CinemaScript />)} />
+              <Route path="/cinema-studio/:id/assets" element={routeElement(<CinemaAssets />)} />
+              <Route path="/cinema-studio/:id/scenes" element={routeElement(<CinemaScenes />)} />
+              <Route path="/cinema-studio/:id/scenes/:sceneId" element={routeElement(<CinemaShotEditor />)} />
               <Route path="/settings" element={routeElement(<Settings />)} />
               <Route path="*" element={routeElement(<NotFound />)} />
             </Route>

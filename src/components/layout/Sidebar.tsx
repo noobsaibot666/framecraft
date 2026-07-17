@@ -4,6 +4,7 @@ import {
   Archive,
   BookOpen,
   Briefcase,
+  Clapperboard,
   FileText,
   Film,
   GitCompare,
@@ -32,6 +33,12 @@ const NAV_GROUPS = [
       { label: "Campaigns", to: "/campaigns", icon: Briefcase },
       { label: "Projects", to: "/projects", icon: Archive },
       { label: "Queue", to: "/queue", icon: ListChecks },
+    ],
+  },
+  {
+    label: "CINEMA STUDIO",
+    items: [
+      { label: "Cinema Studio", to: "/cinema-studio", icon: Clapperboard },
     ],
   },
   {

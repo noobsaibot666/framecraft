@@ -232,6 +232,18 @@ pub fn run() {
             sql: include_str!("../migrations/037_duplicate_dismissals.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 38,
+            description: "cinema_studio",
+            sql: include_str!("../migrations/038_cinema_studio.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 39,
+            description: "cinema_shot_prompt_versions",
+            sql: include_str!("../migrations/039_cinema_shot_prompt_versions.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

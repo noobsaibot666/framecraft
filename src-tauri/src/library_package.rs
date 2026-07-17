@@ -730,13 +730,20 @@ const REFERENCE_COLUMNS: [&str; 16] = [
     "updated_at",
 ];
 
-const REQUIRED_RELEASE_TABLES: [&str; 34] = [
+const REQUIRED_RELEASE_TABLES: [&str; 41] = [
     "ai_suggestion_events",
     "app_meta",
     "assistant_messages",
     "assistant_threads",
     "avoidance_patterns",
     "campaigns",
+    "cinema_assets",
+    "cinema_folders",
+    "cinema_projects",
+    "cinema_scenes",
+    "cinema_script_versions",
+    "cinema_shot_prompt_versions",
+    "cinema_shots",
     "comparison_items",
     "comparison_sessions",
     "creative_directions",
@@ -1031,6 +1038,56 @@ const FK_DUPLICATE_DISMISSAL: &[MergeForeignKey] = &[
         table: "prompts",
     },
 ];
+const FK_CINEMA_SCRIPT_VERSION: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "cinema_projects",
+}];
+const FK_CINEMA_FOLDER: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "cinema_projects",
+    },
+    MergeForeignKey {
+        column: "parent_id",
+        table: "cinema_folders",
+    },
+];
+const FK_CINEMA_ASSET: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "project_id",
+        table: "cinema_projects",
+    },
+    MergeForeignKey {
+        column: "folder_id",
+        table: "cinema_folders",
+    },
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+];
+const FK_CINEMA_SCENE: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "project_id",
+    table: "cinema_projects",
+}];
+const FK_CINEMA_SHOT: &[MergeForeignKey] = &[
+    MergeForeignKey {
+        column: "scene_id",
+        table: "cinema_scenes",
+    },
+    MergeForeignKey {
+        column: "project_id",
+        table: "cinema_projects",
+    },
+    MergeForeignKey {
+        column: "prompt_id",
+        table: "prompts",
+    },
+];
+const FK_CINEMA_SHOT_PROMPT_VERSION: &[MergeForeignKey] = &[MergeForeignKey {
+    column: "shot_id",
+    table: "cinema_shots",
+}];
 
 const CAMPAIGN_COLUMNS: &[&str] = &[
     "id",
@@ -1278,6 +1335,95 @@ const AI_SUGGESTION_EVENT_COLUMNS: &[&str] = &[
     "provider",
     "created_at",
 ];
+const CINEMA_PROJECT_COLUMNS: &[&str] = &[
+    "id",
+    "title",
+    "status",
+    "script_model",
+    "image_provider",
+    "video_provider",
+    "script_content",
+    "script_idea",
+    "script_runtime_target",
+    "script_setting",
+    "script_tone",
+    "script_status",
+    "notes",
+    "thumbnail_data",
+    "created_at",
+    "updated_at",
+];
+const CINEMA_SCRIPT_VERSION_COLUMNS: &[&str] =
+    &["id", "project_id", "content", "label", "created_at"];
+const CINEMA_FOLDER_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "parent_id",
+    "name",
+    "kind",
+    "description",
+    "accent_color",
+    "sort_order",
+    "created_at",
+    "updated_at",
+];
+const CINEMA_ASSET_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "folder_id",
+    "tag",
+    "title",
+    "asset_type",
+    "prompt_text",
+    "prompt_id",
+    "file_data",
+    "thumbnail_data",
+    "is_primary",
+    "merged_from",
+    "canvas_x",
+    "canvas_y",
+    "sort_order",
+    "created_at",
+    "updated_at",
+];
+const CINEMA_SCENE_COLUMNS: &[&str] = &[
+    "id",
+    "project_id",
+    "sort_order",
+    "title",
+    "script_excerpt",
+    "summary",
+    "mood",
+    "accent_index",
+    "status",
+    "created_at",
+    "updated_at",
+];
+const CINEMA_SHOT_COLUMNS: &[&str] = &[
+    "id",
+    "scene_id",
+    "project_id",
+    "sort_order",
+    "label",
+    "shot_type",
+    "description",
+    "director_notes",
+    "dop_notes",
+    "camera_notes",
+    "lighting_notes",
+    "sound_notes",
+    "linked_asset_ids",
+    "transition_in",
+    "transition_out",
+    "generated_prompt",
+    "prompt_id",
+    "is_broll",
+    "status",
+    "created_at",
+    "updated_at",
+];
+const CINEMA_SHOT_PROMPT_VERSION_COLUMNS: &[&str] =
+    &["id", "shot_id", "content", "label", "created_at"];
 
 const MERGE_MANIFEST: &[MergeTableSpec] = &[
     MergeTableSpec {
@@ -1541,6 +1687,62 @@ const MERGE_MANIFEST: &[MergeTableSpec] = &[
         columns: LEARNED_FORMULA_COLUMNS,
         identity: MergeIdentity::TargetOwned(&["provider"]),
         foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_projects",
+        columns: CINEMA_PROJECT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: &[],
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_folders",
+        columns: CINEMA_FOLDER_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_FOLDER,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_assets",
+        columns: CINEMA_ASSET_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_ASSET,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_scenes",
+        columns: CINEMA_SCENE_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_SCENE,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_shots",
+        columns: CINEMA_SHOT_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_SHOT,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_shot_prompt_versions",
+        columns: CINEMA_SHOT_PROMPT_VERSION_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_SHOT_PROMPT_VERSION,
+        media_columns: &[],
+        user_only: false,
+    },
+    MergeTableSpec {
+        table: "cinema_script_versions",
+        columns: CINEMA_SCRIPT_VERSION_COLUMNS,
+        identity: MergeIdentity::Id(&[]),
+        foreign_keys: FK_CINEMA_SCRIPT_VERSION,
         media_columns: &[],
         user_only: false,
     },
@@ -2377,7 +2579,10 @@ fn excluded_foreign_key_policy(table: &str, column: &str) -> ExcludedForeignKeyP
         | ("shot_sequence", "result_id")
         | ("direction_storyboards", "prompt_id")
         | ("inconsistency_events", "prompt_id")
-        | ("ai_suggestion_events", "prompt_id") => ExcludedForeignKeyPolicy::Null,
+        | ("ai_suggestion_events", "prompt_id")
+        | ("cinema_folders", "parent_id")
+        | ("cinema_assets", "prompt_id")
+        | ("cinema_shots", "prompt_id") => ExcludedForeignKeyPolicy::Null,
         _ => ExcludedForeignKeyPolicy::Exclude,
     }
 }
@@ -3116,7 +3321,9 @@ fn has_previous_release_schema(db_path: &str) -> Result<bool, String> {
                 **table,
                 "campaigns" | "creative_directions" | "shot_sequence" | "inconsistency_events"
                     | "direction_storyboards" | "learned_formulas" | "ai_suggestion_events"
-                    | "duplicate_dismissals"
+                    | "duplicate_dismissals" | "cinema_projects" | "cinema_folders"
+                    | "cinema_assets" | "cinema_scenes" | "cinema_shots"
+                    | "cinema_script_versions" | "cinema_shot_prompt_versions"
             )
         })
         .all(|table| connection_table_exists(&conn, table)))
@@ -3311,6 +3518,14 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
     )
     .map_err(|error| error.to_string())?;
 
+    tx.execute_batch(include_str!("../migrations/038_cinema_studio.sql"))
+        .map_err(|error| error.to_string())?;
+
+    tx.execute_batch(include_str!(
+        "../migrations/039_cinema_shot_prompt_versions.sql"
+    ))
+    .map_err(|error| error.to_string())?;
+
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
@@ -3353,7 +3568,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 34] {
+fn migration_sql() -> [&'static str; 36] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3389,6 +3604,8 @@ fn migration_sql() -> [&'static str; 34] {
         include_str!("../migrations/035_learned_formulas.sql"),
         include_str!("../migrations/036_ai_suggestion_events.sql"),
         include_str!("../migrations/037_duplicate_dismissals.sql"),
+        include_str!("../migrations/038_cinema_studio.sql"),
+        include_str!("../migrations/039_cinema_shot_prompt_versions.sql"),
     ]
 }
 
@@ -5095,6 +5312,13 @@ mod tests {
              INSERT INTO learned_formulas(provider,steps,updated_at) VALUES('midjourney','[\"Subject\"]','t');
              INSERT INTO ai_suggestion_events(id,tool,field,action,suggestion,prompt_id,provider,created_at) VALUES('suggestion-event','analyze_prompt','improvement:lighting','accepted','use softer light','p','midjourney','t');
              INSERT INTO duplicate_dismissals(id,source_prompt_id,candidate_prompt_id,created_at) VALUES('dismissal','p','p','t');
+             INSERT INTO cinema_projects(id,title,status,created_at,updated_at) VALUES('cin-proj','Source cinema project','draft','t','t');
+             INSERT INTO cinema_folders(id,project_id,name,created_at,updated_at) VALUES('cin-folder','cin-proj','Source folder','t','t');
+             INSERT INTO cinema_scenes(id,project_id,title,created_at,updated_at) VALUES('cin-scene','cin-proj','Source scene','t','t');
+             INSERT INTO cinema_assets(id,project_id,folder_id,tag,title,prompt_id,created_at,updated_at) VALUES('cin-asset','cin-proj','cin-folder','ASSET-1','Source asset','p','t','t');
+             INSERT INTO cinema_shots(id,scene_id,project_id,label,prompt_id,created_at,updated_at) VALUES('cin-shot','cin-scene','cin-proj','Source shot','p','t','t');
+             INSERT INTO cinema_shot_prompt_versions(id,shot_id,content,created_at) VALUES('cin-shot-prompt-version','cin-shot','Source prompt version content','t');
+             INSERT INTO cinema_script_versions(id,project_id,content,created_at) VALUES('cin-script-version','cin-proj','Source script content','t');
              UPDATE app_meta SET value='source-must-not-overwrite' WHERE key='schema_version';
              INSERT INTO app_meta(key,value,updated_at) VALUES('source_custom_setting','kept','t');"
         ).unwrap();
@@ -5133,7 +5357,14 @@ mod tests {
              INSERT INTO direction_storyboards(id,direction_id,project_id,sort_order,shot_label,description,is_approved,prompt_id,accent_index,created_at,updated_at) VALUES('storyboard','direction','proj',9,'Shot 99','Target shot',0,'p',4,'t','t');
              INSERT INTO inconsistency_events(id,rule_id,rule_label,suggestion,prompt_id,provider,action,created_at) VALUES('event','rule','Target rule','ignore','p','kling','dismissed','t');
              INSERT INTO ai_suggestion_events(id,tool,field,action,suggestion,prompt_id,provider,created_at) VALUES('suggestion-event','comparison_decision','bundle','dismissed','ignore this','p','kling','t');
-             INSERT INTO duplicate_dismissals(id,source_prompt_id,candidate_prompt_id,created_at) VALUES('dismissal','p','p','t');"
+             INSERT INTO duplicate_dismissals(id,source_prompt_id,candidate_prompt_id,created_at) VALUES('dismissal','p','p','t');
+             INSERT INTO cinema_projects(id,title,status,created_at,updated_at) VALUES('cin-proj','Target cinema project','draft','t','t');
+             INSERT INTO cinema_folders(id,project_id,name,created_at,updated_at) VALUES('cin-folder','cin-proj','Target folder','t','t');
+             INSERT INTO cinema_scenes(id,project_id,title,created_at,updated_at) VALUES('cin-scene','cin-proj','Target scene','t','t');
+             INSERT INTO cinema_assets(id,project_id,folder_id,tag,title,prompt_id,created_at,updated_at) VALUES('cin-asset','cin-proj','cin-folder','ASSET-1','Target asset','p','t','t');
+             INSERT INTO cinema_shots(id,scene_id,project_id,label,prompt_id,created_at,updated_at) VALUES('cin-shot','cin-scene','cin-proj','Target shot','p','t','t');
+             INSERT INTO cinema_shot_prompt_versions(id,shot_id,content,created_at) VALUES('cin-shot-prompt-version','cin-shot','Target prompt version content','t');
+             INSERT INTO cinema_script_versions(id,project_id,content,created_at) VALUES('cin-script-version','cin-proj','Target script content','t');"
         ).unwrap();
         drop(source_conn);
         drop(target_conn);
@@ -6085,6 +6316,15 @@ mod tests {
             "learned_formulas" => (&["provider"], vec![Value::Text("midjourney".into())]),
             "ai_suggestion_events" => (&["id"], vec![Value::Text("suggestion-event".into())]),
             "duplicate_dismissals" => (&["id"], vec![Value::Text("dismissal".into())]),
+            "cinema_projects" => (&["id"], vec![Value::Text("cin-proj".into())]),
+            "cinema_folders" => (&["id"], vec![Value::Text("cin-folder".into())]),
+            "cinema_assets" => (&["id"], vec![Value::Text("cin-asset".into())]),
+            "cinema_scenes" => (&["id"], vec![Value::Text("cin-scene".into())]),
+            "cinema_shots" => (&["id"], vec![Value::Text("cin-shot".into())]),
+            "cinema_shot_prompt_versions" => {
+                (&["id"], vec![Value::Text("cin-shot-prompt-version".into())])
+            }
+            "cinema_script_versions" => (&["id"], vec![Value::Text("cin-script-version".into())]),
             "app_meta" => (&["key"], vec![Value::Text("source_custom_setting".into())]),
             _ => panic!("missing complete graph identity for {table}"),
         }

@@ -46,7 +46,7 @@ export function ProTipPanel({ stage, provider, title = "PRO TIPS" }: Props) {
       {open && (
         <div
           className="absolute right-0 top-full mt-2 z-40 flex flex-col gap-3 p-4 rounded-card w-80"
-          style={{ border: "var(--border-default)", background: "var(--surface-card)", boxShadow: "0 8px 24px rgba(0,0,0,0.45)" }}
+          style={{ border: "var(--border-strong)", background: "var(--color-panel)", boxShadow: "0 8px 24px rgba(0,0,0,0.45)" }}
         >
           <div className="flex items-center gap-2">
             <Lightbulb size={12} className="text-amber" />

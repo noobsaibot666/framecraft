@@ -256,7 +256,7 @@ export function CinemaShotEditor() {
       subtitle={`${project.title} / SHOT EDITOR`}
       action={
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/cinema-studio/${id}/scenes`)}>
+          <Button variant="ghost" size="xs" onClick={() => navigate(`/cinema-studio/${id}/scenes`)}>
             <ArrowLeft size={11} /> Back to Timeline
           </Button>
           <ProTipPanel stage="scenes" provider={project.video_provider} />
@@ -267,10 +267,10 @@ export function CinemaShotEditor() {
         {/* Left: shot list */}
         <div className="flex flex-col gap-3 xl:col-span-1">
           <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" onClick={() => handleAddShot(false)}>
+            <Button variant="primary" size="xs" onClick={() => handleAddShot(false)}>
               <Plus size={10} /> Shot
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleAddShot(true)}>
+            <Button variant="ghost" size="xs" onClick={() => handleAddShot(true)}>
               <Film size={10} /> B-Roll
             </Button>
           </div>
@@ -381,13 +381,13 @@ export function CinemaShotEditor() {
                 <div className="flex items-center justify-between">
                   <label className="system-label">GENERATED PROMPT</label>
                   <div className="flex items-center gap-2">
-                    <Button variant="ghost" size="sm" onClick={handleCopyPrompt} disabled={!selectedShot.generated_prompt?.trim()}>
+                    <Button variant="ghost" size="xs" onClick={handleCopyPrompt} disabled={!selectedShot.generated_prompt?.trim()}>
                       <Copy size={11} /> Copy
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={handleSavePromptVersion} disabled={!selectedShot.generated_prompt?.trim()}>
+                    <Button variant="ghost" size="xs" onClick={handleSavePromptVersion} disabled={!selectedShot.generated_prompt?.trim()}>
                       <History size={11} /> Save Version
                     </Button>
-                    <Button variant="primary" size="sm" onClick={handleGeneratePrompt} disabled={generating}>
+                    <Button variant="primary" size="xs" onClick={handleGeneratePrompt} disabled={generating}>
                       <Sparkles size={11} /> {generating ? "Writing…" : "Generate Prompt"}
                     </Button>
                     <ModelSelector value={modelId} onChange={setModelId} />
@@ -422,7 +422,7 @@ export function CinemaShotEditor() {
               <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
                 <div className="flex items-center justify-between">
                   <label className="system-label">TRANSITIONS</label>
-                  <Button variant="ghost" size="sm" onClick={handleSuggestTransitions} disabled={suggestingTransitions}>
+                  <Button variant="ghost" size="xs" onClick={handleSuggestTransitions} disabled={suggestingTransitions}>
                     <Sparkles size={10} /> {suggestingTransitions ? "Thinking…" : "Suggest"}
                   </Button>
                 </div>

@@ -244,6 +244,12 @@ pub fn run() {
             sql: include_str!("../migrations/039_cinema_shot_prompt_versions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 40,
+            description: "cinema_asset_versioning",
+            sql: include_str!("../migrations/040_cinema_asset_versioning.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

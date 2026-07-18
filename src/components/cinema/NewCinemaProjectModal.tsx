@@ -3,24 +3,10 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { createCinemaProject } from "@/lib/cinemaProjects";
 import { getConnectedModels, providerLabel } from "@/lib/aiConfig";
+import { IMAGE_PROVIDER_OPTIONS, VIDEO_PROVIDER_OPTIONS } from "@/lib/providerParameters";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
-
-const IMAGE_PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
-  { value: "nano_banana", label: "Nano Banana Pro" },
-  { value: "gpt_image", label: "GPT Image 2" },
-  { value: "midjourney", label: "Midjourney" },
-  { value: "flux", label: "Flux" },
-  { value: "ideogram", label: "Ideogram" },
-];
-
-const VIDEO_PROVIDER_OPTIONS: { value: Provider; label: string }[] = [
-  { value: "seedance", label: "Seedance" },
-  { value: "kling", label: "Kling" },
-  { value: "runway", label: "Runway" },
-  { value: "higgsfield", label: "Higgsfield" },
-];
 
 interface Props {
   onCreated: (id: string) => void;
@@ -176,10 +162,10 @@ export function NewCinemaProjectModal({ onCreated, onClose }: Props) {
         </div>
 
         <div className="flex items-center gap-2 px-6 py-5" style={{ borderTop: "var(--border-default)" }}>
-          <Button variant="primary" size="sm" onClick={handleCreate} disabled={!title.trim() || saving}>
+          <Button variant="primary" size="xs" onClick={handleCreate} disabled={!title.trim() || saving}>
             {saving ? "Creating…" : "Create Project"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="xs" onClick={onClose}>Cancel</Button>
         </div>
       </div>
     </div>

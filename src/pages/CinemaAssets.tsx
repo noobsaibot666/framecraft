@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
+import { Copy, Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Lock, Pipette, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
@@ -11,11 +11,12 @@ import { AssetPromptComposer } from "@/components/cinema/AssetPromptComposer";
 import { MoodboardCanvas } from "@/components/cinema/MoodboardCanvas";
 import { MergeAssetsModal } from "@/components/cinema/MergeAssetsModal";
 import { MIN_MERGE_SOURCES } from "@/lib/assetMerge";
-import { exportAssetsWithNaming } from "@/lib/cinemaExport";
+import { copyToClipboard, exportAssetsWithNaming } from "@/lib/cinemaExport";
+import { formatPromptWithParameters } from "@/lib/providerParameters";
 import { getCinemaProjectById, updateCinemaProject } from "@/lib/cinemaProjects";
 import { createCinemaFolder, deleteCinemaFolder, getFoldersForProject, getOrCreateMasterFolder, MASTER_FOLDER_NAMES, updateCinemaFolder } from "@/lib/cinemaFolders";
 import { suggestFoldersFromScript, type SuggestedFolder } from "@/lib/cinemaFolderSuggestions";
-import { computeGridPosition, createCinemaAsset, deleteCinemaAsset, getAssetsForFolder, getAssetsForProject, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
+import { computeGridPosition, createCinemaAsset, deleteCinemaAsset, getAssetsForFolder, getAssetsForProject, groupAssetVersions, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { ACCENT_COLORS } from "@/lib/storytelling";
 import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -39,6 +40,43 @@ const FOLDER_KIND_TO_ASSET_TYPE: Record<CinemaFolderKind, CinemaAssetType> = {
   other: "other",
 };
 
+// Only the first 3 ACCENT_COLORS are offered as one-click presets — the rest of the palette
+// stays reachable through the custom color picker to keep the folder color row compact.
+const PRESET_FOLDER_COLORS = ACCENT_COLORS.slice(0, 3);
+
+function FolderColorPicker({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+  const isPreset = PRESET_FOLDER_COLORS.includes(value);
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      {PRESET_FOLDER_COLORS.map((color) => (
+        <button
+          key={color}
+          type="button"
+          onClick={() => onChange(color)}
+          className={cn("w-4 h-4 rounded-full border transition-precise", value === color ? "border-white scale-110" : "border-white/20")}
+          style={{ background: color }}
+        />
+      ))}
+      <label
+        className={cn(
+          "relative w-4 h-4 rounded-full border flex items-center justify-center cursor-pointer transition-precise overflow-hidden",
+          !isPreset ? "border-white scale-110" : "border-white/20 hover:border-white/40"
+        )}
+        style={!isPreset ? { background: value } : undefined}
+        title="Custom color"
+      >
+        {isPreset && <Pipette size={9} className="text-muted" />}
+        <input
+          type="color"
+          value={isPreset ? "#ffffff" : value}
+          onChange={(e) => onChange(e.target.value)}
+          className="absolute inset-0 opacity-0 cursor-pointer"
+        />
+      </label>
+    </div>
+  );
+}
+
 export function CinemaAssets() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -56,6 +94,7 @@ export function CinemaAssets() {
   const [creatingUnder, setCreatingUnder] = useState<string | null | undefined>(undefined);
   const [newName, setNewName] = useState("");
   const [newKind, setNewKind] = useState<CinemaFolderKind>("other");
+  const [newColor, setNewColor] = useState<string>(PRESET_FOLDER_COLORS[0]);
 
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestedFolder[]>([]);
@@ -112,6 +151,16 @@ export function CinemaAssets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode, id]);
 
+  const handleCopySelectedPrompt = async (asset: CinemaAsset) => {
+    if (!asset.prompt_text?.trim()) return;
+    try {
+      await copyToClipboard(formatPromptWithParameters(asset.provider ?? "other", asset.prompt_text, asset.prompt_parameters));
+      toast("Prompt copied", "success");
+    } catch {
+      toast("Failed to copy prompt", "error");
+    }
+  };
+
   const handleCanvasPositionChange = async (assetId: string, x: number, y: number) => {
     try {
       await updateCinemaAsset(assetId, { canvas_x: x, canvas_y: y });
@@ -161,7 +210,7 @@ export function CinemaAssets() {
         parent_id: creatingUnder ?? undefined,
         name: newName.trim(),
         kind: newKind,
-        accent_color: ACCENT_COLORS[folders.length % ACCENT_COLORS.length],
+        accent_color: newColor,
       });
       setNewName("");
       setCreatingUnder(undefined);
@@ -373,7 +422,7 @@ export function CinemaAssets() {
             </div>
             <Button
               variant="accent"
-              size="sm"
+              size="xs"
               onClick={handleExportAssets}
               disabled={exporting || canvasAssets.every((a) => !a.file_data)}
               className="shrink-0"
@@ -392,7 +441,7 @@ export function CinemaAssets() {
               folders={folders}
               selectedId={selectedFolderId}
               onSelect={setSelectedFolderId}
-              onAddChild={(parentId) => { setCreatingUnder(parentId); setNewName(""); setNewKind("other"); }}
+              onAddChild={(parentId) => { setCreatingUnder(parentId); setNewName(""); setNewKind("other"); setNewColor(PRESET_FOLDER_COLORS[folders.length % PRESET_FOLDER_COLORS.length]); }}
               onDelete={handleDeleteFolder}
             />
           </div>
@@ -417,9 +466,13 @@ export function CinemaAssets() {
               >
                 {KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </select>
-              <div className="flex items-center gap-2">
-                <Button variant="primary" size="sm" onClick={handleCreateFolder} disabled={!newName.trim()}>Create</Button>
-                <Button variant="ghost" size="sm" onClick={() => setCreatingUnder(undefined)}>Cancel</Button>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[9px] text-muted tracking-widest uppercase">Color</span>
+                <FolderColorPicker value={newColor} onChange={setNewColor} />
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button variant="ghost" size="xs" onClick={() => setCreatingUnder(undefined)}>Cancel</Button>
+                <Button variant="primary" size="xs" onClick={handleCreateFolder} disabled={!newName.trim()}>Create</Button>
               </div>
             </div>
           )}
@@ -428,7 +481,7 @@ export function CinemaAssets() {
             <span className="system-label text-[11px]">SUGGEST FROM SCRIPT</span>
             <div className="flex items-center gap-1.5">
               <ModelSelector value={modelId} onChange={setModelId} className="flex-1 min-w-0" />
-              <Button variant="ghost" size="sm" onClick={handleSuggestFolders} disabled={suggesting} className="shrink-0">
+              <Button variant="ghost" size="xs" onClick={handleSuggestFolders} disabled={suggesting} className="shrink-0">
                 <Sparkles size={10} /> {suggesting ? "Reading…" : "Suggest"}
               </Button>
             </div>
@@ -474,17 +527,10 @@ export function CinemaAssets() {
                   >
                     {KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
                   </select>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {ACCENT_COLORS.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => handleUpdateSelectedFolder({ accent_color: color })}
-                        className={cn("w-4 h-4 rounded-full border transition-precise", selectedFolder.accent_color === color ? "border-white scale-110" : "border-white/20")}
-                        style={{ background: color }}
-                      />
-                    ))}
-                  </div>
+                  <FolderColorPicker
+                    value={selectedFolder.accent_color ?? PRESET_FOLDER_COLORS[0]}
+                    onChange={(color) => handleUpdateSelectedFolder({ accent_color: color })}
+                  />
                 </div>
                 <textarea
                   value={selectedFolder.description ?? ""}
@@ -500,11 +546,11 @@ export function CinemaAssets() {
                 <span className="system-label text-[11px]">ASSETS IN THIS FOLDER</span>
                 <div className="flex items-center gap-2">
                   {assets.filter((a) => !!a.file_data).length >= MIN_MERGE_SOURCES && (
-                    <Button variant="ghost" size="sm" onClick={() => setShowMerge(true)}>
+                    <Button variant="ghost" size="xs" onClick={() => setShowMerge(true)}>
                       <Layers size={10} /> Merge Assets
                     </Button>
                   )}
-                  <Button variant="ghost" size="sm" onClick={handleNewAsset}>
+                  <Button variant="ghost" size="xs" onClick={handleNewAsset}>
                     <Plus size={10} /> New Asset
                   </Button>
                 </div>
@@ -512,48 +558,72 @@ export function CinemaAssets() {
 
               {assets.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
-                  {assets.map((a) => (
-                    <div
-                      key={a.id}
-                      onClick={() => setSelectedAssetId(a.id)}
-                      className={cn(
-                        "group relative flex flex-col gap-2 p-3 rounded-sm border text-left cursor-pointer transition-precise",
-                        selectedAssetId === a.id ? "border-cyan/55 bg-cyan/10" : "border-white/12 hover:border-white/30"
-                      )}
-                    >
-                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
-                        {(a.thumbnail_data || a.file_data) && (
+                  {groupAssetVersions(assets).map((group) => {
+                    const groupKey = group[0].version_group_id ?? group[0].id;
+                    const active = group.find((v) => v.id === selectedAssetId) ?? group[group.length - 1];
+                    return (
+                      <div
+                        key={groupKey}
+                        onClick={() => setSelectedAssetId(active.id)}
+                        className={cn(
+                          "group relative flex flex-col gap-2 p-3 rounded-sm border text-left cursor-pointer transition-precise",
+                          selectedAssetId === active.id ? "border-cyan/55 bg-cyan/10" : "border-white/12 hover:border-white/30"
+                        )}
+                      >
+                        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise">
+                          {(active.thumbnail_data || active.file_data) && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handleSetAsCover(active); }}
+                              className="p-1 rounded-sm bg-black/60 text-muted hover:text-cyan transition-precise"
+                              title="Use as project cover"
+                            >
+                              <ImageIcon size={11} />
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); handleSetAsCover(a); }}
-                            className="p-1 rounded-sm bg-black/60 text-muted hover:text-cyan transition-precise"
-                            title="Use as project cover"
+                            onClick={(e) => { e.stopPropagation(); handleDeleteAsset(active); }}
+                            className="p-1 rounded-sm bg-black/60 text-muted hover:text-red transition-precise"
+                            title="Delete asset"
                           >
-                            <ImageIcon size={11} />
+                            <Trash2 size={11} />
                           </button>
+                        </div>
+                        {active.thumbnail_data && (
+                          <img src={active.thumbnail_data} alt={active.title} className="w-full aspect-square object-cover rounded-sm" />
                         )}
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteAsset(a); }}
-                          className="p-1 rounded-sm bg-black/60 text-muted hover:text-red transition-precise"
-                          title="Delete asset"
-                        >
-                          <Trash2 size={11} />
-                        </button>
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] text-cyan tracking-widest uppercase truncate">{active.tag}</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {active.locked && <Lock size={10} className="text-cyan" />}
+                            {active.is_primary && <Star size={10} className="text-amber" fill="currentColor" />}
+                          </div>
+                        </div>
+                        <span className="font-sans text-[13px] text-white truncate">{active.title}</span>
+                        {group.length > 1 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {group.map((v) => (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); setSelectedAssetId(v.id); }}
+                                className={cn(
+                                  "h-5 px-1.5 rounded-sm font-mono text-[9px] tracking-widest transition-precise",
+                                  v.id === active.id ? "bg-cyan/20 text-cyan" : "text-muted hover:text-white hover:bg-white/8"
+                                )}
+                              >
+                                V{v.version_number}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {active.merged_from && active.merged_from.length > 0 && (
+                          <span className="font-mono text-[8px] text-cyan tracking-widest uppercase">MERGED · {active.merged_from.length} sources</span>
+                        )}
                       </div>
-                      {a.thumbnail_data && (
-                        <img src={a.thumbnail_data} alt={a.title} className="w-full aspect-square object-cover rounded-sm" />
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] text-cyan tracking-widest uppercase truncate">{a.tag}</span>
-                        {a.is_primary && <Star size={10} className="text-amber shrink-0" fill="currentColor" />}
-                      </div>
-                      <span className="font-sans text-[13px] text-white truncate">{a.title}</span>
-                      {a.merged_from && a.merged_from.length > 0 && (
-                        <span className="font-mono text-[8px] text-cyan tracking-widest uppercase">MERGED · {a.merged_from.length} sources</span>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 
@@ -569,7 +639,14 @@ export function CinemaAssets() {
               )}
 
               {selectedAsset && (
-                <AssetPromptComposer key={selectedAsset.id} asset={selectedAsset} folder={selectedFolder} project={project} onChange={reloadAssets} />
+                <AssetPromptComposer
+                  key={selectedAsset.id}
+                  asset={selectedAsset}
+                  folder={selectedFolder}
+                  project={project}
+                  onChange={reloadAssets}
+                  onSelectAsset={setSelectedAssetId}
+                />
               )}
             </>
           ) : (
@@ -587,9 +664,30 @@ export function CinemaAssets() {
           )}
         </div>
 
-        {/* Right: script preview + counts */}
+        {/* Right: script preview + prompt preview + counts */}
         <div className="xl:col-span-1 flex flex-col gap-4">
           <ScriptPreviewPanel scriptContent={project.script_content} />
+          {selectedAsset?.prompt_text?.trim() && (
+            <div className="flex flex-col gap-2 p-4 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+              <div className="flex items-center justify-between">
+                <span className="system-label text-[11px]">PROMPT PREVIEW</span>
+                <div className="flex items-center gap-2">
+                  {selectedAsset.locked && (
+                    <span className="flex items-center gap-1 font-mono text-[9px] text-cyan tracking-widest uppercase">
+                      <Lock size={9} /> Locked
+                    </span>
+                  )}
+                  <span className="font-mono text-[9px] text-muted tracking-widest uppercase">{selectedAsset.provider ?? "—"}</span>
+                </div>
+              </div>
+              <p className="font-mono text-[11px] leading-relaxed text-readable whitespace-pre-wrap max-h-64 overflow-y-auto">
+                {formatPromptWithParameters(selectedAsset.provider ?? "other", selectedAsset.prompt_text, selectedAsset.prompt_parameters)}
+              </p>
+              <Button variant="ghost" size="xs" onClick={() => handleCopySelectedPrompt(selectedAsset)} className="self-end">
+                <Copy size={10} /> Copy Prompt
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-2 p-3 rounded-card font-mono text-[11px] text-muted" style={{ border: "var(--border-default)" }}>
             <Layers size={12} /> {folders.length} folder{folders.length !== 1 ? "s" : ""}
           </div>

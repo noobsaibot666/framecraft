@@ -189,7 +189,7 @@ export function CinemaStudioLibrary() {
       subtitle="VIDEO PRODUCTION WORKSPACE"
       description="Script → folder-organized assets → scene/shot direction, built for video generation."
       action={
-        <Button variant="primary" size="md" onClick={() => setShowCreate(true)}>
+        <Button variant="primary" size="xs" onClick={() => setShowCreate(true)}>
           <Plus size={11} /> New Project
         </Button>
       }
@@ -210,7 +210,7 @@ export function CinemaStudioLibrary() {
             <span className="font-mono text-[13px] text-readable text-center leading-relaxed">
               A Cinema Studio project takes a script through folder-organized assets to scene-by-scene shot direction.
             </span>
-            <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+            <Button variant="primary" size="xs" onClick={() => setShowCreate(true)}>
               <Plus size={10} /> Create First Project
             </Button>
           </div>

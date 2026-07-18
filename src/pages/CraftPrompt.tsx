@@ -302,87 +302,36 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (t: string[]) 
 }
 
 // ─── Provider Parameter Panels ────────────────────────────────
-
-export interface MJParams {
-  aspect_ratio: string; model_version: string; quality: string;
-  stylize: string; chaos: string; weird: string; stop: string; repeat: string;
-  seed: string; zoom: string; style: string; sw: string; sv: string;
-  sref_code: string; profile: string; no_prompt: string;
-  raw: boolean; hd: boolean; tile: boolean; fast: boolean; relax: boolean; exp: boolean;
-}
-export interface DalleParams { size: string; quality: string; style: string; }
-export interface SDParams { steps: string; cfg_scale: string; sampler: string; negative_prompt: string; seed: string; }
-
-/**
- * Build the `parameters` DB column for the given provider (audit doc 05 §1).
- * Pure — previously this logic only handled Midjourney inline in buildData(),
- * so DALL-E/SD params were never written to the DB at all.
- */
-export function buildProviderParameters(
-  provider: Provider,
-  mj: MJParams,
-  dalle: DalleParams,
-  sd: SDParams
-): Record<string, string | boolean> | undefined {
-  if (provider === "midjourney") {
-    const pp: Record<string, string | boolean> = {};
-    if (mj.profile)   pp.profile  = mj.profile;
-    if (mj.stylize)   pp.stylize  = mj.stylize;
-    if (mj.chaos)     pp.chaos    = mj.chaos;
-    if (mj.weird)     pp.weird    = mj.weird;
-    if (mj.quality)   pp.quality  = mj.quality;
-    if (mj.style)     pp.style    = mj.style;
-    if (mj.sw)        pp.sw       = mj.sw;
-    if (mj.sv)        pp.sv       = mj.sv;
-    if (mj.seed)      pp.seed     = mj.seed;
-    if (mj.zoom)      pp.zoom     = mj.zoom;
-    if (mj.stop)      pp.stop     = mj.stop;
-    if (mj.repeat)    pp.repeat   = mj.repeat;
-    if (mj.no_prompt) pp.no       = mj.no_prompt;
-    if (mj.raw)       pp.raw      = true;
-    if (mj.hd)        pp.hd       = true;
-    if (mj.tile)      pp.tile     = true;
-    if (mj.fast)      pp.fast     = true;
-    if (mj.relax)     pp.relax    = true;
-    if (mj.exp)       pp.exp      = true;
-    return Object.keys(pp).length ? pp : undefined;
-  }
-  if (provider === "dalle") {
-    const pp: Record<string, string | boolean> = {};
-    if (dalle.size)    pp.size    = dalle.size;
-    if (dalle.quality) pp.quality = dalle.quality;
-    if (dalle.style)   pp.style   = dalle.style;
-    return Object.keys(pp).length ? pp : undefined;
-  }
-  if (provider === "stable_diffusion") {
-    const pp: Record<string, string | boolean> = {};
-    if (sd.steps)           pp.steps           = sd.steps;
-    if (sd.cfg_scale)       pp.cfg_scale       = sd.cfg_scale;
-    if (sd.sampler)         pp.sampler         = sd.sampler;
-    if (sd.seed)            pp.seed            = sd.seed;
-    if (sd.negative_prompt) pp.negative_prompt = sd.negative_prompt;
-    return Object.keys(pp).length ? pp : undefined;
-  }
-  return undefined;
-}
-
-/** Restore DalleParams/SDParams from a loaded prompt's `parameters` column. Pure. */
-export function restoreDalleParams(pp: Record<string, unknown>): DalleParams {
-  return {
-    size:    String(pp.size    ?? ""),
-    quality: String(pp.quality ?? ""),
-    style:   String(pp.style   ?? ""),
-  };
-}
-export function restoreSDParams(pp: Record<string, unknown>): SDParams {
-  return {
-    steps:           String(pp.steps           ?? ""),
-    cfg_scale:       String(pp.cfg_scale        ?? ""),
-    sampler:         String(pp.sampler          ?? ""),
-    seed:            String(pp.seed             ?? ""),
-    negative_prompt: String(pp.negative_prompt  ?? ""),
-  };
-}
+// The parameter model itself (types, DB build/restore, option lists) now
+// lives in src/lib/providerParameters.ts, shared with Cinema Studio's asset
+// composer — re-exported here so existing imports (incl. this file's own
+// test, CraftPrompt.paramPersistence.test.ts) are unaffected.
+export {
+  buildProviderParameters,
+  restoreDalleParams,
+  restoreSDParams,
+  type MJParams,
+  type DalleParams,
+  type SDParams,
+} from "@/lib/providerParameters";
+import {
+  MJ_VERSIONS,
+  MJ_QUALITY,
+  MJ_STYLE,
+  DALLE_SIZES,
+  DALLE_QUALITY_OPTS,
+  DALLE_STYLE_OPTS,
+  SD_SAMPLERS,
+  EMPTY_MJ,
+  EMPTY_DALLE,
+  EMPTY_SD,
+  buildProviderParameters,
+  restoreDalleParams,
+  restoreSDParams,
+  type MJParams,
+  type DalleParams,
+  type SDParams,
+} from "@/lib/providerParameters";
 
 const ASPECT_RATIOS = [
   { value: "", label: "Select ratio…" },
@@ -394,61 +343,6 @@ const ASPECT_RATIOS = [
   { value: "2:3", label: "2:3 — Vertical" },
   { value: "21:9", label: "21:9 — Ultra-wide" },
   { value: "4:5", label: "4:5 — Instagram" },
-];
-
-const MJ_VERSIONS = [
-  { value: "", label: "Default" },
-  { value: "8.1", label: "v8.1 (latest)" },
-  { value: "8", label: "v8" },
-  { value: "7", label: "v7" },
-  { value: "6.1", label: "v6.1" },
-  { value: "6", label: "v6" },
-  { value: "5.2", label: "v5.2" },
-  { value: "niji 7", label: "Niji 7" },
-  { value: "niji 6", label: "Niji 6" },
-];
-
-const MJ_QUALITY = [
-  { value: "", label: "Default (1)" },
-  { value: "1", label: "1 — Standard" },
-  { value: ".5", label: ".5 — Half" },
-  { value: ".25", label: ".25 — Quarter" },
-  { value: "2", label: "2 — Double (v5 only)" },
-];
-
-const MJ_STYLE = [
-  { value: "", label: "Default" },
-  { value: "raw", label: "raw" },
-  { value: "cute", label: "cute (Niji)" },
-  { value: "expressive", label: "expressive (Niji)" },
-  { value: "original", label: "original (Niji)" },
-  { value: "scenic", label: "scenic (Niji)" },
-];
-
-const DALLE_SIZES = [
-  { value: "", label: "Default" },
-  { value: "1024x1024", label: "1024×1024 — Square" },
-  { value: "1792x1024", label: "1792×1024 — Landscape" },
-  { value: "1024x1792", label: "1024×1792 — Portrait" },
-];
-
-const DALLE_QUALITY_OPTS = [
-  { value: "", label: "Standard" },
-  { value: "hd", label: "HD" },
-];
-
-const DALLE_STYLE_OPTS = [
-  { value: "", label: "Vivid" },
-  { value: "natural", label: "Natural" },
-];
-
-const SD_SAMPLERS = [
-  { value: "", label: "Default" },
-  { value: "Euler a", label: "Euler a" },
-  { value: "DPM++ 2M Karras", label: "DPM++ 2M Karras" },
-  { value: "DDIM", label: "DDIM" },
-  { value: "UniPC", label: "UniPC" },
-  { value: "LMS", label: "LMS" },
 ];
 
 const MidjourneyParams = memo(function MidjourneyParams({ p, set, selectedSrefTitle, onBrowseSref, onClearSref, context }: {
@@ -1018,16 +912,6 @@ function removeClauseFromField(current: string, clause: string): string {
   if (index >= 0) parts.splice(index, 1);
   return parts.join(", ");
 }
-
-const EMPTY_MJ: MJParams = {
-  aspect_ratio: "", model_version: "", quality: "",
-  stylize: "", chaos: "", weird: "", stop: "", repeat: "",
-  seed: "", zoom: "", style: "", sw: "", sv: "",
-  sref_code: "", profile: "", no_prompt: "",
-  raw: false, hd: false, tile: false, fast: false, relax: false, exp: false,
-};
-const EMPTY_DALLE: DalleParams = { size: "", quality: "", style: "" };
-const EMPTY_SD: SDParams = { steps: "", cfg_scale: "", sampler: "", negative_prompt: "", seed: "" };
 
 // ─── In-progress draft persistence ─────────────────────────────
 // Keeps whatever the user has typed on a *new* (unsaved) prompt when they

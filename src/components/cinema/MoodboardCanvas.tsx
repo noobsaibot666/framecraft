@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useDrag, useGesture } from "@use-gesture/react";
-import { Maximize2, Minus, Plus, RotateCcw, Star, X } from "lucide-react";
+import { Lock, Maximize2, Minus, Plus, RotateCcw, Star, X } from "lucide-react";
+import { useShortcut } from "@/lib/shortcuts";
 import type { CinemaAsset, CinemaFolder } from "@/types";
 
 const CARD_W = 160;
@@ -62,15 +63,20 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
       className="absolute flex flex-col gap-1.5 p-2 rounded-sm cursor-grab active:cursor-grabbing touch-none"
       style={{
         left: pos.x, top: pos.y, width: CARD_W,
-        border: `1px solid ${folderColor}55`,
+        border: asset.locked ? "1px solid rgba(56,183,200,0.65)" : `1px solid ${folderColor}55`,
         background: "rgba(20,20,20,0.92)",
       }}
     >
-      <div className="aspect-square rounded-sm overflow-hidden flex items-center justify-center" style={{ background: "rgba(255,255,255,0.05)" }}>
+      <div className="aspect-square rounded-sm overflow-hidden flex items-center justify-center relative" style={{ background: "rgba(255,255,255,0.05)" }}>
         {asset.thumbnail_data ? (
           <img src={asset.thumbnail_data} alt={asset.title} className="w-full h-full object-cover pointer-events-none" draggable={false} />
         ) : (
           <span className="font-mono text-[9px] text-muted">{asset.tag}</span>
+        )}
+        {asset.locked && (
+          <span className="absolute top-1 left-1 flex items-center gap-0.5 px-1 py-0.5 rounded-sm bg-black/70 text-cyan" title="Locked — approved">
+            <Lock size={8} />
+          </span>
         )}
       </div>
       <div className="flex items-center justify-between gap-1">
@@ -153,6 +159,7 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
   };
 
   const lightboxAsset = assets.find((a) => a.id === lightboxId);
+  useShortcut("escape", () => setLightboxId(null), !!lightboxAsset);
 
   return (
     <div className="flex flex-col gap-2">
@@ -205,8 +212,13 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
           style={{ background: "var(--color-black)" }}
           onClick={() => setLightboxId(null)}
         >
-          <button type="button" onClick={() => setLightboxId(null)} className="absolute top-6 right-6 text-white/60 hover:text-white transition-precise">
-            <X size={20} />
+          <button
+            type="button"
+            onClick={() => setLightboxId(null)}
+            title="Close (Esc)"
+            className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/8 text-white/70 hover:bg-white/16 hover:text-white transition-precise"
+          >
+            <X size={18} />
           </button>
           <div className="flex flex-col items-center gap-3 max-w-3xl max-h-full">
             {lightboxAsset.file_data || lightboxAsset.thumbnail_data ? (

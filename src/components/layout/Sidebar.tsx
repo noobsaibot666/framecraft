@@ -213,94 +213,104 @@ export function Sidebar() {
     closeTimerRef.current = window.setTimeout(() => setDockOpen(false), 220);
   };
 
-  if (collapsed) {
-    return (
-      <>
-        {/* Thin always-present hover zone at the screen's left edge — hovering it reveals the dock. */}
+  return (
+    <>
+      {/* Single persistent element whose width animates between expanded and collapsed —
+          swapping between two different DOM trees (as this used to do) can't be CSS-
+          transitioned, which is why the fold/unfold had no animation before. The inner
+          content stays a fixed 208px and gets clipped by the outer overflow-hidden as it
+          shrinks, so it reads as a panel sliding away rather than text reflowing. */}
+      <aside
+        className={cn(
+          "flex flex-col shrink-0 overflow-hidden transition-[width] duration-300 ease-out",
+          collapsed ? "w-2" : "w-52"
+        )}
+        style={{ borderRight: "var(--border-default)" }}
+        onMouseEnter={collapsed ? openDock : undefined}
+        onMouseLeave={collapsed ? scheduleCloseDock : undefined}
+      >
         <div
-          className="w-2 shrink-0"
-          style={{ borderRight: "var(--border-default)" }}
-          onMouseEnter={openDock}
-          onMouseLeave={scheduleCloseDock}
-        />
-        <div
-          onMouseEnter={openDock}
-          onMouseLeave={scheduleCloseDock}
           className={cn(
-            "fixed top-12 bottom-0 left-0 z-40 flex flex-col items-center gap-1.5 py-4 px-2",
-            "transition-all duration-200 ease-out",
-            dockOpen ? "translate-x-0 opacity-100 pointer-events-auto" : "-translate-x-3 opacity-0 pointer-events-none"
+            "flex flex-col h-full w-52 shrink-0 transition-opacity duration-150",
+            collapsed ? "opacity-0 pointer-events-none" : "opacity-100 delay-100"
           )}
-          style={{
-            background: "rgba(10,10,10,0.94)",
-            borderRight: "var(--border-default)",
-            backdropFilter: "blur(8px)",
-          }}
         >
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            title="Expand navigation"
-            className="flex items-center justify-center w-10 h-10 rounded-lg mb-1 text-soft-white/60 hover:text-cyan hover:bg-cyan/10 transition-precise"
-          >
-            <PanelLeftOpen size={16} />
-          </button>
-          <div className="w-6 h-px bg-white/10 mb-1 shrink-0" />
-          <div className="flex flex-col gap-1.5 overflow-y-auto">
-            {ALL_NAV_ITEMS.map((item) => (
-              <DockIcon
-                key={item.to}
-                {...item}
-                badge={item.to === "/queue" ? pendingCount : undefined}
-                onNavigate={scheduleCloseDock}
-              />
+          {/* Fold toggle */}
+          <div className="flex items-center justify-end px-3 pt-3">
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              title="Collapse navigation"
+              className="flex items-center justify-center w-7 h-7 rounded-sm text-soft-white/50 hover:text-cyan hover:bg-cyan/10 transition-precise"
+            >
+              <PanelLeftClose size={13} />
+            </button>
+          </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto pb-3 pt-1 flex flex-col gap-4">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="flex flex-col gap-1">
+                <span className="px-4 pb-1 pt-2 font-mono text-[10.5px] tracking-widest text-soft-white/60 uppercase">
+                  {group.label}
+                </span>
+                {group.items.map((item) => (
+                  <NavItem key={item.to} {...item} badge={item.to === "/queue" ? pendingCount : undefined} />
+                ))}
+              </div>
             ))}
+          </nav>
+
+          {/* Divider */}
+          <div className="mx-4 h-px bg-white/7" />
+
+          {/* Bottom identifier */}
+          <div className="px-4 pb-3 pt-1">
+            <span className="system-label text-[10px] text-soft-white/65">
+              FRAMECRAFT / LOCAL
+            </span>
           </div>
         </div>
-      </>
-    );
-  }
+      </aside>
 
-  return (
-    <aside
-      className="w-52 flex flex-col shrink-0"
-      style={{ borderRight: "var(--border-default)" }}
-    >
-      {/* Fold toggle */}
-      <div className="flex items-center justify-end px-3 pt-3">
+      {/* Floating macOS-dock-style icon rail — always mounted so its own opacity/transform
+          transition can run; only interactive while collapsed. */}
+      <div
+        onMouseEnter={openDock}
+        onMouseLeave={scheduleCloseDock}
+        className={cn(
+          "fixed top-12 bottom-0 left-0 z-40 flex flex-col items-center gap-1.5 py-4 px-2",
+          "transition-all duration-200 ease-out",
+          collapsed && dockOpen
+            ? "translate-x-0 opacity-100 pointer-events-auto"
+            : "-translate-x-3 opacity-0 pointer-events-none"
+        )}
+        style={{
+          background: "rgba(10,10,10,0.94)",
+          borderRight: "var(--border-default)",
+          backdropFilter: "blur(8px)",
+        }}
+      >
         <button
           type="button"
-          onClick={() => setCollapsed(true)}
-          title="Collapse navigation"
-          className="flex items-center justify-center w-7 h-7 rounded-sm text-soft-white/50 hover:text-cyan hover:bg-cyan/10 transition-precise"
+          onClick={() => setCollapsed(false)}
+          title="Expand navigation"
+          className="flex items-center justify-center w-10 h-10 rounded-lg mb-1 text-soft-white/60 hover:text-cyan hover:bg-cyan/10 transition-precise"
         >
-          <PanelLeftClose size={13} />
+          <PanelLeftOpen size={16} />
         </button>
+        <div className="w-6 h-px bg-white/10 mb-1 shrink-0" />
+        <div className="flex flex-col gap-1.5 overflow-y-auto">
+          {ALL_NAV_ITEMS.map((item) => (
+            <DockIcon
+              key={item.to}
+              {...item}
+              badge={item.to === "/queue" ? pendingCount : undefined}
+              onNavigate={scheduleCloseDock}
+            />
+          ))}
+        </div>
       </div>
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto pb-3 pt-1 flex flex-col gap-4">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label} className="flex flex-col gap-1">
-            <span className="px-4 pb-1 pt-2 font-mono text-[10.5px] tracking-widest text-soft-white/60 uppercase">
-              {group.label}
-            </span>
-            {group.items.map((item) => (
-              <NavItem key={item.to} {...item} badge={item.to === "/queue" ? pendingCount : undefined} />
-            ))}
-          </div>
-        ))}
-      </nav>
-
-      {/* Divider */}
-      <div className="mx-4 h-px bg-white/7" />
-
-      {/* Bottom identifier */}
-      <div className="px-4 pb-3 pt-1">
-        <span className="system-label text-[10px] text-soft-white/65">
-          FRAMECRAFT / LOCAL
-        </span>
-      </div>
-    </aside>
+    </>
   );
 }

@@ -713,6 +713,19 @@ export interface CinemaAsset {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /** 1–5, set after the user reviews a generated image. */
+  rating?: number;
+  /** Free-text critique captured alongside `rating`, fed into the next version's AI redraft. */
+  feedback?: string;
+  /** Approved for the Moodboard's finished sequence. */
+  locked: boolean;
+  /** Groups V1/V2/V3… together — the root version's own id. `undefined` on assets created before versioning shipped (application treats that as its own single-version group). */
+  version_group_id?: string;
+  version_number: number;
+  provider?: Provider;
+  prompt_parameters?: Record<string, string | boolean>;
+  /** The "Describe what you want" instruction that produced `prompt_text` — persisted so a new version can carry it forward. */
+  instruction?: string;
 }
 
 export interface CreateCinemaAssetInput {
@@ -730,6 +743,12 @@ export interface CreateCinemaAssetInput {
   canvas_x?: number;
   canvas_y?: number;
   sort_order?: number;
+  locked?: boolean;
+  version_group_id?: string;
+  version_number?: number;
+  provider?: Provider;
+  prompt_parameters?: Record<string, string | boolean>;
+  instruction?: string;
 }
 
 export interface UpdateCinemaAssetInput {
@@ -746,6 +765,12 @@ export interface UpdateCinemaAssetInput {
   canvas_x?: number;
   canvas_y?: number;
   sort_order?: number;
+  rating?: number | null;
+  feedback?: string | null;
+  locked?: boolean;
+  provider?: Provider | null;
+  prompt_parameters?: Record<string, string | boolean> | null;
+  instruction?: string | null;
 }
 
 export interface CinemaScene {

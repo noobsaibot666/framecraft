@@ -41,6 +41,16 @@ function tryParseArray(raw: unknown): string[] | undefined {
   }
 }
 
+function tryParseObject(raw: unknown): Record<string, string | boolean> | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw as string);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function rowToAsset(row: Record<string, unknown>): CinemaAsset {
   return {
     id: row.id as string,
@@ -60,24 +70,38 @@ function rowToAsset(row: Record<string, unknown>): CinemaAsset {
     sort_order: (row.sort_order as number) ?? 0,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
+    rating: (row.rating as number) ?? undefined,
+    feedback: (row.feedback as string) || undefined,
+    locked: Boolean(row.locked),
+    version_group_id: (row.version_group_id as string) || undefined,
+    version_number: (row.version_number as number) ?? 1,
+    provider: (row.provider as CinemaAsset["provider"]) || undefined,
+    prompt_parameters: tryParseObject(row.prompt_parameters),
+    instruction: (row.instruction as string) || undefined,
   };
 }
 
 export async function createCinemaAsset(input: CreateCinemaAssetInput): Promise<string> {
   const id = generateId();
   const ts = now();
+  // A version chain always groups by the root version's own id — new,
+  // ungrouped assets are trivially "a group of one" this way, so callers
+  // (and getAssetVersions) never need to special-case an absent group.
+  const versionGroupId = input.version_group_id ?? id;
 
   if (isTauri) {
     const db = await getFramecraftDb();
     await db.execute(
       `INSERT INTO cinema_assets
-       (id, project_id, folder_id, tag, title, asset_type, prompt_text, prompt_id, file_data, thumbnail_data, is_primary, merged_from, canvas_x, canvas_y, sort_order, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+       (id, project_id, folder_id, tag, title, asset_type, prompt_text, prompt_id, file_data, thumbnail_data, is_primary, merged_from, canvas_x, canvas_y, sort_order, created_at, updated_at, locked, version_group_id, version_number, provider, prompt_parameters, instruction)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
       [
         id, input.project_id, input.folder_id, input.tag.trim(), input.title.trim(), input.asset_type ?? "other",
         input.prompt_text?.trim() || null, input.prompt_id ?? null, input.file_data ?? null, input.thumbnail_data ?? null,
         input.is_primary ? 1 : 0, input.merged_from ? JSON.stringify(input.merged_from) : null,
         input.canvas_x ?? 0, input.canvas_y ?? 0, input.sort_order ?? 0, ts, ts,
+        input.locked ? 1 : 0, versionGroupId, input.version_number ?? 1, input.provider ?? null,
+        input.prompt_parameters ? JSON.stringify(input.prompt_parameters) : null, input.instruction?.trim() || null,
       ]
     );
     return id;
@@ -101,6 +125,12 @@ export async function createCinemaAsset(input: CreateCinemaAssetInput): Promise<
     sort_order: input.sort_order ?? 0,
     created_at: ts,
     updated_at: ts,
+    locked: input.locked ?? false,
+    version_group_id: versionGroupId,
+    version_number: input.version_number ?? 1,
+    provider: input.provider,
+    prompt_parameters: input.prompt_parameters,
+    instruction: input.instruction?.trim() || undefined,
   });
   return id;
 }
@@ -164,6 +194,12 @@ export async function updateCinemaAsset(id: string, data: UpdateCinemaAssetInput
     if ("canvas_x" in data && data.canvas_x != null) add("canvas_x", data.canvas_x);
     if ("canvas_y" in data && data.canvas_y != null) add("canvas_y", data.canvas_y);
     if ("sort_order" in data && data.sort_order != null) add("sort_order", data.sort_order);
+    if ("rating" in data) add("rating", data.rating ?? null);
+    if ("feedback" in data) add("feedback", data.feedback ?? null);
+    if ("locked" in data && data.locked != null) add("locked", data.locked ? 1 : 0);
+    if ("provider" in data) add("provider", data.provider ?? null);
+    if ("prompt_parameters" in data) add("prompt_parameters", data.prompt_parameters ? JSON.stringify(data.prompt_parameters) : null);
+    if ("instruction" in data) add("instruction", data.instruction ?? null);
 
     values.push(id);
     await db.execute(`UPDATE cinema_assets SET ${sets.join(", ")} WHERE id = $${values.length}`, values);
@@ -188,6 +224,12 @@ export async function updateCinemaAsset(id: string, data: UpdateCinemaAssetInput
     canvas_x: data.canvas_x ?? prev.canvas_x,
     canvas_y: data.canvas_y ?? prev.canvas_y,
     sort_order: data.sort_order ?? prev.sort_order,
+    rating: "rating" in data ? (data.rating ?? undefined) : prev.rating,
+    feedback: "feedback" in data ? (data.feedback ?? undefined) : prev.feedback,
+    locked: data.locked ?? prev.locked,
+    provider: "provider" in data ? (data.provider ?? undefined) : prev.provider,
+    prompt_parameters: "prompt_parameters" in data ? (data.prompt_parameters ?? undefined) : prev.prompt_parameters,
+    instruction: "instruction" in data ? (data.instruction ?? undefined) : prev.instruction,
     updated_at: ts,
   };
 }
@@ -237,4 +279,83 @@ export async function suggestAssetTag(projectId: string, name: string): Promise<
     n += 1;
   }
   return `@${candidate}`;
+}
+
+/**
+ * Groups a flat asset list into version stacks (V1, V2, …), each stack
+ * sorted by version_number ascending. Pre-versioning rows (no
+ * `version_group_id`) are trivially their own single-item group, since
+ * `createCinemaAsset` always sets `version_group_id = id` for new rows.
+ */
+export function groupAssetVersions(assets: CinemaAsset[]): CinemaAsset[][] {
+  const groups = new Map<string, CinemaAsset[]>();
+  for (const asset of assets) {
+    const groupId = asset.version_group_id ?? asset.id;
+    const group = groups.get(groupId);
+    if (group) group.push(asset);
+    else groups.set(groupId, [asset]);
+  }
+  return Array.from(groups.values()).map((group) => [...group].sort((a, b) => a.version_number - b.version_number));
+}
+
+/**
+ * The immediately-prior version in `asset`'s stack (version_number - 1), if
+ * any — used to feed the prior prompt/rating/feedback into a redraft. `undefined`
+ * for a V1, or for an asset with no stack at all.
+ */
+export async function getPreviousVersion(asset: CinemaAsset): Promise<CinemaAsset | undefined> {
+  if (asset.version_number <= 1) return undefined;
+  const siblings = await getAssetsForFolder(asset.folder_id);
+  const groupId = asset.version_group_id ?? asset.id;
+  return siblings.find((a) => (a.version_group_id ?? a.id) === groupId && a.version_number === asset.version_number - 1);
+}
+
+const TRAILING_VERSION_RE = /\s+V\d+$/i;
+const TRAILING_TAG_VERSION_RE = /_v\d+$/i;
+
+/**
+ * Creates a new sibling asset — "V{n+1}" of `source` — in the same folder,
+ * for the same purpose: fresh prompt/image/rating slate, but the same
+ * folder/asset_type/provider/instruction carried forward so the user is
+ * iterating on the same subject, not starting over. Retroactively labels
+ * `source`'s own title with its version number the first time a second
+ * version is created, so a not-yet-versioned V1 gains a visible "V1" suffix
+ * once it's actually part of a stack.
+ */
+export async function createAssetVersion(source: CinemaAsset): Promise<string> {
+  const [folderAssets, projectAssets] = await Promise.all([
+    getAssetsForFolder(source.folder_id),
+    getAssetsForProject(source.project_id),
+  ]);
+  const groupId = source.version_group_id ?? source.id;
+  const siblings = folderAssets.filter((a) => (a.version_group_id ?? a.id) === groupId);
+  const nextVersionNumber = Math.max(...siblings.map((a) => a.version_number), source.version_number) + 1;
+
+  if (nextVersionNumber === 2 && !TRAILING_VERSION_RE.test(source.title)) {
+    await updateCinemaAsset(source.id, { title: `${source.title} V${source.version_number}` });
+  }
+
+  const baseTitle = source.title.replace(TRAILING_VERSION_RE, "").trim();
+  const baseTag = source.tag.replace(TRAILING_TAG_VERSION_RE, "");
+  let candidateTag = `${baseTag}_v${nextVersionNumber}`;
+  let n = nextVersionNumber;
+  while (await isTagTaken(source.project_id, candidateTag)) {
+    n += 1;
+    candidateTag = `${baseTag}_v${n}`;
+  }
+
+  const { x, y } = computeGridPosition(projectAssets.length);
+  return createCinemaAsset({
+    project_id: source.project_id,
+    folder_id: source.folder_id,
+    tag: candidateTag,
+    title: `${baseTitle} V${nextVersionNumber}`,
+    asset_type: source.asset_type,
+    canvas_x: x,
+    canvas_y: y,
+    version_group_id: groupId,
+    version_number: nextVersionNumber,
+    provider: source.provider,
+    instruction: source.instruction,
+  });
 }

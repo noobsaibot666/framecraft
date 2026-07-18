@@ -262,7 +262,7 @@ export function CinemaScript() {
             </select>
           </div>
 
-          <Button variant="primary" size="sm" onClick={handleGenerateDraft} disabled={drafting || !idea.trim()}>
+          <Button variant="primary" size="xs" onClick={handleGenerateDraft} disabled={drafting || !idea.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Draft"}
           </Button>
         </div>
@@ -312,7 +312,7 @@ export function CinemaScript() {
               style={{ border: "1px solid rgba(255,255,255,0.16)" }}
               onKeyDown={(e) => { if (e.key === "Enter") handleRefine(); }}
             />
-            <Button variant="ghost" size="sm" onClick={handleRefine} disabled={refining || !instruction.trim()}>
+            <Button variant="ghost" size="xs" onClick={handleRefine} disabled={refining || !instruction.trim()}>
               <Wand2 size={11} /> {refining ? "Refining…" : "Refine"}
             </Button>
           </div>
@@ -339,15 +339,15 @@ export function CinemaScript() {
 
           {/* Bottom action bar — right-aligned, anchored at the end of the page. */}
           <div className="flex items-center justify-end gap-2 pt-4 mt-2" style={{ borderTop: "var(--border-default)" }}>
-            <Button variant="ghost" size="sm" onClick={handleSaveVersion} disabled={!content.trim()}>
+            <Button variant="ghost" size="xs" onClick={handleSaveVersion} disabled={!content.trim()}>
               <History size={11} /> Save Version
             </Button>
-            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+            <Button variant="primary" size="xs" onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save Script"}
             </Button>
             <Button
               variant={project.script_status === "approved" ? "muted" : "accent"}
-              size="sm"
+              size="xs"
               onClick={handleApprove}
               disabled={!content.trim() || project.script_status === "approved"}
             >

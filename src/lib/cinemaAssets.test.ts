@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   computeGridPosition,
+  createAssetVersion,
   createCinemaAsset,
   deleteCinemaAsset,
   getAssetsForFolder,
   getAssetsForProject,
   getCinemaAssetById,
+  groupAssetVersions,
   isTagTaken,
   suggestAssetTag,
   updateCinemaAsset,
@@ -96,5 +98,78 @@ describe("cinema asset development store", () => {
 
     const shot = await getCinemaShotById(shotId);
     expect(shot!.linked_asset_ids).toEqual([otherAssetId]);
+  });
+
+  it("a freshly created asset is its own single-version group", async () => {
+    const id = await createCinemaAsset({ project_id: "asset-project-h", folder_id: "folder-h", tag: "@solo", title: "Solo" });
+    const asset = await getCinemaAssetById(id);
+    expect(asset!.version_group_id).toBe(id);
+    expect(asset!.version_number).toBe(1);
+    expect(asset!.locked).toBe(false);
+  });
+
+  it("createAssetVersion creates a V2 sibling carrying forward folder/type/provider/instruction, with a fresh prompt/image/rating slate", async () => {
+    const projectId = "asset-project-i";
+    const v1Id = await createCinemaAsset({
+      project_id: projectId,
+      folder_id: "folder-i",
+      tag: "@hero_shot",
+      title: "Hero Shot",
+      asset_type: "product",
+      provider: "midjourney",
+      instruction: "A hero shot of the product on a pedestal",
+    });
+    await updateCinemaAsset(v1Id, { prompt_text: "the v1 prompt", rating: 2, feedback: "lighting too flat", file_data: "data:image/png;base64,x" });
+
+    const v1 = (await getCinemaAssetById(v1Id))!;
+    const v2Id = await createAssetVersion(v1);
+    const v2 = (await getCinemaAssetById(v2Id))!;
+
+    expect(v2.title).toBe("Hero Shot V2");
+    expect(v2.tag).toBe("@hero_shot_v2");
+    expect(v2.version_number).toBe(2);
+    expect(v2.version_group_id).toBe(v1Id);
+    expect(v2.folder_id).toBe("folder-i");
+    expect(v2.asset_type).toBe("product");
+    expect(v2.provider).toBe("midjourney");
+    expect(v2.instruction).toBe("A hero shot of the product on a pedestal");
+    expect(v2.prompt_text).toBeUndefined();
+    expect(v2.file_data).toBeUndefined();
+    expect(v2.rating).toBeUndefined();
+    expect(v2.locked).toBe(false);
+
+    // Retroactively labeled once a second version exists.
+    const v1AfterVersioning = (await getCinemaAssetById(v1Id))!;
+    expect(v1AfterVersioning.title).toBe("Hero Shot V1");
+    expect(v1AfterVersioning.version_group_id).toBe(v1Id);
+  });
+
+  it("createAssetVersion on an already-versioned asset keeps incrementing and dedupes tags", async () => {
+    const projectId = "asset-project-j";
+    const v1Id = await createCinemaAsset({ project_id: projectId, folder_id: "folder-j", tag: "@scene", title: "Scene" });
+    const v2Id = await createAssetVersion((await getCinemaAssetById(v1Id))!);
+    const v3Id = await createAssetVersion((await getCinemaAssetById(v2Id))!);
+
+    const v3 = (await getCinemaAssetById(v3Id))!;
+    expect(v3.title).toBe("Scene V3");
+    expect(v3.tag).toBe("@scene_v3");
+    expect(v3.version_number).toBe(3);
+    expect(v3.version_group_id).toBe(v1Id);
+  });
+
+  it("groupAssetVersions groups siblings by version_group_id and sorts each stack by version_number", async () => {
+    const projectId = "asset-project-k";
+    const v1Id = await createCinemaAsset({ project_id: projectId, folder_id: "folder-k", tag: "@grouped", title: "Grouped" });
+    const v2Id = await createAssetVersion((await getCinemaAssetById(v1Id))!);
+    const otherId = await createCinemaAsset({ project_id: projectId, folder_id: "folder-k", tag: "@unrelated", title: "Unrelated" });
+
+    const assets = await getAssetsForFolder("folder-k");
+    const groups = groupAssetVersions(assets);
+
+    expect(groups.length).toBe(2);
+    const versionedGroup = groups.find((g) => g.some((a) => a.id === v1Id))!;
+    expect(versionedGroup.map((a) => a.id)).toEqual([v1Id, v2Id]);
+    const soloGroup = groups.find((g) => g.some((a) => a.id === otherId))!;
+    expect(soloGroup.length).toBe(1);
   });
 });

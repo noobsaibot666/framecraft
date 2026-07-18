@@ -61,7 +61,7 @@ function FolderRow({ node, depth, selectedId, onSelect, onAddChild, onDelete }: 
           className="w-1.5 h-1.5 rounded-full shrink-0"
           style={{ background: node.accent_color ?? "rgba(255,255,255,0.3)" }}
         />
-        <span className="font-mono text-[12.5px] truncate flex-1">{node.name}</span>
+        <span className="font-mono text-[12.5px] truncate flex-1" title={node.name}>{node.name}</span>
         <span
           className={cn(
             "font-mono text-[9px] tracking-widest uppercase shrink-0",

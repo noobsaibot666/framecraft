@@ -774,7 +774,7 @@ const REQUIRED_RELEASE_TABLES: [&str; 41] = [
     "tokens",
 ];
 
-const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
+const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 6] = [
     (
         "comparison_sessions",
         &["comparison_type", "outcome_summary"],
@@ -793,6 +793,19 @@ const REQUIRED_RELEASE_COLUMNS: [(&str, &[&str]); 5] = [
             "builder_state",
             "thumbnail_result_id",
             "variant_label",
+        ],
+    ),
+    (
+        "cinema_assets",
+        &[
+            "rating",
+            "feedback",
+            "locked",
+            "version_group_id",
+            "version_number",
+            "provider",
+            "prompt_parameters",
+            "instruction",
         ],
     ),
 ];
@@ -1385,6 +1398,14 @@ const CINEMA_ASSET_COLUMNS: &[&str] = &[
     "sort_order",
     "created_at",
     "updated_at",
+    "rating",
+    "feedback",
+    "locked",
+    "version_group_id",
+    "version_number",
+    "provider",
+    "prompt_parameters",
+    "instruction",
 ];
 const CINEMA_SCENE_COLUMNS: &[&str] = &[
     "id",
@@ -3526,6 +3547,55 @@ fn upgrade_supported_release_schema(db_path: &str) -> Result<(), String> {
     ))
     .map_err(|error| error.to_string())?;
 
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "rating",
+        "ALTER TABLE cinema_assets ADD COLUMN rating INTEGER;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "feedback",
+        "ALTER TABLE cinema_assets ADD COLUMN feedback TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "locked",
+        "ALTER TABLE cinema_assets ADD COLUMN locked INTEGER NOT NULL DEFAULT 0;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "version_group_id",
+        "ALTER TABLE cinema_assets ADD COLUMN version_group_id TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "version_number",
+        "ALTER TABLE cinema_assets ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "provider",
+        "ALTER TABLE cinema_assets ADD COLUMN provider TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "prompt_parameters",
+        "ALTER TABLE cinema_assets ADD COLUMN prompt_parameters TEXT;",
+    )?;
+    add_column_if_missing(
+        &tx,
+        "cinema_assets",
+        "instruction",
+        "ALTER TABLE cinema_assets ADD COLUMN instruction TEXT;",
+    )?;
+
     tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_projects_campaign ON projects(campaign_id);
          CREATE INDEX IF NOT EXISTS idx_generation_queue_pinned ON generation_queue(is_pinned);
@@ -3568,7 +3638,7 @@ fn add_column_if_missing(
     Ok(())
 }
 
-fn migration_sql() -> [&'static str; 36] {
+fn migration_sql() -> [&'static str; 37] {
     [
         include_str!("../migrations/001_initial.sql"),
         include_str!("../migrations/002_tokens.sql"),
@@ -3606,6 +3676,7 @@ fn migration_sql() -> [&'static str; 36] {
         include_str!("../migrations/037_duplicate_dismissals.sql"),
         include_str!("../migrations/038_cinema_studio.sql"),
         include_str!("../migrations/039_cinema_shot_prompt_versions.sql"),
+        include_str!("../migrations/040_cinema_asset_versioning.sql"),
     ]
 }
 

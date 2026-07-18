@@ -56,7 +56,7 @@ export function MergeAssetsModal({ projectId, folder, assets, projectAssetCount,
     try {
       const sourceAssets = mergeable.filter((a) => selected.includes(a.id));
       const merged = preview ?? await mergeImagesSideBySide(sourceAssets.map((a) => a.file_data!));
-      const thumb = await thumbnailFromDataUrl(merged);
+      const thumb = await thumbnailFromDataUrl(merged, 640);
       const tag = await suggestAssetTag(projectId, `${folder.name} sheet`);
       const { x, y } = computeGridPosition(projectAssetCount);
       await createCinemaAsset({
@@ -122,7 +122,7 @@ export function MergeAssetsModal({ projectId, folder, assets, projectAssetCount,
           )}
 
           {selected.length >= MIN_MERGE_SOURCES && !preview && (
-            <Button variant="ghost" size="sm" onClick={handlePreview} className="self-start">
+            <Button variant="ghost" size="xs" onClick={handlePreview} className="self-start">
               <Layers size={11} /> Preview Merge
             </Button>
           )}
@@ -136,10 +136,10 @@ export function MergeAssetsModal({ projectId, folder, assets, projectAssetCount,
         </div>
 
         <div className="flex items-center gap-2 px-6 py-5" style={{ borderTop: "var(--border-default)" }}>
-          <Button variant="primary" size="sm" onClick={handleMerge} disabled={selected.length < MIN_MERGE_SOURCES || merging}>
+          <Button variant="primary" size="xs" onClick={handleMerge} disabled={selected.length < MIN_MERGE_SOURCES || merging}>
             {merging ? "Merging…" : `Create Merged Sheet (${selected.length})`}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="xs" onClick={onClose}>Cancel</Button>
         </div>
       </div>
     </div>

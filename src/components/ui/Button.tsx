@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "accent" | "ghost" | "danger" | "muted";
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
 }
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -12,16 +12,17 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          "inline-flex items-center justify-center gap-2",
-          "font-mono text-[13px] tracking-[0.10em] uppercase whitespace-nowrap",
+          "inline-flex items-center justify-center",
+          "font-mono uppercase whitespace-nowrap",
           "transition-all duration-150 ease-out",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-red/60",
           {
             // size
-            "h-9 px-4": size === "sm",
-            "h-10 px-[18px]": size === "md",
-            "h-11 px-5": size === "lg",
+            "h-7 px-2.5 gap-1.5 text-[10.5px] tracking-[0.08em]": size === "xs",
+            "h-9 px-4 gap-2 text-[13px] tracking-widest": size === "sm",
+            "h-10 px-4.5 gap-2 text-[13px] tracking-widest": size === "md",
+            "h-11 px-5 gap-2 text-[13px] tracking-widest": size === "lg",
             // variants
             "bg-red/14 border border-red/60 text-white hover:bg-red/22 hover:border-red/80 rounded-[6px]":
               variant === "primary",

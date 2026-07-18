@@ -16,6 +16,8 @@ function asset(overrides: Partial<CinemaAsset> = {}): CinemaAsset {
     sort_order: 0,
     created_at: "t",
     updated_at: "t",
+    locked: false,
+    version_number: 1,
     ...overrides,
   };
 }

@@ -7,7 +7,10 @@ const dummyModel: AIModel = { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6
 describe("draftAssetPrompt validation", () => {
   it("rejects an empty instruction before calling the model", async () => {
     await expect(
-      draftAssetPrompt({ folderKind: "character", folderName: "Characters", assetTitle: "Eduardo", instruction: "  " }, dummyModel)
+      draftAssetPrompt(
+        { folderKind: "character", folderName: "Characters", assetTitle: "Eduardo", instruction: "  ", provider: "midjourney" },
+        dummyModel
+      )
     ).rejects.toThrow(/describe what you want/i);
   });
 });

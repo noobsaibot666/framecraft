@@ -178,7 +178,7 @@ export function CinemaScenes() {
       subtitle="SCENE GENERATION"
       action={
         <div className="flex items-center gap-3">
-          <Button variant={project.status === "complete" ? "muted" : "accent"} size="sm" onClick={handleToggleComplete}>
+          <Button variant={project.status === "complete" ? "muted" : "accent"} size="xs" onClick={handleToggleComplete}>
             <CheckCircle2 size={11} /> {project.status === "complete" ? "Reopen" : "Mark Complete"}
           </Button>
           <CinemaStageTabs projectId={id} active="scenes" />
@@ -188,7 +188,7 @@ export function CinemaScenes() {
     >
       <div className="flex flex-col gap-6">
           <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" onClick={handleSplit} disabled={splitting}>
+            <Button variant="accent" size="xs" onClick={handleSplit} disabled={splitting}>
               <Sparkles size={11} /> {splitting ? "Reading script…" : "Split Script into Scenes"}
             </Button>
             <ModelSelector value={modelId} onChange={setModelId} />
@@ -201,7 +201,7 @@ export function CinemaScenes() {
               style={{ border: "1px solid rgba(255,255,255,0.16)" }}
               onKeyDown={(e) => { if (e.key === "Enter") handleAddScene(); }}
             />
-            <Button variant="ghost" size="sm" onClick={handleAddScene} disabled={!newTitle.trim()}>
+            <Button variant="ghost" size="xs" onClick={handleAddScene} disabled={!newTitle.trim()}>
               <Plus size={10} /> Add Scene
             </Button>
           </div>

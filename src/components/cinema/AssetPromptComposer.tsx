@@ -1,30 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, ImageUp, Pencil, Sparkles, Star, Library } from "lucide-react";
+import { Check, CheckCircle2, Copy, GitFork, ImageUp, Lock, Pencil, Sparkles, Star, Library, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { isTagTaken, updateCinemaAsset } from "@/lib/cinemaAssets";
+import { RatingDisplay } from "@/components/ui/RatingDisplay";
+import { AssetParametersPanel } from "./AssetParametersPanel";
+import { createAssetVersion, getPreviousVersion, isTagTaken, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { draftAssetPrompt } from "@/lib/cinemaAssetPrompt";
+import { copyToClipboard } from "@/lib/cinemaExport";
 import { createPrompt } from "@/lib/db";
 import { AI_MODELS, resolveModelPreference } from "@/lib/aiConfig";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { IMAGE_PROVIDER_OPTIONS, formatPromptWithParameters } from "@/lib/providerParameters";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn, slugify } from "@/lib/utils";
-import type { CinemaAsset, CinemaFolder, CinemaProject } from "@/types";
+import type { CinemaAsset, CinemaFolder, CinemaProject, Provider } from "@/types";
 
 interface Props {
   asset: CinemaAsset;
   folder: CinemaFolder;
   project: CinemaProject;
   onChange: () => void;
+  /** Selects a different asset in the parent's folder view — used after "New Version" to jump straight to the fresh draft. */
+  onSelectAsset: (assetId: string) => void;
 }
 
-export function AssetPromptComposer({ asset, folder, project, onChange }: Props) {
+export function AssetPromptComposer({ asset, folder, project, onChange, onSelectAsset }: Props) {
   const toast = useToastStore((s) => s.add);
   const [title, setTitle] = useState(asset.title);
-  const [instruction, setInstruction] = useState("");
+  const [instruction, setInstruction] = useState(asset.instruction ?? "");
   const [promptText, setPromptText] = useState(asset.prompt_text ?? "");
   const [isPrimary, setIsPrimary] = useState(asset.is_primary);
+  const [provider, setProvider] = useState<Provider>(asset.provider ?? project.image_provider ?? "midjourney");
+  const [parameters, setParameters] = useState(asset.prompt_parameters);
+  const [draftNonce, setDraftNonce] = useState(0);
+  const [rating, setRating] = useState(asset.rating);
+  const [feedback, setFeedback] = useState(asset.feedback ?? "");
   const [modelId, setModelId] = useState(() => resolveModelPreference(project.script_model)?.id ?? AI_MODELS[0].id);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
@@ -37,16 +48,20 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
   const [drafting, setDrafting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [creatingVersion, setCreatingVersion] = useState(false);
   const [autosaved, setAutosaved] = useState(false);
   const hydratedRef = useRef(false);
 
-  // Silent debounced autosave — title/prompt/primary edits are no longer lost if the
-  // user navigates away (e.g. back to Script Studio) without clicking Save Asset.
+  // Silent debounced autosave — edits are no longer lost if the user
+  // navigates away (e.g. back to Script Studio) without clicking Save Asset.
   // Skips the first run (component mount) so it doesn't re-save unchanged data.
   useEffect(() => {
     if (!hydratedRef.current) { hydratedRef.current = true; return; }
     const timer = window.setTimeout(() => {
-      updateCinemaAsset(asset.id, { title, prompt_text: promptText, is_primary: isPrimary })
+      updateCinemaAsset(asset.id, {
+        title, prompt_text: promptText, is_primary: isPrimary, instruction,
+        provider, prompt_parameters: parameters, rating, feedback,
+      })
         .then(() => {
           onChange();
           setAutosaved(true);
@@ -56,7 +71,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
     }, 800);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, promptText, isPrimary]);
+  }, [title, promptText, isPrimary, instruction, provider, parameters, rating, feedback]);
 
   const handleSaveTag = async () => {
     const normalized = tagDraft.trim().replace(/^@/, "");
@@ -82,7 +97,10 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
     try {
       await validateMediaFile(file);
       const dataUrl = await fileToDataUrl(file);
-      const thumb = await thumbnailFromDataUrl(dataUrl);
+      // 640px (not the 320px default) — this thumbnail is displayed fairly large across
+      // Cinema Studio (project cover, moodboard cards at higher zoom), and 320px was
+      // visibly soft/upscaled at those sizes.
+      const thumb = await thumbnailFromDataUrl(dataUrl, 640);
       await updateCinemaAsset(asset.id, { file_data: dataUrl, thumbnail_data: thumb });
       onChange();
       toast("Image imported", "success");
@@ -104,6 +122,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
     if (!instruction.trim()) { toast("Describe what you want first", "error"); return; }
     setDrafting(true);
     try {
+      const previous = await getPreviousVersion(asset);
       const draft = await draftAssetPrompt({
         folderKind: folder.kind,
         folderName: folder.name,
@@ -111,8 +130,19 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
         scriptExcerpt: project.script_content?.slice(0, 1500),
         assetTitle: title,
         instruction,
+        provider,
+        previousAttempt: previous?.prompt_text
+          ? { promptText: previous.prompt_text, rating: previous.rating, feedback: previous.feedback }
+          : undefined,
       }, model);
-      setPromptText(draft);
+      setPromptText(draft.promptText);
+      setParameters(draft.parameters);
+      setDraftNonce((n) => n + 1);
+      // Persisted immediately (not left to the debounce) so the prompt is
+      // there to copy right away — this is a deliberate, infrequent action,
+      // not keystroke noise.
+      await updateCinemaAsset(asset.id, { prompt_text: draft.promptText, prompt_parameters: draft.parameters ?? null, provider, instruction });
+      onChange();
       toast("Prompt drafted", "success");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to draft prompt", "error");
@@ -124,7 +154,10 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateCinemaAsset(asset.id, { title, prompt_text: promptText, is_primary: isPrimary });
+      await updateCinemaAsset(asset.id, {
+        title, prompt_text: promptText, is_primary: isPrimary, instruction,
+        provider, prompt_parameters: parameters, rating, feedback,
+      });
       onChange();
       toast("Asset saved", "success");
     } catch {
@@ -140,9 +173,10 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
     try {
       const promptId = await createPrompt({
         title: `${asset.tag} — ${title}`,
-        provider: project.image_provider ?? "other",
+        provider: provider,
         category: "cinematic",
         prompt_text: promptText,
+        parameters,
         tags: ["cinema-studio", folder.kind],
         notes: `Cinema Studio asset for "${project.title}" / ${folder.name}.`,
       });
@@ -153,6 +187,43 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
       toast("Failed to promote prompt", "error");
     } finally {
       setPromoting(false);
+    }
+  };
+
+  const handleCopyPrompt = async () => {
+    if (!promptText.trim()) return;
+    try {
+      await copyToClipboard(formatPromptWithParameters(provider, promptText, parameters));
+      toast("Prompt copied", "success");
+    } catch {
+      toast("Failed to copy prompt", "error");
+    }
+  };
+
+  const handleNewVersion = async () => {
+    setCreatingVersion(true);
+    try {
+      // Persist current edits first so the new version carries forward the
+      // instruction/provider the user actually landed on, not a stale save.
+      await updateCinemaAsset(asset.id, { title, instruction, provider, rating, feedback });
+      const newId = await createAssetVersion({ ...asset, title, instruction, provider });
+      onChange();
+      onSelectAsset(newId);
+      toast(`New version created`, "success");
+    } catch {
+      toast("Failed to create a new version", "error");
+    } finally {
+      setCreatingVersion(false);
+    }
+  };
+
+  const handleToggleLock = async () => {
+    try {
+      await updateCinemaAsset(asset.id, { locked: !asset.locked });
+      onChange();
+      toast(asset.locked ? "Asset unlocked" : "Asset locked — approved for the Moodboard sequence", "success");
+    } catch {
+      toast("Failed to update lock state", "error");
     }
   };
 
@@ -178,16 +249,24 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
             className="flex items-center gap-1.5 font-mono text-[11px] text-cyan tracking-widest uppercase hover:text-white transition-precise group"
           >
             {asset.tag} <Pencil size={9} className="opacity-0 group-hover:opacity-100 transition-precise" />
+            {asset.version_number > 1 && <span className="text-muted">V{asset.version_number}</span>}
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setIsPrimary((v) => !v)}
-          className={cn("flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase transition-precise", isPrimary ? "text-amber" : "text-muted hover:text-amber")}
-          title="Mark as the primary reference for this folder"
-        >
-          <Star size={11} fill={isPrimary ? "currentColor" : "none"} /> Primary
-        </button>
+        <div className="flex items-center gap-3">
+          {asset.locked && (
+            <span className="flex items-center gap-1 font-mono text-[10px] text-cyan tracking-widest uppercase">
+              <Lock size={10} /> Locked
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsPrimary((v) => !v)}
+            className={cn("flex items-center gap-1 font-mono text-[10px] tracking-widest uppercase transition-precise", isPrimary ? "text-amber" : "text-muted hover:text-amber")}
+            title="Mark as the primary reference for this folder"
+          >
+            <Star size={11} fill={isPrimary ? "currentColor" : "none"} /> Primary
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -201,25 +280,48 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="system-label">DESCRIBE WHAT YOU WANT</label>
+        <div className="flex items-center justify-between">
+          <label className="system-label">DESCRIBE WHAT YOU WANT</label>
+          <div className="flex flex-col gap-1 items-end">
+            <span className="font-mono text-[9px] text-muted tracking-widest uppercase">Target provider</span>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as Provider)}
+              className="h-7 px-2 font-mono text-[10.5px] text-white bg-dark rounded-sm focus:outline-none"
+              style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+            >
+              {IMAGE_PROVIDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
         <textarea
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
           placeholder={`e.g. "Write a prompt for a character sheet of this guy, dressed as a pirate. Three views: full body front, full body back, and a close-up portrait…"`}
-          rows={4}
+          rows={8}
           className="px-3 py-2 font-mono text-[12.5px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
-        <div className="flex items-center gap-1.5">
-          <Button variant="primary" size="sm" onClick={handleDraft} disabled={drafting || !instruction.trim()}>
+        <div className="flex items-center justify-end gap-1.5">
+          <ModelSelector value={modelId} onChange={setModelId} />
+          <Button variant="primary" size="xs" onClick={handleDraft} disabled={drafting || !instruction.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Prompt"}
           </Button>
-          <ModelSelector value={modelId} onChange={setModelId} />
         </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="system-label">PROMPT</label>
+        <div className="flex items-center justify-between">
+          <label className="system-label">PROMPT</label>
+          <button
+            type="button"
+            onClick={handleCopyPrompt}
+            disabled={!promptText.trim()}
+            className="flex items-center gap-1 font-mono text-[9.5px] text-muted hover:text-cyan tracking-widest uppercase transition-precise disabled:opacity-30"
+          >
+            <Copy size={10} /> Copy
+          </button>
+        </div>
         <textarea
           value={promptText}
           onChange={(e) => setPromptText(e.target.value)}
@@ -229,6 +331,8 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
       </div>
+
+      <AssetParametersPanel key={draftNonce} provider={provider} parameters={parameters} onChange={setParameters} />
 
       <div className="flex flex-col gap-1.5">
         <label className="system-label">GENERATED IMAGE</label>
@@ -247,7 +351,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
             )}
           >
             <img src={asset.file_data} alt={asset.title} className="w-24 h-24 object-cover rounded-sm border border-white/12" />
-            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            <Button variant="ghost" size="xs" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
               <ImageUp size={11} /> {uploading ? "Importing…" : "Replace Image"}
             </Button>
             <span className="font-mono text-[10px] text-dim/60">or drop a new image here</span>
@@ -270,18 +374,43 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
         )}
       </div>
 
-      <div className="flex items-center gap-2 pt-1">
-        <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save Asset"}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={handlePromote} disabled={promoting || !!asset.prompt_id}>
-          <Library size={11} /> {asset.prompt_id ? "In Prompt Library" : promoting ? "Promoting…" : "Promote to Library"}
-        </Button>
+      {asset.file_data && (
+        <div className="flex flex-col gap-2 p-3 rounded-sm" style={{ border: "1px solid rgba(255,255,255,0.1)" }}>
+          <div className="flex items-center justify-between">
+            <span className="system-label text-[10px]">RATE THIS RESULT</span>
+            <RatingDisplay value={rating ?? 0} onChange={setRating} size="sm" />
+          </div>
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="What would you change? (fed into the next version's redraft)"
+            rows={2}
+            className="px-2.5 py-2 font-mono text-[11px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
+            style={{ border: "1px solid rgba(255,255,255,0.14)" }}
+          />
+          <div className="flex items-center justify-end">
+            <Button variant="ghost" size="xs" onClick={handleNewVersion} disabled={creatingVersion}>
+              <GitFork size={11} /> {creatingVersion ? "Creating…" : `New Version (V${asset.version_number + 1})`}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-2 pt-1">
         {autosaved && (
           <span className="flex items-center gap-1 font-mono text-[10px] text-cyan tracking-widest uppercase">
             <CheckCircle2 size={11} /> Autosaved
           </span>
         )}
+        <Button variant="ghost" size="xs" onClick={handlePromote} disabled={promoting || !!asset.prompt_id}>
+          <Library size={11} /> {asset.prompt_id ? "In Prompt Library" : promoting ? "Promoting…" : "Promote to Library"}
+        </Button>
+        <Button variant={asset.locked ? "muted" : "accent"} size="xs" onClick={handleToggleLock}>
+          {asset.locked ? <Unlock size={11} /> : <Lock size={11} />} {asset.locked ? "Unlock" : "Lock Asset"}
+        </Button>
+        <Button variant="primary" size="xs" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving…" : "Save Asset"}
+        </Button>
       </div>
     </div>
   );

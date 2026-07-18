@@ -591,8 +591,10 @@ export interface UpdateShotInput {
 
 export type CinemaProjectStatus = "draft" | "scripting" | "assets" | "scenes" | "complete" | "archived";
 export type CinemaScriptStatus = "draft" | "approved";
-export type CinemaFolderKind = "character" | "location" | "prop" | "other";
-export type CinemaAssetType = "character_sheet" | "location" | "prop" | "other";
+// "product" is distinct from "prop": the product is the advertised item an ad
+// exists to sell — the hero of the piece — vs. an incidental environment prop.
+export type CinemaFolderKind = "character" | "location" | "prop" | "product" | "other";
+export type CinemaAssetType = "character_sheet" | "location" | "prop" | "product" | "other";
 export type CinemaShotType = ShotType | "b_roll";
 export type CinemaSceneStatus = "draft" | "directing" | "ready" | "exported";
 export type CinemaShotStatus = "draft" | "ready" | "exported";

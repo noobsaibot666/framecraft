@@ -12,6 +12,7 @@ const FOLDER_KIND_TO_ASSET_TYPE: Record<CinemaFolderKind, CinemaAssetType> = {
   character: "character_sheet",
   location: "location",
   prop: "prop",
+  product: "product",
   other: "other",
 };
 

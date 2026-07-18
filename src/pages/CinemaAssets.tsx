@@ -17,12 +17,14 @@ import { createCinemaFolder, deleteCinemaFolder, getFoldersForProject, getOrCrea
 import { suggestFoldersFromScript, type SuggestedFolder } from "@/lib/cinemaFolderSuggestions";
 import { computeGridPosition, createCinemaAsset, deleteCinemaAsset, getAssetsForFolder, getAssetsForProject, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { ACCENT_COLORS } from "@/lib/storytelling";
-import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
 import type { CinemaAsset, CinemaAssetType, CinemaFolder, CinemaFolderKind, CinemaProject } from "@/types";
 
 const KIND_OPTIONS: { value: CinemaFolderKind; label: string }[] = [
+  { value: "product", label: "Product" },
   { value: "character", label: "Character" },
   { value: "location", label: "Location" },
   { value: "prop", label: "Prop" },
@@ -33,6 +35,7 @@ const FOLDER_KIND_TO_ASSET_TYPE: Record<CinemaFolderKind, CinemaAssetType> = {
   character: "character_sheet",
   location: "location",
   prop: "prop",
+  product: "product",
   other: "other",
 };
 
@@ -56,7 +59,7 @@ export function CinemaAssets() {
 
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestedFolder[]>([]);
-  const [modelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
   const [showMerge, setShowMerge] = useState(false);
   const [acceptingSuggestion, setAcceptingSuggestion] = useState(false);
@@ -76,6 +79,15 @@ export function CinemaAssets() {
   };
 
   useEffect(load, [id]);
+
+  // Apply the project's saved default AI model once, on first load.
+  useEffect(() => {
+    if (project) {
+      const preferred = resolveModelPreference(project.script_model);
+      if (preferred) setModelId(preferred.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   const selectedFolder = folders.find((f) => f.id === selectedFolderId);
 
@@ -109,7 +121,22 @@ export function CinemaAssets() {
     }
   };
 
-  const canvasAssets = canvasFolderFilter === "all" ? projectAssets : projectAssets.filter((a) => a.folder_id === canvasFolderFilter);
+  // Folder tree for the Moodboard filter bar — grouped by root category (Characters/
+  // Locations/Products/Props/Other) with each root's direct children as sub-filters,
+  // instead of every folder at every depth flattened into one equal-weight row.
+  const rootFolders = folders.filter((f) => !f.parent_id);
+  const childrenOfFolder = (folderId: string) => folders.filter((f) => f.parent_id === folderId);
+  const folderAndDescendantIds = (folderId: string) => new Set([folderId, ...childrenOfFolder(folderId).map((c) => c.id)]);
+  const assetCountFor = (folderId: string) => {
+    const ids = folderAndDescendantIds(folderId);
+    return projectAssets.filter((a) => ids.has(a.folder_id)).length;
+  };
+
+  // Selecting a root folder includes assets in its direct children too — a "Characters"
+  // filter should show every character, not just ones filed at the root level.
+  const canvasAssets = canvasFolderFilter === "all"
+    ? projectAssets
+    : projectAssets.filter((a) => folderAndDescendantIds(canvasFolderFilter).has(a.folder_id));
 
   const handleExportAssets = async () => {
     setExporting(true);
@@ -292,46 +319,72 @@ export function CinemaAssets() {
               type="button"
               onClick={() => setViewMode("canvas")}
               className={cn("h-8 px-3 flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase transition-precise",
-                viewMode === "canvas" ? "bg-cyan/10 text-cyan" : "text-readable hover:text-white")}
+                viewMode === "canvas" ? "bg-blue/12 text-blue" : "text-readable hover:text-white")}
             >
               <LayoutGrid size={12} /> Moodboard
             </button>
           </div>
           <CinemaStageTabs projectId={id} active="assets" />
+          <ProTipPanel stage="assets" provider={project.image_provider} />
         </div>
       }
     >
       {viewMode === "canvas" ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setCanvasFolderFilter("all")}
-              className={cn("h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border",
-                canvasFolderFilter === "all" ? "text-cyan border-cyan/55 bg-cyan/10" : "text-readable border-white/14 hover:text-white")}
+        <div className="flex flex-col gap-5">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setCanvasFolderFilter("all")}
+                  className={cn("h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border",
+                    canvasFolderFilter === "all" ? "text-cyan border-cyan/55 bg-cyan/10" : "text-readable border-white/14 hover:text-white")}
+                >
+                  All ({projectAssets.length})
+                </button>
+              </div>
+              {rootFolders.map((root) => {
+                const children = childrenOfFolder(root.id);
+                return (
+                  <div key={root.id} className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setCanvasFolderFilter(root.id)}
+                      className={cn("h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border shrink-0",
+                        canvasFolderFilter === root.id ? "text-cyan border-cyan/55 bg-cyan/10" : "text-readable border-white/20 hover:text-white")}
+                    >
+                      {root.name} ({assetCountFor(root.id)})
+                    </button>
+                    {children.length > 0 && <span className="w-px h-4 bg-white/10 shrink-0" />}
+                    {children.map((child) => (
+                      <button
+                        key={child.id}
+                        type="button"
+                        onClick={() => setCanvasFolderFilter(child.id)}
+                        className={cn("h-6 px-2.5 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border shrink-0",
+                          canvasFolderFilter === child.id ? "text-cyan border-cyan/55 bg-cyan/10" : "text-dim/70 border-white/10 hover:text-readable")}
+                      >
+                        {child.name} ({assetCountFor(child.id)})
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+            <Button
+              variant="accent"
+              size="sm"
+              onClick={handleExportAssets}
+              disabled={exporting || canvasAssets.every((a) => !a.file_data)}
+              className="shrink-0"
             >
-              All ({projectAssets.length})
-            </button>
-            {folders.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setCanvasFolderFilter(f.id)}
-                className={cn("h-7 px-3 rounded-sm font-mono text-[9px] tracking-widest uppercase transition-precise border",
-                  canvasFolderFilter === f.id ? "text-cyan border-cyan/55 bg-cyan/10" : "text-readable border-white/14 hover:text-white")}
-              >
-                {f.name} ({projectAssets.filter((a) => a.folder_id === f.id).length})
-              </button>
-            ))}
-            <div className="flex-1" />
-            <Button variant="ghost" size="sm" onClick={handleExportAssets} disabled={exporting || canvasAssets.every((a) => !a.file_data)}>
               <Download size={11} /> {exporting ? "Exporting…" : `Export (${canvasAssets.filter((a) => !!a.file_data).length})`}
             </Button>
           </div>
           <MoodboardCanvas assets={canvasAssets} folders={folders} onPositionChange={handleCanvasPositionChange} />
         </div>
       ) : (
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-start">
         {/* Left: folder tree + AI suggestions */}
         <div className="flex flex-col gap-4 xl:col-span-1">
           <div className="p-3 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
@@ -371,10 +424,11 @@ export function CinemaAssets() {
             </div>
           )}
 
-          <div className="flex flex-col gap-2 p-3 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-            <div className="flex items-center justify-between">
-              <span className="system-label text-[11px]">SUGGEST FROM SCRIPT</span>
-              <Button variant="ghost" size="sm" onClick={handleSuggestFolders} disabled={suggesting}>
+          <div className="flex flex-col gap-2.5 p-3 rounded-card" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
+            <span className="system-label text-[11px]">SUGGEST FROM SCRIPT</span>
+            <div className="flex items-center gap-1.5">
+              <ModelSelector value={modelId} onChange={setModelId} className="flex-1 min-w-0" />
+              <Button variant="ghost" size="sm" onClick={handleSuggestFolders} disabled={suggesting} className="shrink-0">
                 <Sparkles size={10} /> {suggesting ? "Reading…" : "Suggest"}
               </Button>
             </div>
@@ -386,10 +440,13 @@ export function CinemaAssets() {
                     type="button"
                     onClick={() => handleAcceptSuggestion(s)}
                     disabled={acceptingSuggestion}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded-sm border border-cyan/25 hover:bg-cyan/8 transition-precise text-left disabled:opacity-40"
+                    className={cn(
+                      "flex items-center justify-between px-2.5 py-1.5 rounded-sm border transition-precise text-left disabled:opacity-40",
+                      s.kind === "product" ? "border-amber/35 hover:bg-amber/8" : "border-cyan/25 hover:bg-cyan/8"
+                    )}
                   >
-                    <span className="font-mono text-[11.5px] text-white">{s.name}</span>
-                    <span className="font-mono text-[9px] text-cyan tracking-widest uppercase">+ {s.kind}</span>
+                    <span className="font-mono text-[11.5px] text-white">{s.kind === "product" && "★ "}{s.name}</span>
+                    <span className={cn("font-mono text-[9px] tracking-widest uppercase", s.kind === "product" ? "text-amber" : "text-cyan")}>+ {s.kind}</span>
                   </button>
                 ))}
               </div>
@@ -516,26 +573,23 @@ export function CinemaAssets() {
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 gap-4">
-              <div
-                className="flex flex-col items-center gap-3 p-8 rounded-card max-w-md w-full"
-                style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
-              >
-                <FolderTreeIcon size={28} className="text-white/25" />
-                <span className="system-label">SELECT OR CREATE A FOLDER</span>
-                <span className="font-mono text-[13px] text-readable text-center leading-relaxed">
-                  Folders organize character sheets, locations, and props. Use "Suggest from Script" for a
-                  head start, or add one manually from the tree on the left.
-                </span>
-              </div>
+            <div
+              className="flex flex-col items-center gap-3 p-8 rounded-card max-w-md w-full mx-auto"
+              style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+            >
+              <FolderTreeIcon size={28} className="text-white/25" />
+              <span className="system-label">SELECT OR CREATE A FOLDER</span>
+              <span className="font-mono text-[13px] text-readable text-center leading-relaxed">
+                Folders organize characters, products, locations, and props. Use "Suggest from Script" for a
+                head start, or add one manually from the tree on the left.
+              </span>
             </div>
           )}
         </div>
 
-        {/* Right: script preview + pro tips */}
+        {/* Right: script preview + counts */}
         <div className="xl:col-span-1 flex flex-col gap-4">
           <ScriptPreviewPanel scriptContent={project.script_content} />
-          <ProTipPanel stage="assets" provider={project.image_provider} />
           <div className="flex items-center gap-2 p-3 rounded-card font-mono text-[11px] text-muted" style={{ border: "var(--border-default)" }}>
             <Layers size={12} /> {folders.length} folder{folders.length !== 1 ? "s" : ""}
           </div>

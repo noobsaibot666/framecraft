@@ -27,7 +27,7 @@ export interface ScriptDraftInput {
   plotTwist?: string;
 }
 
-const SCRIPT_SYSTEM_PROMPT = `You are a screenwriter drafting a short, production-ready video script for an AI-video shoot. Write clear scene headings, action lines, and camera-relevant description — this script will be broken into scenes and shots later. Keep it tight and visual; avoid stage-play dialogue formatting unless dialogue is essential. Return only the script text, no preamble or commentary.`;
+const SCRIPT_SYSTEM_PROMPT = `You are a screenwriter drafting a short, production-ready video script for an AI-video shoot. Write clear scene headings, action lines, and camera-relevant description — this script will be broken into scenes and shots later. Keep it tight and visual; avoid stage-play dialogue formatting unless dialogue is essential. If this is an advertisement or otherwise features a specific product, name that product explicitly and establish it clearly within the first beat — it is the hero of the piece and should read as distinct from incidental background props, not blend in with the scenery. Return only the script text, no preamble or commentary.`;
 
 function buildDraftPrompt(input: ScriptDraftInput): string {
   const context = [

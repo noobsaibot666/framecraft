@@ -44,6 +44,23 @@ export function AppShell() {
 
   useEffect(() => scheduleLikelyRoutePrefetch(), []);
 
+  // Global drag-and-drop guard. Without this, dropping a file anywhere that
+  // isn't a dedicated dropzone (or even on one, if its own onDrop doesn't
+  // preventDefault) falls through to the webview's native default: it
+  // navigates the whole window to display the dropped file, replacing the
+  // SPA entirely — reported as "the image opens full screen and the app
+  // locks up". Real dropzones still work: they call preventDefault() in
+  // their own onDrop before this ever needs to catch it.
+  useEffect(() => {
+    const preventDefault = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", preventDefault);
+    window.addEventListener("drop", preventDefault);
+    return () => {
+      window.removeEventListener("dragover", preventDefault);
+      window.removeEventListener("drop", preventDefault);
+    };
+  }, []);
+
   const openSearch = useCallback(() => setSearchOpen((open) => !open), []);
   useShortcut("cmd+k", openSearch);
   useShortcut("cmd+/", () => setShortcutsOpen((v) => !v));

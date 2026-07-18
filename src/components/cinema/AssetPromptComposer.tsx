@@ -1,10 +1,11 @@
-import { useRef, useState } from "react";
-import { Check, ImageUp, Pencil, Sparkles, Star, Library } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, CheckCircle2, ImageUp, Pencil, Sparkles, Star, Library } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { isTagTaken, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { draftAssetPrompt } from "@/lib/cinemaAssetPrompt";
 import { createPrompt } from "@/lib/db";
-import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
+import { AI_MODELS, resolveModelPreference } from "@/lib/aiConfig";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
 import { useToastStore } from "@/stores/useToastStore";
@@ -24,17 +25,38 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
   const [instruction, setInstruction] = useState("");
   const [promptText, setPromptText] = useState(asset.prompt_text ?? "");
   const [isPrimary, setIsPrimary] = useState(asset.is_primary);
-  const [modelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [modelId, setModelId] = useState(() => resolveModelPreference(project.script_model)?.id ?? AI_MODELS[0].id);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const [editingTag, setEditingTag] = useState(false);
   const [tagDraft, setTagDraft] = useState(asset.tag);
   const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [drafting, setDrafting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [autosaved, setAutosaved] = useState(false);
+  const hydratedRef = useRef(false);
+
+  // Silent debounced autosave — title/prompt/primary edits are no longer lost if the
+  // user navigates away (e.g. back to Script Studio) without clicking Save Asset.
+  // Skips the first run (component mount) so it doesn't re-save unchanged data.
+  useEffect(() => {
+    if (!hydratedRef.current) { hydratedRef.current = true; return; }
+    const timer = window.setTimeout(() => {
+      updateCinemaAsset(asset.id, { title, prompt_text: promptText, is_primary: isPrimary })
+        .then(() => {
+          onChange();
+          setAutosaved(true);
+          window.setTimeout(() => setAutosaved(false), 1200);
+        })
+        .catch(() => toast("Failed to autosave asset", "error"));
+    }, 800);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, promptText, isPrimary]);
 
   const handleSaveTag = async () => {
     const normalized = tagDraft.trim().replace(/^@/, "");
@@ -70,6 +92,12 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    handleFileSelected(e.dataTransfer.files[0]);
   };
 
   const handleDraft = async () => {
@@ -173,28 +201,6 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="system-label">GENERATED IMAGE</label>
-        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileSelected(e.target.files?.[0])} />
-        {asset.file_data ? (
-          <div className="flex items-center gap-3">
-            <img src={asset.file_data} alt={asset.title} className="w-24 h-24 object-cover rounded-sm border border-white/12" />
-            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              <ImageUp size={11} /> {uploading ? "Importing…" : "Replace Image"}
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center justify-center gap-2 h-16 rounded-sm border-2 border-dashed border-white/20 hover:border-cyan/45 transition-precise font-mono text-[11px] text-readable hover:text-cyan"
-          >
-            <ImageUp size={13} /> {uploading ? "Importing…" : "Import generated image"}
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1.5">
         <label className="system-label">DESCRIBE WHAT YOU WANT</label>
         <textarea
           value={instruction}
@@ -204,9 +210,12 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
           className="px-3 py-2 font-mono text-[12.5px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
-        <Button variant="primary" size="sm" onClick={handleDraft} disabled={drafting || !instruction.trim()} className="self-start">
-          <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Prompt"}
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="primary" size="sm" onClick={handleDraft} disabled={drafting || !instruction.trim()}>
+            <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Prompt"}
+          </Button>
+          <ModelSelector value={modelId} onChange={setModelId} />
+        </div>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -221,6 +230,46 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
         />
       </div>
 
+      <div className="flex flex-col gap-1.5">
+        <label className="system-label">GENERATED IMAGE</label>
+        <span className="font-mono text-[10.5px] text-muted -mt-0.5">
+          Take the prompt above to your image generator, then import the result here.
+        </span>
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFileSelected(e.target.files?.[0])} />
+        {asset.file_data ? (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={cn(
+              "flex items-center gap-3 p-2 -m-2 rounded-sm transition-precise",
+              dragging && "bg-cyan/8 ring-1 ring-cyan/50"
+            )}
+          >
+            <img src={asset.file_data} alt={asset.title} className="w-24 h-24 object-cover rounded-sm border border-white/12" />
+            <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+              <ImageUp size={11} /> {uploading ? "Importing…" : "Replace Image"}
+            </Button>
+            <span className="font-mono text-[10px] text-dim/60">or drop a new image here</span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            disabled={uploading}
+            className={cn(
+              "flex items-center justify-center gap-2 h-16 rounded-sm border-2 border-dashed transition-precise font-mono text-[11px]",
+              dragging ? "border-cyan/60 bg-cyan/8 text-cyan" : "border-white/20 text-readable hover:border-cyan/45 hover:text-cyan"
+            )}
+          >
+            <ImageUp size={13} /> {uploading ? "Importing…" : dragging ? "Drop here" : "Import generated image, or drag one in"}
+          </button>
+        )}
+      </div>
+
       <div className="flex items-center gap-2 pt-1">
         <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
           {saving ? "Saving…" : "Save Asset"}
@@ -228,6 +277,11 @@ export function AssetPromptComposer({ asset, folder, project, onChange }: Props)
         <Button variant="ghost" size="sm" onClick={handlePromote} disabled={promoting || !!asset.prompt_id}>
           <Library size={11} /> {asset.prompt_id ? "In Prompt Library" : promoting ? "Promoting…" : "Promote to Library"}
         </Button>
+        {autosaved && (
+          <span className="flex items-center gap-1 font-mono text-[10px] text-cyan tracking-widest uppercase">
+            <CheckCircle2 size={11} /> Autosaved
+          </span>
+        )}
       </div>
     </div>
   );

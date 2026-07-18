@@ -16,7 +16,8 @@ import {
 } from "@/lib/cinemaScenes";
 import { splitScriptIntoScenes } from "@/lib/cinemaSceneSplit";
 import { accentIndexForSortOrder } from "@/lib/storytelling";
-import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useToastStore } from "@/stores/useToastStore";
 import type { CinemaProject, CinemaScene } from "@/types";
 
@@ -29,7 +30,7 @@ export function CinemaScenes() {
   const [loading, setLoading] = useState(true);
   const [splitting, setSplitting] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [modelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const load = () => {
@@ -46,6 +47,15 @@ export function CinemaScenes() {
   };
 
   useEffect(load, [id]);
+
+  // Apply the project's saved default AI model once, on first load.
+  useEffect(() => {
+    if (project) {
+      const preferred = resolveModelPreference(project.script_model);
+      if (preferred) setModelId(preferred.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   const reload = () => {
     if (!id) return;
@@ -172,15 +182,16 @@ export function CinemaScenes() {
             <CheckCircle2 size={11} /> {project.status === "complete" ? "Reopen" : "Mark Complete"}
           </Button>
           <CinemaStageTabs projectId={id} active="scenes" />
+          <ProTipPanel stage="scenes" provider={project.video_provider} />
         </div>
       }
     >
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        <div className="flex flex-col gap-6 xl:col-span-3">
+      <div className="flex flex-col gap-6">
           <div className="flex items-center gap-2">
             <Button variant="primary" size="sm" onClick={handleSplit} disabled={splitting}>
               <Sparkles size={11} /> {splitting ? "Reading script…" : "Split Script into Scenes"}
             </Button>
+            <ModelSelector value={modelId} onChange={setModelId} />
             <div className="flex-1" />
             <input
               value={newTitle}
@@ -228,11 +239,6 @@ export function CinemaScenes() {
               </div>
             </div>
           )}
-        </div>
-
-        <div className="xl:col-span-1">
-          <ProTipPanel stage="scenes" provider={project.video_provider} />
-        </div>
       </div>
     </PageContainer>
   );

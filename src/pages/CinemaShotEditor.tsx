@@ -19,7 +19,8 @@ import { getAssetsForProject } from "@/lib/cinemaAssets";
 import { generateShotPrompt, suggestTransitions, type TimelinePosition, type TransitionSuggestion } from "@/lib/cinemaShotGeneration";
 import { copyToClipboard } from "@/lib/cinemaExport";
 import { createShotPromptVersion, getShotPromptVersions } from "@/lib/cinemaShotPromptVersions";
-import { AI_MODELS, pickAvailableModel } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn, formatDate, formatTime } from "@/lib/utils";
 import type { CinemaAsset, CinemaProject, CinemaScene, CinemaShot, CinemaShotPromptVersion, CinemaShotType } from "@/types";
@@ -62,7 +63,7 @@ export function CinemaShotEditor() {
   const [suggestingTransitions, setSuggestingTransitions] = useState(false);
   const [transitionSuggestions, setTransitionSuggestions] = useState<TransitionSuggestion[]>([]);
   const [promptVersions, setPromptVersions] = useState<CinemaShotPromptVersion[]>([]);
-  const [modelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const load = () => {
@@ -82,6 +83,15 @@ export function CinemaShotEditor() {
   };
 
   useEffect(load, [id, sceneId]);
+
+  // Apply the project's saved default AI model once, on first load.
+  useEffect(() => {
+    if (project) {
+      const preferred = resolveModelPreference(project.script_model);
+      if (preferred) setModelId(preferred.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
 
   const reloadShots = () => {
     if (!sceneId) return;
@@ -245,9 +255,12 @@ export function CinemaShotEditor() {
       title={scene.title}
       subtitle={`${project.title} / SHOT EDITOR`}
       action={
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/cinema-studio/${id}/scenes`)}>
-          <ArrowLeft size={11} /> Back to Timeline
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/cinema-studio/${id}/scenes`)}>
+            <ArrowLeft size={11} /> Back to Timeline
+          </Button>
+          <ProTipPanel stage="scenes" provider={project.video_provider} />
+        </div>
       }
     >
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
@@ -377,6 +390,7 @@ export function CinemaShotEditor() {
                     <Button variant="primary" size="sm" onClick={handleGeneratePrompt} disabled={generating}>
                       <Sparkles size={11} /> {generating ? "Writing…" : "Generate Prompt"}
                     </Button>
+                    <ModelSelector value={modelId} onChange={setModelId} />
                   </div>
                 </div>
                 <textarea
@@ -469,11 +483,10 @@ export function CinemaShotEditor() {
           )}
         </div>
 
-        {/* Right: script excerpt + creative hints + pro tips */}
+        {/* Right: script excerpt + creative hints */}
         <div className="xl:col-span-1 flex flex-col gap-4">
           <ScriptPreviewPanel scriptContent={scene.script_excerpt} title="SCENE SCRIPT EXCERPT" defaultExpanded={false} />
           <CreativeHintsPanel mood={scene.mood} />
-          <ProTipPanel stage="scenes" provider={project.video_provider} />
         </div>
       </div>
     </PageContainer>

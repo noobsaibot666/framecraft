@@ -12,12 +12,21 @@ export interface SuggestedFolder {
   kind: CinemaFolderKind;
 }
 
-const FOLDER_SYSTEM_PROMPT = `You are a video-production coordinator reading a script to plan asset folders (character sheets, location references, prop references). Extract every distinct character, location, and prop that will need its own visual reference. Skip generic background elements with no visual reference need. Return only valid JSON, no commentary.`;
+const FOLDER_SYSTEM_PROMPT = `You are a video-production coordinator reading a script to plan asset folders (character sheets, location references, product references, prop references). Extract every distinct character, location, product, and prop that will need its own visual reference. Skip generic background elements with no visual reference need.
+
+Distinguish "product" from "prop" carefully — they are not the same kind:
+- "product" is the item the piece exists to advertise or showcase — the hero the script is built around (e.g. the watch in a watch ad, the sneaker in a sneaker ad). There is usually only one product, occasionally a small family of variants. It typically gets the most deliberate, camera-favoring treatment in the script (close-ups, hero shots, the "reveal").
+- "prop" is everything else the characters merely interact with or that dresses the scene (a coffee cup, a suitcase, a phone) — incidental, not what the piece is selling.
+
+If the script is not an advertisement (no featured product), it's fine to return zero "product" entries — don't force one.
+
+Return only valid JSON, no commentary.`;
 
 const JSON_SHAPE = `{
   "folders": [
     { "name": "Eduardo", "kind": "character" },
     { "name": "Captain's Cabin", "kind": "location" },
+    { "name": "RIMOWA Aluminum Case", "kind": "product" },
     { "name": "Treasure Map", "kind": "prop" }
   ]
 }`;
@@ -25,7 +34,7 @@ const JSON_SHAPE = `{
 export function parseSuggestedFolders(raw: string): SuggestedFolder[] {
   const parsed = extractJson(raw) as { folders?: unknown };
   if (!Array.isArray(parsed?.folders)) throw new Error("Folder suggestions must return a folders array.");
-  const validKinds: CinemaFolderKind[] = ["character", "location", "prop", "other"];
+  const validKinds: CinemaFolderKind[] = ["character", "location", "prop", "product", "other"];
   const seen = new Set<string>();
   const result: SuggestedFolder[] = [];
   for (const candidate of parsed.folders) {

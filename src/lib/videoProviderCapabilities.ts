@@ -126,6 +126,7 @@ const GENERAL_STAGE_TIPS: Record<CinemaStageKey, string[]> = {
     "Generate variations, don't settle for the first result — a higher win rate comes from picking the best of 3-4.",
     "Use a 3/4 angle for locations to enrich depth — a flat head-on shot gives the video model less to work with.",
     "Use the prompt in your image generator once you already have a reference — consistency compounds across the sheet.",
+    "Character sheets: erase the face from the full-body shot on the first panel when the AI generates the 3-image sheet — leaving only one face (on the close-up portrait) for the model to track keeps identity consistent across views.",
   ],
   scenes: [
     "Reverse angles for the same location keep multi-shot continuity — generate a second asset from the opposite side before shooting coverage.",

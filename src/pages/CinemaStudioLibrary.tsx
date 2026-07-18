@@ -44,7 +44,7 @@ function ProjectCard({
 
   return (
     <div
-      className="group relative flex flex-col gap-4 p-5 rounded-card transition-all duration-150 border border-white/22 bg-white/7 hover:bg-white/10 hover:border-white/30"
+      className="group relative flex flex-col gap-4 p-5 rounded-card transition-all duration-150 border border-white/22 bg-white/7 hover:bg-white/10 hover:border-white/30 min-w-0"
       style={{ cursor: "pointer" }}
       onClick={onClick}
     >
@@ -113,14 +113,14 @@ function ProjectCard({
         </div>
       )}
 
-      <div className="flex items-center gap-5 pt-2 border-t border-white/12">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-2 border-t border-white/12">
         {[
           { label: "folders", val: project.folder_count ?? 0 },
           { label: "assets", val: project.asset_count ?? 0 },
           { label: "scenes", val: project.scene_count ?? 0 },
           { label: "shots", val: project.shot_count ?? 0 },
         ].map(({ label, val }) => (
-          <div key={label} className="flex items-center gap-1">
+          <div key={label} className="flex items-center gap-1 shrink-0">
             <span className="font-mono text-[14px] text-soft-white tabular-nums">{val}</span>
             <span className="font-mono text-[9px] text-muted tracking-widest uppercase">{label}</span>
           </div>
@@ -217,7 +217,7 @@ export function CinemaStudioLibrary() {
         </div>
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {active.map((p) => (
               <ProjectCard
                 key={p.id}
@@ -232,7 +232,7 @@ export function CinemaStudioLibrary() {
           {archived.length > 0 && (
             <div className="flex flex-col gap-3">
               <span className="system-label text-[11px]">ARCHIVED ({archived.length})</span>
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 opacity-60">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 opacity-60">
                 {archived.map((p) => (
                   <ProjectCard
                     key={p.id}

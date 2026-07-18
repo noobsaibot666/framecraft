@@ -62,7 +62,14 @@ function FolderRow({ node, depth, selectedId, onSelect, onAddChild, onDelete }: 
           style={{ background: node.accent_color ?? "rgba(255,255,255,0.3)" }}
         />
         <span className="font-mono text-[12.5px] truncate flex-1">{node.name}</span>
-        <span className="font-mono text-[9px] text-muted tracking-widest uppercase shrink-0">{node.kind}</span>
+        <span
+          className={cn(
+            "font-mono text-[9px] tracking-widest uppercase shrink-0",
+            node.kind === "product" ? "text-amber" : "text-muted"
+          )}
+        >
+          {node.kind === "product" ? "★ PRODUCT" : node.kind}
+        </span>
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-precise shrink-0">
           <button type="button" onClick={(e) => { e.stopPropagation(); onAddChild(node.id); }} className="text-muted hover:text-cyan transition-precise" title="Add subfolder">
             <FolderPlus size={11} />

@@ -8,19 +8,23 @@ export interface AIModel {
   id: string;
   label: string;
   provider: "anthropic" | "openai" | "deepseek";
-  tier: "fast" | "balanced" | "powerful";
+  tier: "fast" | "balanced" | "powerful" | "flagship";
 }
 
 export type AIProvider = AIModel["provider"];
 
+// Ordered priciest/most-capable → cheapest within each provider, so any UI that
+// lists a provider's models in AI_MODELS order (or filters by getConnectedModels())
+// reads top-to-bottom as "flagship down to the cheaper model".
 export const AI_MODELS: AIModel[] = [
-  { id: "claude-sonnet-4-6",        label: "Claude Sonnet 4.6",  provider: "anthropic", tier: "balanced"  },
+  { id: "claude-fable-5",           label: "Claude Fable 5",     provider: "anthropic", tier: "flagship"  },
   { id: "claude-opus-4-8",          label: "Claude Opus 4.8",    provider: "anthropic", tier: "powerful"  },
+  { id: "claude-sonnet-5",          label: "Claude Sonnet 5",    provider: "anthropic", tier: "balanced"  },
   { id: "claude-haiku-4-5-20251001",label: "Claude Haiku 4.5",   provider: "anthropic", tier: "fast"      },
   { id: "gpt-4o",                   label: "GPT-4o",             provider: "openai",    tier: "powerful"  },
   { id: "gpt-4o-mini",              label: "GPT-4o mini",        provider: "openai",    tier: "fast"      },
-  { id: "deepseek-chat",            label: "DeepSeek Chat",      provider: "deepseek",  tier: "fast"      },
   { id: "deepseek-reasoner",        label: "DeepSeek Reasoner",  provider: "deepseek",  tier: "powerful"  },
+  { id: "deepseek-chat",            label: "DeepSeek Chat",      provider: "deepseek",  tier: "fast"      },
 ];
 
 export function providerLabel(provider: AIProvider): string {
@@ -70,6 +74,19 @@ export function getConnectedModels(): AIModel[] {
 
 function isModelConnected(model: AIModel): boolean {
   return validateApiKey(model.provider, getApiKey(model.provider)).valid;
+}
+
+/**
+ * Resolves a project's saved default AI model (e.g. `CinemaProject.script_model`)
+ * to a connected AIModel, falling back to pickAvailableModel() when the project
+ * has no preference set or its saved model's key is no longer connected.
+ */
+export function resolveModelPreference(preferredId?: string | null): AIModel | undefined {
+  if (preferredId) {
+    const model = AI_MODELS.find((m) => m.id === preferredId);
+    if (model && isModelConnected(model)) return model;
+  }
+  return pickAvailableModel();
 }
 
 /** The user's chosen "standard model" from Settings, if set and still connected. */

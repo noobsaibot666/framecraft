@@ -12,6 +12,7 @@ export const MASTER_FOLDER_NAMES: Record<CinemaFolderKind, string> = {
   character: "Characters",
   location: "Locations",
   prop: "Props",
+  product: "Products",
   other: "Other",
 };
 

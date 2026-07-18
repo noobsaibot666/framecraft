@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircle2, History, Sparkles, Wand2 } from "lucide-react";
+import { CheckCircle2, Copy, History, Sparkles, Wand2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
@@ -8,7 +8,8 @@ import { ProTipPanel } from "@/components/cinema/ProTipPanel";
 import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
 import { createScriptVersion, getScriptVersions } from "@/lib/cinemaScriptVersions";
 import { generateScriptDraft, refineScript, SCRIPT_QUESTIONS } from "@/lib/cinemaScriptGeneration";
-import { AI_MODELS, getConnectedModels, pickAvailableModel } from "@/lib/aiConfig";
+import { copyToClipboard } from "@/lib/cinemaExport";
+import { AI_MODELS, getConnectedModels, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
 import { useToastStore } from "@/stores/useToastStore";
 import { formatDate, formatTime } from "@/lib/utils";
 import type { CinemaProject, CinemaScriptVersion } from "@/types";
@@ -54,6 +55,16 @@ export function CinemaScript() {
 
   useEffect(load, [id]);
 
+  // Apply the project's saved default AI model once, on first load — not on every
+  // project state update (autosave, etc), so a manual mid-session model switch sticks.
+  useEffect(() => {
+    if (project) {
+      const preferred = resolveModelPreference(project.script_model);
+      if (preferred) setModelId(preferred.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id]);
+
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const handleSave = async () => {
@@ -69,7 +80,18 @@ export function CinemaScript() {
         script_content: content.trim() || undefined,
         status,
       });
-      if (status) setProject((prev) => (prev ? { ...prev, status } : prev));
+      // Update the local project snapshot too — not just `status` — so the "Saved" indicator
+      // (which reads project.script_content) reflects the save immediately instead of only
+      // after the next full load().
+      setProject((prev) => (prev ? {
+        ...prev,
+        script_idea: idea.trim() || undefined,
+        script_runtime_target: runtime.trim() || undefined,
+        script_setting: setting.trim() || undefined,
+        script_tone: tone.trim() || undefined,
+        script_content: content.trim() || undefined,
+        ...(status ? { status } : {}),
+      } : prev));
       toast("Script saved", "success");
     } catch {
       toast("Failed to save script", "error");
@@ -117,7 +139,7 @@ export function CinemaScript() {
   const handleSaveVersion = async () => {
     if (!id || !content.trim()) return;
     try {
-      await createScriptVersion(id, content, `${versions.length + 1} versions saved`);
+      await createScriptVersion(id, content, `Version ${versions.length + 1}`);
       setVersions(await getScriptVersions(id));
       toast("Version saved", "success");
     } catch {
@@ -127,7 +149,24 @@ export function CinemaScript() {
 
   const handleRestoreVersion = (version: CinemaScriptVersion) => {
     setContent(version.content);
-    toast("Version restored into the editor — Save Script to keep it", "info");
+    toast(`${version.label ?? "Version"} restored into the editor — Save Script to keep it`, "info");
+  };
+
+  const handleCopyScript = async () => {
+    if (!content.trim()) { toast("Nothing to copy yet", "error"); return; }
+    try {
+      await copyToClipboard(content);
+      toast("Script copied to clipboard", "success");
+    } catch {
+      toast("Failed to copy — your browser may block clipboard access here", "error");
+    }
+  };
+
+  const handleReloadSaved = () => {
+    if (!project?.script_content) return;
+    if (content !== project.script_content && !window.confirm("Discard your unsaved edits and reload the saved script?")) return;
+    setContent(project.script_content);
+    toast("Reloaded the saved script", "info");
   };
 
   const handleApprove = async () => {
@@ -167,10 +206,15 @@ export function CinemaScript() {
     <PageContainer
       title={project.title}
       subtitle="SCRIPT STUDIO"
-      action={<CinemaStageTabs projectId={id} active="script" />}
+      action={
+        <div className="flex items-center gap-3">
+          <CinemaStageTabs projectId={id} active="script" nextStage={project.script_status === "approved" ? "assets" : undefined} />
+          <ProTipPanel stage="script" />
+        </div>
+      }
     >
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-        {/* Left column: idea + Q&A + model + pro tips */}
+        {/* Left column: idea + Q&A + model */}
         <div className="flex flex-col gap-4 xl:col-span-1">
           <div className="flex flex-col gap-1.5">
             <label className="system-label">IDEA / LOGLINE</label>
@@ -221,18 +265,40 @@ export function CinemaScript() {
           <Button variant="primary" size="sm" onClick={handleGenerateDraft} disabled={drafting || !idea.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Draft"}
           </Button>
-
-          <ProTipPanel stage="script" />
         </div>
 
-        {/* Center: script editor + refine + versions */}
+        {/* Center: script editor + refine + versions + actions */}
         <div className="flex flex-col gap-3 xl:col-span-3">
-          <label className="system-label">SCRIPT</label>
+          <div className="flex items-center justify-between gap-3">
+            <label className="system-label">SCRIPT</label>
+            <div className="flex items-center gap-2">
+              {project.script_content?.trim() && (
+                <button
+                  type="button"
+                  onClick={handleReloadSaved}
+                  title="Reload the saved script (discards unsaved edits)"
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-sm border border-cyan/35 bg-cyan/8 text-cyan font-mono text-[10px] tracking-widest uppercase hover:bg-cyan/14 transition-precise"
+                >
+                  <CheckCircle2 size={11} /> Saved — {project.title}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleCopyScript}
+                disabled={!content.trim()}
+                title="Copy script text"
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-sm font-mono text-[10px] tracking-widest uppercase text-readable hover:text-white disabled:opacity-40 transition-precise"
+                style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+              >
+                <Copy size={11} /> Copy
+              </button>
+            </div>
+          </div>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Full script text… or generate a draft from the idea on the left."
-            rows={18}
+            rows={30}
             className="px-3 py-2 font-mono text-[13px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
             style={{ border: "1px solid rgba(255,255,255,0.16)" }}
           />
@@ -251,14 +317,34 @@ export function CinemaScript() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save Script"}
-            </Button>
+          {versions.length > 0 && (
+            <div className="flex flex-col gap-2 pt-2">
+              <label className="system-label">VERSION HISTORY</label>
+              <div className="flex flex-col gap-1.5">
+                {versions.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => handleRestoreVersion(v)}
+                    title="Reopen this version for editing"
+                    className="flex items-center justify-between px-3 py-2 rounded-sm border border-white/10 hover:border-cyan/40 hover:bg-cyan/5 transition-precise text-left"
+                  >
+                    <span className="font-mono text-[11px] text-readable">{v.label ?? "Version"}</span>
+                    <span className="font-mono text-[10px] text-muted">{formatDate(v.created_at)} {formatTime(v.created_at)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom action bar — right-aligned, anchored at the end of the page. */}
+          <div className="flex items-center justify-end gap-2 pt-4 mt-2" style={{ borderTop: "var(--border-default)" }}>
             <Button variant="ghost" size="sm" onClick={handleSaveVersion} disabled={!content.trim()}>
               <History size={11} /> Save Version
             </Button>
-            <div className="flex-1" />
+            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save Script"}
+            </Button>
             <Button
               variant={project.script_status === "approved" ? "muted" : "accent"}
               size="sm"
@@ -269,25 +355,6 @@ export function CinemaScript() {
               {project.script_status === "approved" ? "Script Approved" : "Approve Script"}
             </Button>
           </div>
-
-          {versions.length > 0 && (
-            <div className="flex flex-col gap-2 pt-4">
-              <label className="system-label">VERSION HISTORY</label>
-              <div className="flex flex-col gap-1.5">
-                {versions.map((v) => (
-                  <button
-                    key={v.id}
-                    type="button"
-                    onClick={() => handleRestoreVersion(v)}
-                    className="flex items-center justify-between px-3 py-2 rounded-sm border border-white/10 hover:border-cyan/40 hover:bg-cyan/5 transition-precise text-left"
-                  >
-                    <span className="font-mono text-[11px] text-readable">{v.label ?? "Version"}</span>
-                    <span className="font-mono text-[10px] text-muted">{formatDate(v.created_at)} {formatTime(v.created_at)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </PageContainer>

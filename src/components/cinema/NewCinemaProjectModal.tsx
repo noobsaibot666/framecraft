@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { createCinemaProject } from "@/lib/cinemaProjects";
+import { getConnectedModels, providerLabel } from "@/lib/aiConfig";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
 import type { Provider } from "@/types";
@@ -69,6 +70,7 @@ export function NewCinemaProjectModal({ onCreated, onClose }: Props) {
   const [videoProvider, setVideoProvider] = useState<Provider | "">("");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const connectedModels = getConnectedModels();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -138,14 +140,35 @@ export function NewCinemaProjectModal({ onCreated, onClose }: Props) {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="system-label">SCRIPT MODEL</label>
-            <input
-              value={scriptModel}
-              onChange={(e) => setScriptModel(e.target.value)}
-              placeholder="Uses your Settings default if left blank"
-              className="h-9 px-3 font-mono text-[12px] text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none"
-              style={{ border: "1px solid rgba(255,255,255,0.16)" }}
-            />
+            <label className="system-label">DEFAULT AI MODEL</label>
+            <span className="font-mono text-[10.5px] text-muted leading-relaxed">
+              Used across Script, Assets, Scenes, and Shots — switchable per-page any time.
+            </span>
+            {connectedModels.length === 0 ? (
+              <span className="font-mono text-[11px] text-dim/60">
+                No AI models connected yet — add an API key in Settings to choose one here.
+              </span>
+            ) : (
+              <select
+                value={scriptModel}
+                onChange={(e) => setScriptModel(e.target.value)}
+                className="h-9 px-3 font-mono text-[12px] text-white bg-dark rounded-sm focus:outline-none"
+                style={{ border: "1px solid rgba(255,255,255,0.16)" }}
+              >
+                <option value="">Uses your Settings default</option>
+                {(["anthropic", "openai", "deepseek"] as const).map((provider) => {
+                  const models = connectedModels.filter((m) => m.provider === provider);
+                  if (models.length === 0) return null;
+                  return (
+                    <optgroup key={provider} label={providerLabel(provider)}>
+                      {models.map((m) => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
+              </select>
+            )}
           </div>
 
           <PickerRow label="IMAGE MODEL (ASSETS)" options={IMAGE_PROVIDER_OPTIONS} value={imageProvider} onChange={setImageProvider} />

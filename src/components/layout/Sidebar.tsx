@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Archive,
@@ -11,6 +11,8 @@ import {
   Image,
   Layers,
   ListChecks,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   Tag,
   Upload,
@@ -20,7 +22,13 @@ import { getQueue } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import { prefetchRoute } from "@/lib/routePrefetch";
 
-const NAV_GROUPS = [
+interface NavItemDef {
+  label: string;
+  to: string;
+  icon: typeof Settings;
+}
+
+const NAV_GROUPS: { label: string; items: NavItemDef[] }[] = [
   {
     label: "START",
     items: [
@@ -68,7 +76,11 @@ const NAV_GROUPS = [
       { label: "Compare", to: "/compare", icon: GitCompare },
     ],
   },
-] as const;
+];
+
+const ALL_NAV_ITEMS: NavItemDef[] = NAV_GROUPS.flatMap((g) => g.items);
+
+const SIDEBAR_COLLAPSED_KEY = "fc_sidebar_collapsed";
 
 function NavItem({
   label,
@@ -128,8 +140,55 @@ function NavItem({
   );
 }
 
+/** One icon in the collapsed-state floating dock — macOS-dock-style: scales up on its own hover. */
+function DockIcon({
+  label,
+  to,
+  icon: Icon,
+  badge,
+  onNavigate,
+}: {
+  label: string;
+  to: string;
+  icon: typeof Settings;
+  badge?: number;
+  onNavigate: () => void;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={to === "/"}
+      title={label}
+      onClick={onNavigate}
+      onMouseEnter={() => prefetchRoute(to)}
+      className={({ isActive }) =>
+        cn(
+          "relative flex items-center justify-center w-10 h-10 rounded-lg shrink-0",
+          "transition-all duration-150 ease-out hover:scale-[1.18] hover:-translate-y-0.5",
+          isActive
+            ? "bg-red/14 text-red"
+            : "bg-white/5 text-soft-white/70 hover:bg-cyan/12 hover:text-cyan"
+        )
+      }
+    >
+      <Icon size={16} />
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-1 -right-1 flex items-center justify-center w-3.5 h-3.5 rounded-full bg-red text-white font-mono text-[8px]">
+          {badge}
+        </span>
+      )}
+    </NavLink>
+  );
+}
+
 export function Sidebar() {
   const [pendingCount, setPendingCount] = useState(0);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
+  const [dockOpen, setDockOpen] = useState(false);
+  const closeTimerRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     getQueue()
@@ -137,13 +196,90 @@ export function Sidebar() {
       .catch(() => setPendingCount(0));
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+    if (!collapsed) setDockOpen(false);
+  }, [collapsed]);
+
+  useEffect(() => () => { if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current); }, []);
+
+  // Debounced open/close so moving the mouse across the small gap between the
+  // hover rail and the floating dock doesn't cause it to flicker shut.
+  const openDock = () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    setDockOpen(true);
+  };
+  const scheduleCloseDock = () => {
+    closeTimerRef.current = window.setTimeout(() => setDockOpen(false), 220);
+  };
+
+  if (collapsed) {
+    return (
+      <>
+        {/* Thin always-present hover zone at the screen's left edge — hovering it reveals the dock. */}
+        <div
+          className="w-2 shrink-0"
+          style={{ borderRight: "var(--border-default)" }}
+          onMouseEnter={openDock}
+          onMouseLeave={scheduleCloseDock}
+        />
+        <div
+          onMouseEnter={openDock}
+          onMouseLeave={scheduleCloseDock}
+          className={cn(
+            "fixed top-12 bottom-0 left-0 z-40 flex flex-col items-center gap-1.5 py-4 px-2",
+            "transition-all duration-200 ease-out",
+            dockOpen ? "translate-x-0 opacity-100 pointer-events-auto" : "-translate-x-3 opacity-0 pointer-events-none"
+          )}
+          style={{
+            background: "rgba(10,10,10,0.94)",
+            borderRight: "var(--border-default)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="Expand navigation"
+            className="flex items-center justify-center w-10 h-10 rounded-lg mb-1 text-soft-white/60 hover:text-cyan hover:bg-cyan/10 transition-precise"
+          >
+            <PanelLeftOpen size={16} />
+          </button>
+          <div className="w-6 h-px bg-white/10 mb-1 shrink-0" />
+          <div className="flex flex-col gap-1.5 overflow-y-auto">
+            {ALL_NAV_ITEMS.map((item) => (
+              <DockIcon
+                key={item.to}
+                {...item}
+                badge={item.to === "/queue" ? pendingCount : undefined}
+                onNavigate={scheduleCloseDock}
+              />
+            ))}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <aside
       className="w-52 flex flex-col shrink-0"
       style={{ borderRight: "var(--border-default)" }}
     >
+      {/* Fold toggle */}
+      <div className="flex items-center justify-end px-3 pt-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          title="Collapse navigation"
+          className="flex items-center justify-center w-7 h-7 rounded-sm text-soft-white/50 hover:text-cyan hover:bg-cyan/10 transition-precise"
+        >
+          <PanelLeftClose size={13} />
+        </button>
+      </div>
+
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto pb-3 pt-4 flex flex-col gap-4">
+      <nav className="flex-1 overflow-y-auto pb-3 pt-1 flex flex-col gap-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="flex flex-col gap-1">
             <span className="px-4 pb-1 pt-2 font-mono text-[10.5px] tracking-widest text-soft-white/60 uppercase">

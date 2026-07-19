@@ -4,7 +4,7 @@
 // prose in, prose out — no JSON contract needed here, unlike storyboard/shot
 // generation which returns structured shot lists.
 import { chatComplete } from "./aiClient";
-import type { AIModel } from "./aiConfig";
+import type { AIModel, AIQuality } from "./aiConfig";
 
 export interface ScriptQuestion {
   key: "runtime" | "setting" | "plot_twist" | "tone";
@@ -41,24 +41,25 @@ function buildDraftPrompt(input: ScriptDraftInput): string {
   return `Write a short video script from this premise.\n\n${context}`;
 }
 
-export async function generateScriptDraft(input: ScriptDraftInput, model: AIModel): Promise<string> {
+export async function generateScriptDraft(input: ScriptDraftInput, model: AIModel, quality: AIQuality = "standard"): Promise<string> {
   if (!input.idea.trim()) throw new Error("Add an idea or logline before generating a draft.");
   const text = await chatComplete(model, {
     system: SCRIPT_SYSTEM_PROMPT,
     user: buildDraftPrompt(input),
     maxTokens: 2000,
+    quality,
   });
   const trimmed = text.trim();
   if (!trimmed) throw new Error("The model returned an empty script.");
   return trimmed;
 }
 
-export async function refineScript(currentScript: string, instruction: string, model: AIModel): Promise<string> {
+export async function refineScript(currentScript: string, instruction: string, model: AIModel, quality: AIQuality = "standard"): Promise<string> {
   if (!currentScript.trim()) throw new Error("There's no script yet to refine — generate a draft first.");
   if (!instruction.trim()) throw new Error("Add a refinement instruction.");
 
   const user = `Current script:\n\n${currentScript.trim()}\n\nRevise the script per this instruction, keeping everything else intact unless the instruction requires a change: ${instruction.trim()}`;
-  const text = await chatComplete(model, { system: SCRIPT_SYSTEM_PROMPT, user, maxTokens: 2400 });
+  const text = await chatComplete(model, { system: SCRIPT_SYSTEM_PROMPT, user, maxTokens: 2400, quality });
   const trimmed = text.trim();
   if (!trimmed) throw new Error("The model returned an empty script.");
   return trimmed;

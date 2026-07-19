@@ -13,6 +13,36 @@ export interface AIModel {
 
 export type AIProvider = AIModel["provider"];
 
+/**
+ * Response depth dial, independent of model choice — scales max output tokens
+ * and appends a short instruction to the system prompt. Provider-uniform
+ * (token budget + prompt instruction only) rather than Anthropic-only
+ * extended-thinking, so it behaves the same across all three providers.
+ */
+export type AIQuality = "draft" | "standard" | "thorough";
+
+export const AI_QUALITIES: { id: AIQuality; label: string; description: string }[] = [
+  { id: "draft",    label: "Draft",    description: "Fastest, shortest — good for quick iteration." },
+  { id: "standard", label: "Standard", description: "Balanced default." },
+  { id: "thorough", label: "Thorough", description: "Slower, more detailed — more tokens, deeper coverage." },
+];
+
+const QUALITY_TOKEN_SCALE: Record<AIQuality, number> = { draft: 0.6, standard: 1, thorough: 1.6 };
+
+export function scaleMaxTokensForQuality(baseMaxTokens: number, quality: AIQuality): number {
+  return Math.max(256, Math.round(baseMaxTokens * QUALITY_TOKEN_SCALE[quality]));
+}
+
+const QUALITY_INSTRUCTIONS: Record<AIQuality, string> = {
+  draft: "Prioritize speed: keep the response concise and skip exhaustive edge-case coverage.",
+  standard: "",
+  thorough: "Take extra care: consider more nuance, coverage, and detail than usual before finalizing your answer.",
+};
+
+export function qualityInstruction(quality: AIQuality): string {
+  return QUALITY_INSTRUCTIONS[quality];
+}
+
 // Ordered priciest/most-capable → cheapest within each provider, so any UI that
 // lists a provider's models in AI_MODELS order (or filters by getConnectedModels())
 // reads top-to-bottom as "flagship down to the cheaper model".

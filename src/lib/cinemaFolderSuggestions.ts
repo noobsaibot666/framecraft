@@ -4,7 +4,7 @@
 // House, Jungle, car... the application need to catch the keywords").
 import { chatComplete } from "./aiClient";
 import { extractJson } from "./creativeDirectionGeneration";
-import type { AIModel } from "./aiConfig";
+import type { AIModel, AIQuality } from "./aiConfig";
 import type { CinemaFolderKind } from "@/types";
 
 export interface SuggestedFolder {
@@ -52,12 +52,13 @@ export function parseSuggestedFolders(raw: string): SuggestedFolder[] {
   return result;
 }
 
-export async function suggestFoldersFromScript(scriptText: string, model: AIModel): Promise<SuggestedFolder[]> {
+export async function suggestFoldersFromScript(scriptText: string, model: AIModel, quality: AIQuality = "standard"): Promise<SuggestedFolder[]> {
   if (!scriptText.trim()) throw new Error("Approve a script before requesting folder suggestions.");
   const text = await chatComplete(model, {
     system: FOLDER_SYSTEM_PROMPT,
     user: `Script:\n\n${scriptText.trim()}\n\nReturn only valid JSON in this exact structure:\n${JSON_SHAPE}`,
     maxTokens: 1200,
+    quality,
   });
   return parseSuggestedFolders(text);
 }

@@ -3,9 +3,12 @@ import {
   AI_KEY_ANTHROPIC,
   AI_KEY_DEEPSEEK,
   AI_KEY_OPENAI,
+  AI_QUALITIES,
   getConnectedModels,
   pickAvailableModel,
   pickVisionModel,
+  qualityInstruction,
+  scaleMaxTokensForQuality,
 } from "./aiConfig";
 import { setDefaultAiModelId } from "./userPreferences";
 
@@ -80,5 +83,37 @@ describe("getConnectedModels", () => {
     const connected = getConnectedModels();
     expect(connected.every((m) => m.provider === "anthropic")).toBe(true);
     expect(connected.length).toBeGreaterThan(0);
+  });
+});
+
+describe("scaleMaxTokensForQuality", () => {
+  it("leaves standard unscaled", () => {
+    expect(scaleMaxTokensForQuality(1000, "standard")).toBe(1000);
+  });
+
+  it("shrinks draft and grows thorough", () => {
+    expect(scaleMaxTokensForQuality(1000, "draft")).toBeLessThan(1000);
+    expect(scaleMaxTokensForQuality(1000, "thorough")).toBeGreaterThan(1000);
+  });
+
+  it("never scales below the 256-token floor", () => {
+    expect(scaleMaxTokensForQuality(100, "draft")).toBe(256);
+  });
+});
+
+describe("qualityInstruction", () => {
+  it("is empty for standard, so it's a no-op append", () => {
+    expect(qualityInstruction("standard")).toBe("");
+  });
+
+  it("returns a non-empty instruction for draft and thorough", () => {
+    expect(qualityInstruction("draft")).not.toBe("");
+    expect(qualityInstruction("thorough")).not.toBe("");
+  });
+});
+
+describe("AI_QUALITIES", () => {
+  it("covers exactly draft, standard, and thorough", () => {
+    expect(AI_QUALITIES.map((q) => q.id)).toEqual(["draft", "standard", "thorough"]);
   });
 });

@@ -16,8 +16,10 @@ import {
 } from "@/lib/cinemaScenes";
 import { splitScriptIntoScenes } from "@/lib/cinemaSceneSplit";
 import { accentIndexForSortOrder } from "@/lib/storytelling";
-import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference, type AIQuality } from "@/lib/aiConfig";
+import { getPreferences } from "@/lib/userPreferences";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { QualitySelector } from "@/components/ui/QualitySelector";
 import { useToastStore } from "@/stores/useToastStore";
 import type { CinemaProject, CinemaScene } from "@/types";
 
@@ -31,6 +33,7 @@ export function CinemaScenes() {
   const [splitting, setSplitting] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [quality, setQuality] = useState<AIQuality>(() => getPreferences().defaultAiQuality);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const load = () => {
@@ -89,7 +92,7 @@ export function CinemaScenes() {
     if (!id || !project?.script_content?.trim()) { toast("Approve a script first", "error"); return; }
     setSplitting(true);
     try {
-      const found = await splitScriptIntoScenes(project.script_content, model);
+      const found = await splitScriptIntoScenes(project.script_content, model, quality);
       // Each scene insert is independent (distinct sort_order/accent_index computed up front),
       // so create them concurrently instead of one round trip at a time.
       await Promise.all(found.map((scene, i) => createCinemaScene({
@@ -192,6 +195,7 @@ export function CinemaScenes() {
               <Sparkles size={11} /> {splitting ? "Reading script…" : "Split Script into Scenes"}
             </Button>
             <ModelSelector value={modelId} onChange={setModelId} />
+            <QualitySelector value={quality} onChange={setQuality} />
             <div className="flex-1" />
             <input
               value={newTitle}

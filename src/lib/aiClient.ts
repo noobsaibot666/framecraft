@@ -1,4 +1,4 @@
-import { providerErrorMessage, providerLabel, validateApiKey, getApiKey, type AIModel, type AIProvider } from "./aiConfig";
+import { providerErrorMessage, providerLabel, validateApiKey, getApiKey, qualityInstruction, scaleMaxTokensForQuality, type AIModel, type AIProvider, type AIQuality } from "./aiConfig";
 
 export const DEFAULT_AI_TIMEOUT_MS = 60_000;
 
@@ -21,13 +21,24 @@ export function requireValidApiKey(provider: AIProvider, apiKey: string): void {
   if (!validation.valid) throw new Error(validation.message ?? `Invalid ${providerLabel(provider)} API key.`);
 }
 
-/** Provider-agnostic single-turn chat completion. Returns the raw text response. */
+/**
+ * Provider-agnostic single-turn chat completion. Returns the raw text response.
+ * `opts.quality` defaults to "standard" — callers that never pass it (every
+ * call site outside Cinema Studio, as of this writing) get identical
+ * behavior to before this option existed: maxTokens unscaled, no instruction
+ * appended.
+ */
 export async function chatComplete(
   model: AIModel,
-  opts: { system: string; user: string; maxTokens: number }
+  opts: { system: string; user: string; maxTokens: number; quality?: AIQuality }
 ): Promise<string> {
   const apiKey = getApiKey(model.provider);
   requireValidApiKey(model.provider, apiKey);
+
+  const quality = opts.quality ?? "standard";
+  const maxTokens = scaleMaxTokensForQuality(opts.maxTokens, quality);
+  const extra = qualityInstruction(quality);
+  const system = extra ? `${opts.system}\n\n${extra}` : opts.system;
 
   if (model.provider === "anthropic") {
     const data = await fetchProviderJson<{ content: { type: string; text: string }[] }>(
@@ -43,8 +54,8 @@ export async function chatComplete(
         },
         body: JSON.stringify({
           model: model.id,
-          max_tokens: opts.maxTokens,
-          system: opts.system,
+          max_tokens: maxTokens,
+          system,
           messages: [{ role: "user", content: opts.user }],
         }),
       }
@@ -62,9 +73,9 @@ export async function chatComplete(
       headers: { "Authorization": `Bearer ${apiKey}`, "content-type": "application/json" },
       body: JSON.stringify({
         model: model.id,
-        max_tokens: opts.maxTokens,
+        max_tokens: maxTokens,
         messages: [
-          { role: "system", content: opts.system },
+          { role: "system", content: system },
           { role: "user", content: opts.user },
         ],
       }),

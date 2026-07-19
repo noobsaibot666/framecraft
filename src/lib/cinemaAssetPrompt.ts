@@ -14,7 +14,7 @@
 // CraftPrompt's PARAMETERS panel so a generated draft "fills" the mini
 // parameter editor instead of leaving the user to type flags by hand.
 import { chatComplete } from "./aiClient";
-import type { AIModel } from "./aiConfig";
+import type { AIModel, AIQuality } from "./aiConfig";
 import { formatFormulaForAI, getFormulaForProvider } from "./promptFormula";
 import { STRUCTURED_PARAM_PROVIDERS } from "./providerParameters";
 import type { CinemaFolderKind, Provider } from "@/types";
@@ -96,7 +96,7 @@ function parseDraft(raw: string): AssetPromptDraft {
   }
 }
 
-export async function draftAssetPrompt(input: AssetPromptDraftInput, model: AIModel): Promise<AssetPromptDraft> {
+export async function draftAssetPrompt(input: AssetPromptDraftInput, model: AIModel, quality: AIQuality = "standard"): Promise<AssetPromptDraft> {
   if (!input.instruction.trim()) throw new Error("Describe what you want before generating a prompt.");
 
   const previous = input.previousAttempt;
@@ -119,6 +119,6 @@ export async function draftAssetPrompt(input: AssetPromptDraftInput, model: AIMo
           : "",
       ].filter(Boolean).join("\n\n");
 
-  const text = await chatComplete(model, { system: buildSystemPrompt(input.provider), user: context, maxTokens: 2000 });
+  const text = await chatComplete(model, { system: buildSystemPrompt(input.provider), user: context, maxTokens: 2000, quality });
   return parseDraft(text);
 }

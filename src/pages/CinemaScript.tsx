@@ -1,18 +1,36 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircle2, Copy, History, Sparkles, Wand2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { CheckCircle2, Copy, History, Sparkles, Wand2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
 import { ProTipPanel } from "@/components/cinema/ProTipPanel";
+import { ModelSelector } from "@/components/ui/ModelSelector";
+import { QualitySelector } from "@/components/ui/QualitySelector";
 import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
 import { createScriptVersion, getScriptVersions } from "@/lib/cinemaScriptVersions";
 import { generateScriptDraft, refineScript, SCRIPT_QUESTIONS } from "@/lib/cinemaScriptGeneration";
+import { analyzeScript } from "@/lib/scriptIntelligence";
+import { createCinemaFolder, getFoldersForProject, getOrCreateMasterFolder, MASTER_FOLDER_NAMES } from "@/lib/cinemaFolders";
+import type { SuggestedFolder } from "@/lib/cinemaFolderSuggestions";
+import { ACCENT_COLORS } from "@/lib/storytelling";
 import { copyToClipboard } from "@/lib/cinemaExport";
-import { AI_MODELS, getConnectedModels, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference, type AIQuality } from "@/lib/aiConfig";
+import { getPreferences } from "@/lib/userPreferences";
 import { useToastStore } from "@/stores/useToastStore";
 import { formatDate, formatTime } from "@/lib/utils";
-import type { CinemaProject, CinemaScriptVersion } from "@/types";
+import type { CinemaFolderKind, CinemaProject, CinemaScriptVersion } from "@/types";
+
+/** User-facing label for what a detected asset folder becomes — surfaces the
+ * "character sheet" / "environment" language from the user's request without
+ * introducing new CinemaFolderKind values. */
+const FOLDER_KIND_DESTINATION: Record<CinemaFolderKind, string> = {
+  character: "Character Sheet",
+  location: "Environment",
+  product: "Product",
+  prop: "Prop",
+  other: "Reference",
+};
 
 export function CinemaScript() {
   const { id } = useParams<{ id: string }>();
@@ -30,10 +48,16 @@ export function CinemaScript() {
   const [content, setContent] = useState("");
   const [instruction, setInstruction] = useState("");
   const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [quality, setQuality] = useState<AIQuality>(() => getPreferences().defaultAiQuality);
+  const [folderSuggestions, setFolderSuggestions] = useState<SuggestedFolder[]>([]);
+  const [scenesCreated, setScenesCreated] = useState<number | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [refining, setRefining] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [acceptingSuggestion, setAcceptingSuggestion] = useState(false);
+  const [approving, setApproving] = useState(false);
 
   const load = () => {
     if (!id) return;
@@ -104,7 +128,7 @@ export function CinemaScript() {
     if (!idea.trim()) { toast("Add an idea or logline first", "error"); return; }
     setDrafting(true);
     try {
-      const draft = await generateScriptDraft({ idea, runtimeTarget: runtime, setting, tone, plotTwist }, model);
+      const draft = await generateScriptDraft({ idea, runtimeTarget: runtime, setting, tone, plotTwist }, model, quality);
       setContent(draft);
       toast("Draft generated", "success");
     } catch (err) {
@@ -118,7 +142,7 @@ export function CinemaScript() {
     if (!instruction.trim()) return;
     setRefining(true);
     try {
-      const revised = await refineScript(content, instruction, model);
+      const revised = await refineScript(content, instruction, model, quality);
       setContent(revised);
       setInstruction("");
       toast("Script refined", "success");
@@ -169,8 +193,64 @@ export function CinemaScript() {
     toast("Reloaded the saved script", "info");
   };
 
+  // Shared by the manual "Analyze Script" button and the auto-run fired right
+  // after approval — one entry point so the two paths can't drift apart.
+  // Guarded against re-entrancy: without this, a fast double-click on either
+  // trigger (or clicking Analyze right as auto-run fires post-approval) would
+  // let two calls both read the same pre-run scene/folder state and both
+  // create from it, producing duplicate scenes — the dedupe in analyzeScript
+  // only protects *sequential* re-runs, not concurrent ones.
+  const runAnalysis = async () => {
+    if (!id || !content.trim() || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const result = await analyzeScript(id, content, project?.status ?? "draft", model, quality);
+      setScenesCreated((prev) => (prev ?? 0) + result.scenesCreated);
+      setFolderSuggestions((prev) => {
+        const seen = new Set(prev.map((f) => f.name.toLowerCase()));
+        return [...prev, ...result.suggestedFolders.filter((f) => !seen.has(f.name.toLowerCase()))];
+      });
+      const parts = [`${result.scenesCreated} scene${result.scenesCreated === 1 ? "" : "s"} created`];
+      if (result.suggestedFolders.length) parts.push(`${result.suggestedFolders.length} asset folder${result.suggestedFolders.length === 1 ? "" : "s"} suggested`);
+      toast(`Script analyzed — ${parts.join(", ")}`, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Script analysis failed — you can retry with Analyze Script", "error");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleAnalyzeScript = () => { void runAnalysis(); };
+
+  const handleAcceptFolderSuggestion = async (suggestion: SuggestedFolder) => {
+    if (!id || acceptingSuggestion) return;
+    setAcceptingSuggestion(true);
+    try {
+      const masterId = await getOrCreateMasterFolder(id, suggestion.kind);
+      const folders = await getFoldersForProject(id);
+      await createCinemaFolder({
+        project_id: id,
+        parent_id: masterId,
+        name: suggestion.name,
+        kind: suggestion.kind,
+        accent_color: ACCENT_COLORS[folders.length % ACCENT_COLORS.length],
+      });
+      setFolderSuggestions((prev) => prev.filter((s) => s.name !== suggestion.name));
+      toast(`"${suggestion.name}" created under ${MASTER_FOLDER_NAMES[suggestion.kind]}`, "success");
+    } catch {
+      toast("Failed to create folder", "error");
+    } finally {
+      setAcceptingSuggestion(false);
+    }
+  };
+
+  const handleDismissFolderSuggestion = (suggestion: SuggestedFolder) => {
+    setFolderSuggestions((prev) => prev.filter((s) => s.name !== suggestion.name));
+  };
+
   const handleApprove = async () => {
-    if (!id) return;
+    if (!id || approving || project?.script_status === "approved") return;
+    setApproving(true);
     try {
       // Approving must persist whatever is currently in the editor first — otherwise an
       // unsaved edit is silently discarded by the reload below, while the success toast
@@ -186,8 +266,14 @@ export function CinemaScript() {
       });
       toast("Script approved — Assets stage unlocked", "success");
       load();
+      // Auto-run scene/asset detection right after approval. Wrapped separately so a
+      // failed analysis never contradicts the approval success toast shown above —
+      // the user can always retry via the manual Analyze Script button.
+      void runAnalysis();
     } catch {
       toast("Failed to approve script", "error");
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -245,26 +331,73 @@ export function CinemaScript() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="system-label">MODEL</label>
-            <select
-              value={modelId}
-              onChange={(e) => setModelId(e.target.value)}
-              className="h-9 px-3 rounded-sm bg-dark font-mono text-[12px] text-soft-white focus:outline-none"
-              style={{ border: "var(--border-default)" }}
-            >
-              {getConnectedModels().length === 0 ? (
-                <option value={modelId}>No connected models — add a key in Settings</option>
-              ) : (
-                getConnectedModels().map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))
-              )}
-            </select>
+            <label className="system-label">MODEL & QUALITY</label>
+            <div className="flex items-center gap-2">
+              <ModelSelector value={modelId} onChange={setModelId} className="flex-1 min-w-0 h-9" />
+              <QualitySelector value={quality} onChange={setQuality} className="h-9" />
+            </div>
           </div>
 
           <Button variant="primary" size="xs" onClick={handleGenerateDraft} disabled={drafting || !idea.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Draft"}
           </Button>
+
+          <div className="flex flex-col gap-2 pt-2" style={{ borderTop: "var(--border-dim)" }}>
+            <label className="system-label">SCRIPT INTELLIGENCE</label>
+            <p className="font-mono text-[10.5px] text-dim/60 leading-relaxed -mt-0.5">
+              Detects scenes and asset needs (characters, locations, products, props) straight from
+              the script. Runs automatically once you approve the script — or re-run it manually here.
+            </p>
+            <Button variant="ghost" size="xs" onClick={handleAnalyzeScript} disabled={analyzing || !content.trim()}>
+              <Sparkles size={11} /> {analyzing ? "Analyzing…" : "Analyze Script"}
+            </Button>
+            {scenesCreated !== null && (
+              <Link
+                to={`/cinema-studio/${id}/scenes`}
+                className="font-mono text-[10.5px] text-cyan hover:text-white tracking-widest uppercase transition-precise"
+              >
+                {scenesCreated} scene{scenesCreated === 1 ? "" : "s"} detected — View Scenes →
+              </Link>
+            )}
+            {folderSuggestions.length > 0 && (
+              <div className="flex flex-col gap-1.5 mt-1">
+                <span className="font-mono text-[10px] text-muted tracking-widest uppercase">Asset Folders Detected</span>
+                {folderSuggestions.map((suggestion) => (
+                  <div
+                    key={suggestion.name}
+                    className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-sm"
+                    style={{ border: "1px solid rgba(255,255,255,0.14)" }}
+                  >
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-mono text-[11px] text-readable truncate">{suggestion.name}</span>
+                      <span className="font-mono text-[9.5px] text-muted tracking-widest uppercase">
+                        → {FOLDER_KIND_DESTINATION[suggestion.kind]}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleAcceptFolderSuggestion(suggestion)}
+                        disabled={acceptingSuggestion}
+                        title="Create this asset folder"
+                        className="flex items-center justify-center h-6 w-6 rounded-sm text-cyan hover:bg-cyan/12 transition-precise disabled:opacity-40"
+                      >
+                        <CheckCircle2 size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDismissFolderSuggestion(suggestion)}
+                        title="Dismiss"
+                        className="flex items-center justify-center h-6 w-6 rounded-sm text-muted hover:text-white hover:bg-white/8 transition-precise"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Center: script editor + refine + versions + actions */}
@@ -349,10 +482,10 @@ export function CinemaScript() {
               variant={project.script_status === "approved" ? "muted" : "accent"}
               size="xs"
               onClick={handleApprove}
-              disabled={!content.trim() || project.script_status === "approved"}
+              disabled={!content.trim() || project.script_status === "approved" || approving}
             >
               <CheckCircle2 size={11} />
-              {project.script_status === "approved" ? "Script Approved" : "Approve Script"}
+              {project.script_status === "approved" ? "Script Approved" : approving ? "Approving…" : "Approve Script"}
             </Button>
           </div>
         </div>

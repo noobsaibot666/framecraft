@@ -4,7 +4,7 @@
 // feeds the Shot Editor's creative-hints panel (Phase 126).
 import { chatComplete } from "./aiClient";
 import { extractJson } from "./creativeDirectionGeneration";
-import type { AIModel } from "./aiConfig";
+import type { AIModel, AIQuality } from "./aiConfig";
 
 export interface SplitScene {
   title: string;
@@ -40,12 +40,13 @@ export function parseSplitScenes(raw: string): SplitScene[] {
   });
 }
 
-export async function splitScriptIntoScenes(scriptText: string, model: AIModel): Promise<SplitScene[]> {
+export async function splitScriptIntoScenes(scriptText: string, model: AIModel, quality: AIQuality = "standard"): Promise<SplitScene[]> {
   if (!scriptText.trim()) throw new Error("Approve a script before splitting it into scenes.");
   const text = await chatComplete(model, {
     system: SYSTEM_PROMPT,
     user: `Script:\n\n${scriptText.trim()}\n\nReturn only valid JSON in this exact structure:\n${JSON_SHAPE}`,
     maxTokens: 1800,
+    quality,
   });
   return parseSplitScenes(text);
 }

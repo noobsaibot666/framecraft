@@ -18,8 +18,10 @@ import { createCinemaFolder, deleteCinemaFolder, getFoldersForProject, getOrCrea
 import { suggestFoldersFromScript, type SuggestedFolder } from "@/lib/cinemaFolderSuggestions";
 import { computeGridPosition, createCinemaAsset, deleteCinemaAsset, getAssetsForFolder, getAssetsForProject, groupAssetVersions, suggestAssetTag, updateCinemaAsset } from "@/lib/cinemaAssets";
 import { ACCENT_COLORS } from "@/lib/storytelling";
-import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference, type AIQuality } from "@/lib/aiConfig";
+import { getPreferences } from "@/lib/userPreferences";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { QualitySelector } from "@/components/ui/QualitySelector";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn } from "@/lib/utils";
 import type { CinemaAsset, CinemaAssetType, CinemaFolder, CinemaFolderKind, CinemaProject } from "@/types";
@@ -100,6 +102,7 @@ export function CinemaAssets() {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<SuggestedFolder[]>([]);
   const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [quality, setQuality] = useState<AIQuality>(() => getPreferences().defaultAiQuality);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
   const [showMerge, setShowMerge] = useState(false);
   const [acceptingSuggestion, setAcceptingSuggestion] = useState(false);
@@ -249,7 +252,7 @@ export function CinemaAssets() {
     if (!project?.script_content?.trim()) { toast("Approve a script first", "error"); return; }
     setSuggesting(true);
     try {
-      const found = await suggestFoldersFromScript(project.script_content, model);
+      const found = await suggestFoldersFromScript(project.script_content, model, quality);
       const existingNames = new Set(folders.map((f) => f.name.toLowerCase()));
       setSuggestions(found.filter((f) => !existingNames.has(f.name.toLowerCase())));
       if (found.length === 0) toast("No new folder candidates found", "info");
@@ -491,6 +494,7 @@ export function CinemaAssets() {
             <span className="system-label text-[11px]">SUGGEST FROM SCRIPT</span>
             <div className="flex items-center gap-1.5">
               <ModelSelector value={modelId} onChange={setModelId} className="flex-1 min-w-0" />
+              <QualitySelector value={quality} onChange={setQuality} className="shrink-0" />
               <Button variant="ghost" size="xs" onClick={handleSuggestFolders} disabled={suggesting} className="shrink-0">
                 <Sparkles size={10} /> {suggesting ? "Reading…" : "Suggest"}
               </Button>

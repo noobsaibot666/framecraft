@@ -19,8 +19,10 @@ import { getAssetsForProject } from "@/lib/cinemaAssets";
 import { generateShotPrompt, suggestTransitions, type TimelinePosition, type TransitionSuggestion } from "@/lib/cinemaShotGeneration";
 import { copyToClipboard } from "@/lib/cinemaExport";
 import { createShotPromptVersion, getShotPromptVersions } from "@/lib/cinemaShotPromptVersions";
-import { AI_MODELS, pickAvailableModel, resolveModelPreference } from "@/lib/aiConfig";
+import { AI_MODELS, pickAvailableModel, resolveModelPreference, type AIQuality } from "@/lib/aiConfig";
+import { getPreferences } from "@/lib/userPreferences";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { QualitySelector } from "@/components/ui/QualitySelector";
 import { useToastStore } from "@/stores/useToastStore";
 import { cn, formatDate, formatTime } from "@/lib/utils";
 import type { CinemaAsset, CinemaProject, CinemaScene, CinemaShot, CinemaShotPromptVersion, CinemaShotType } from "@/types";
@@ -64,6 +66,7 @@ export function CinemaShotEditor() {
   const [transitionSuggestions, setTransitionSuggestions] = useState<TransitionSuggestion[]>([]);
   const [promptVersions, setPromptVersions] = useState<CinemaShotPromptVersion[]>([]);
   const [modelId, setModelId] = useState(() => pickAvailableModel()?.id ?? AI_MODELS[0].id);
+  const [quality, setQuality] = useState<AIQuality>(() => getPreferences().defaultAiQuality);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const load = () => {
@@ -190,7 +193,7 @@ export function CinemaShotEditor() {
         linkedAssetTags,
         videoProvider: project.video_provider,
         projectTitle: project.title,
-      }, model);
+      }, model, quality);
       await updateCinemaShot(selectedShot.id, { generated_prompt: prompt });
       reloadShots();
       toast("Shot prompt generated", "success");
@@ -205,7 +208,7 @@ export function CinemaShotEditor() {
     if (!scene) return;
     setSuggestingTransitions(true);
     try {
-      setTransitionSuggestions(await suggestTransitions(scene, scenePosition, model));
+      setTransitionSuggestions(await suggestTransitions(scene, scenePosition, model, quality));
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to suggest transitions", "error");
     } finally {
@@ -391,6 +394,7 @@ export function CinemaShotEditor() {
                       <Sparkles size={11} /> {generating ? "Writing…" : "Generate Prompt"}
                     </Button>
                     <ModelSelector value={modelId} onChange={setModelId} />
+                    <QualitySelector value={quality} onChange={setQuality} />
                   </div>
                 </div>
                 <textarea

@@ -7,8 +7,10 @@ import { createAssetVersion, getPreviousVersion, isTagTaken, updateCinemaAsset }
 import { draftAssetPrompt } from "@/lib/cinemaAssetPrompt";
 import { copyToClipboard } from "@/lib/cinemaExport";
 import { createPrompt } from "@/lib/db";
-import { AI_MODELS, resolveModelPreference } from "@/lib/aiConfig";
+import { AI_MODELS, resolveModelPreference, type AIQuality } from "@/lib/aiConfig";
+import { getPreferences } from "@/lib/userPreferences";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { QualitySelector } from "@/components/ui/QualitySelector";
 import { IMAGE_PROVIDER_OPTIONS, formatPromptWithParameters } from "@/lib/providerParameters";
 import { fileToDataUrl, validateMediaFile } from "@/lib/imageUtils";
 import { thumbnailFromDataUrl } from "@/lib/fileStore";
@@ -38,6 +40,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
   const [rating, setRating] = useState(asset.rating);
   const [feedback, setFeedback] = useState(asset.feedback ?? "");
   const [modelId, setModelId] = useState(() => resolveModelPreference(project.script_model)?.id ?? AI_MODELS[0].id);
+  const [quality, setQuality] = useState<AIQuality>(() => getPreferences().defaultAiQuality);
   const model = AI_MODELS.find((m) => m.id === modelId) ?? AI_MODELS[0];
 
   const [editingTag, setEditingTag] = useState(false);
@@ -136,7 +139,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
         previousAttempt: previous?.prompt_text
           ? { promptText: previous.prompt_text, rating: previous.rating, feedback: previous.feedback }
           : undefined,
-      }, model);
+      }, model, quality);
       setPromptText(draft.promptText);
       setParameters(draft.parameters);
       setDraftNonce((n) => n + 1);
@@ -318,6 +321,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
           </button>
           <div className="flex-1" />
           <ModelSelector value={modelId} onChange={setModelId} />
+          <QualitySelector value={quality} onChange={setQuality} />
           <Button variant="primary" size="xs" onClick={handleDraft} disabled={drafting || !instruction.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Prompt"}
           </Button>

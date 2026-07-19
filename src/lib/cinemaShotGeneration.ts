@@ -8,7 +8,7 @@
 import { chatComplete } from "./aiClient";
 import { formatFormulaForAI, getFormulaForProvider } from "./promptFormula";
 import { extractJson } from "./creativeDirectionGeneration";
-import type { AIModel } from "./aiConfig";
+import type { AIModel, AIQuality } from "./aiConfig";
 import type { CinemaScene, CinemaShot, Provider } from "@/types";
 
 export interface ShotPromptInput {
@@ -38,13 +38,13 @@ function buildShotContext(input: ShotPromptInput): string {
 
 const SYSTEM_PROMPT_PREAMBLE = `You are a director's-brief prompt writer for AI video generation. Given a scene and shot's context, write ONE finished, ready-to-paste video-generation prompt — no preamble, no options, no commentary. Include concrete director/DOP details: camera movement and speed, framing, lighting motivation, physics/weight of movement, and explicit positive locks for any referenced assets ("@tag" identity, wardrobe, or prop shape must not drift). If reference assets are given, name them by their exact tag so the generator can match them.`;
 
-export async function generateShotPrompt(input: ShotPromptInput, model: AIModel): Promise<string> {
+export async function generateShotPrompt(input: ShotPromptInput, model: AIModel, quality: AIQuality = "standard"): Promise<string> {
   const formula = getFormulaForProvider(input.videoProvider);
   const formulaGuidance = formatFormulaForAI(formula, input.videoProvider);
   const system = `${SYSTEM_PROMPT_PREAMBLE}\n\n${formulaGuidance}`;
   const user = buildShotContext(input);
 
-  const text = await chatComplete(model, { system, user, maxTokens: 900 });
+  const text = await chatComplete(model, { system, user, maxTokens: 900, quality });
   const trimmed = text.trim();
   if (!trimmed) throw new Error("The model returned an empty prompt.");
   return trimmed;
@@ -74,7 +74,8 @@ export function parseTransitionSuggestions(raw: string): TransitionSuggestion[] 
 export async function suggestTransitions(
   scene: CinemaScene,
   position: TimelinePosition,
-  model: AIModel
+  model: AIModel,
+  quality: AIQuality = "standard"
 ): Promise<TransitionSuggestion[]> {
   const system = `You are a film editor suggesting scene transitions. Offer 2-3 distinct transition options (cut, dissolve, whip pan, match cut, etc.) suited to the scene's mood and its position in the story, each with a one-sentence rationale. Return only valid JSON: {"transitions":[{"option":"...","rationale":"..."}]}`;
   const user = [
@@ -84,6 +85,6 @@ export async function suggestTransitions(
     `Position in the story: ${position}`,
   ].filter(Boolean).join("\n");
 
-  const text = await chatComplete(model, { system, user, maxTokens: 500 });
+  const text = await chatComplete(model, { system, user, maxTokens: 500, quality });
   return parseTransitionSuggestions(text);
 }

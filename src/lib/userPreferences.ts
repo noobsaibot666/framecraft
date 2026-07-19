@@ -1,9 +1,12 @@
+import type { AIQuality } from "./aiConfig";
+
 const KEY_PROVIDER = "fc_pref_default_provider";
 const KEY_ASPECT_RATIO = "fc_pref_default_aspect_ratio";
 const KEY_CATEGORY = "fc_pref_default_category";
 const KEY_AUTO_ANALYZE = "fc_pref_auto_analyze";
 const KEY_LIBRARY_PAGE_SIZE = "fc_pref_library_page_size";
 const KEY_AI_MODEL = "fc_pref_default_ai_model";
+const KEY_AI_QUALITY = "fc_pref_default_ai_quality";
 
 export const PREF_ASPECT_RATIOS = [
   { value: "", label: "No default" },
@@ -47,6 +50,10 @@ export interface UserPreferences {
    * feature doesn't have its own explicit model picker. Empty string means "auto"
    * (pick the first connected provider). */
   defaultAiModelId: string;
+  /** AIQuality (see aiConfig.ts) — default response depth for Cinema Studio's
+   * AI actions. Each page seeds its local quality state from this once, then
+   * lets the user override it per-session via QualitySelector. */
+  defaultAiQuality: AIQuality;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -56,6 +63,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   autoAnalyzeDraft: false,
   libraryPageSize: 50,
   defaultAiModelId: "",
+  defaultAiQuality: "standard",
 };
 
 function safeGet(key: string): string {
@@ -79,6 +87,7 @@ export function getPreferences(): UserPreferences {
     autoAnalyzeDraft: safeGet(KEY_AUTO_ANALYZE) === "true",
     libraryPageSize: validSizes.includes(pageSizeRaw) ? pageSizeRaw : DEFAULT_PREFERENCES.libraryPageSize,
     defaultAiModelId: safeGet(KEY_AI_MODEL),
+    defaultAiQuality: (safeGet(KEY_AI_QUALITY) as AIQuality) || DEFAULT_PREFERENCES.defaultAiQuality,
   };
 }
 
@@ -106,6 +115,10 @@ export function setDefaultAiModelId(value: string): void {
   safeSet(KEY_AI_MODEL, value);
 }
 
+export function setDefaultAiQuality(value: AIQuality): void {
+  safeSet(KEY_AI_QUALITY, value === DEFAULT_PREFERENCES.defaultAiQuality ? "" : value);
+}
+
 export function resetPreferences(): void {
   safeSet(KEY_PROVIDER, "");
   safeSet(KEY_ASPECT_RATIO, "");
@@ -113,4 +126,5 @@ export function resetPreferences(): void {
   safeSet(KEY_AUTO_ANALYZE, "");
   safeSet(KEY_LIBRARY_PAGE_SIZE, "");
   safeSet(KEY_AI_MODEL, "");
+  safeSet(KEY_AI_QUALITY, "");
 }

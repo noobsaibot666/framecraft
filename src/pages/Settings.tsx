@@ -23,7 +23,7 @@ import { CollapsibleCard } from "@/components/ui/CollapsibleCard";
 import { useDashboardStore } from "@/stores/useDashboardStore";
 import { clearAllData, getPrompts } from "@/lib/db";
 import { exportPromptTransfer, parsePromptTransfer, importPromptTransfer } from "@/lib/promptTransfer";
-import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_KEY_DEEPSEEK, validateApiKey, getConnectedModels, type AIProvider } from "@/lib/aiConfig";
+import { AI_KEY_ANTHROPIC, AI_KEY_OPENAI, AI_KEY_DEEPSEEK, AI_QUALITIES, validateApiKey, getConnectedModels, type AIProvider } from "@/lib/aiConfig";
 import { formatDiagnosticSummary, runReleaseDiagnostics, type DiagnosticResult } from "@/lib/releaseDiagnostics";
 import {
   backupActiveLibrary,
@@ -60,6 +60,7 @@ import {
   setAutoAnalyzeDraft,
   setLibraryPageSize,
   setDefaultAiModelId,
+  setDefaultAiQuality,
   type UserPreferences,
 } from "@/lib/userPreferences";
 import { SUPPORTED_CREATIVE_PROVIDERS } from "@/lib/appInfo";
@@ -483,6 +484,7 @@ export function Settings() {
     setAutoAnalyzeDraft(next.autoAnalyzeDraft);
     setLibraryPageSize(next.libraryPageSize);
     setDefaultAiModelId(next.defaultAiModelId);
+    setDefaultAiQuality(next.defaultAiQuality);
     setPrefs(next);
     setPrefsSaved(true);
     setTimeout(() => setPrefsSaved(false), 2000);
@@ -983,6 +985,24 @@ export function Settings() {
                   })}
                 </select>
               )}
+            </div>
+
+            <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "var(--border-dim)", paddingTop: "1.25rem" }}>
+              <span className="font-mono text-[12px] tracking-widest uppercase text-readable">Response Quality</span>
+              <p className="font-mono text-[11px] text-dim/60 leading-relaxed -mt-0.5">
+                Default response depth for Cinema Studio's AI actions (script drafting, scene/asset
+                detection, shot prompts) — each page also lets you override this per-session.
+              </p>
+              <select
+                value={prefs.defaultAiQuality}
+                onChange={(e) => savePrefs({ ...prefs, defaultAiQuality: e.target.value as UserPreferences["defaultAiQuality"] })}
+                className="h-10 px-3 font-mono text-[13px] text-soft-white bg-dark rounded-sm focus:outline-none w-full max-w-sm"
+                style={{ border: "1px solid rgba(255,255,255,0.24)" }}
+              >
+                {AI_QUALITIES.map((q) => (
+                  <option key={q.id} value={q.id}>{q.label} — {q.description}</option>
+                ))}
+              </select>
             </div>
           </CollapsibleCard>
         </div>

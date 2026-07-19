@@ -35,6 +35,11 @@ export interface AssetPromptDraftInput {
   provider: Provider;
   /** The prior version's prompt/rating/feedback, when redrafting toward a fix. */
   previousAttempt?: AssetPromptPreviousAttempt;
+  /** Skips the script excerpt / folder guidance / previous-attempt context and
+   * sends only the user's own typed instruction — for when the AI is folding
+   * scene directions from the script into a prompt the user wanted written
+   * literally as typed. */
+  bypassContext?: boolean;
 }
 
 export interface AssetPromptDraft {
@@ -95,22 +100,24 @@ export async function draftAssetPrompt(input: AssetPromptDraftInput, model: AIMo
   if (!input.instruction.trim()) throw new Error("Describe what you want before generating a prompt.");
 
   const previous = input.previousAttempt;
-  const context = [
-    `Asset: ${input.assetTitle}`,
-    `Target provider: ${input.provider}`,
-    `Folder: ${input.folderName} (${input.folderKind})`,
-    input.folderDescription?.trim() ? `Folder notes: ${input.folderDescription.trim()}` : "",
-    input.scriptExcerpt?.trim() ? `Relevant script excerpt:\n${input.scriptExcerpt.trim()}` : "",
-    `Guidance: ${KIND_GUIDANCE[input.folderKind]}`,
-    `User request: ${input.instruction.trim()}`,
-    previous?.promptText.trim()
-      ? [
-          `Previous attempt${previous.rating ? ` (rated ${previous.rating}/5)` : ""}: ${previous.promptText.trim()}`,
-          previous.feedback?.trim() ? `User feedback to address: ${previous.feedback.trim()}` : "",
-          `Revise the prompt to address this feedback while keeping the same subject and purpose.`,
-        ].filter(Boolean).join("\n")
-      : "",
-  ].filter(Boolean).join("\n\n");
+  const context = input.bypassContext
+    ? `User request: ${input.instruction.trim()}`
+    : [
+        `Asset: ${input.assetTitle}`,
+        `Target provider: ${input.provider}`,
+        `Folder: ${input.folderName} (${input.folderKind})`,
+        input.folderDescription?.trim() ? `Folder notes: ${input.folderDescription.trim()}` : "",
+        input.scriptExcerpt?.trim() ? `Relevant script excerpt:\n${input.scriptExcerpt.trim()}` : "",
+        `Guidance: ${KIND_GUIDANCE[input.folderKind]}`,
+        `User request: ${input.instruction.trim()}`,
+        previous?.promptText.trim()
+          ? [
+              `Previous attempt${previous.rating ? ` (rated ${previous.rating}/5)` : ""}: ${previous.promptText.trim()}`,
+              previous.feedback?.trim() ? `User feedback to address: ${previous.feedback.trim()}` : "",
+              `Revise the prompt to address this feedback while keeping the same subject and purpose.`,
+            ].filter(Boolean).join("\n")
+          : "",
+      ].filter(Boolean).join("\n\n");
 
   const text = await chatComplete(model, { system: buildSystemPrompt(input.provider), user: context, maxTokens: 2000 });
   return parseDraft(text);

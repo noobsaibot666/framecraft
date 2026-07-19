@@ -9,6 +9,7 @@ import {
   getCinemaAssetById,
   groupAssetVersions,
   isTagTaken,
+  stackedVersionPosition,
   suggestAssetTag,
   updateCinemaAsset,
 } from "./cinemaAssets";
@@ -155,6 +156,24 @@ describe("cinema asset development store", () => {
     expect(v3.tag).toBe("@scene_v3");
     expect(v3.version_number).toBe(3);
     expect(v3.version_group_id).toBe(v1Id);
+  });
+
+  it("new versions cascade diagonally from the stack's root position, not the global grid", async () => {
+    const projectId = "asset-project-cascade";
+    const v1Id = await createCinemaAsset({
+      project_id: projectId, folder_id: "folder-cascade", tag: "@cascade", title: "Cascade",
+      canvas_x: 200, canvas_y: 100,
+    });
+    const v2Id = await createAssetVersion((await getCinemaAssetById(v1Id))!);
+    const v3Id = await createAssetVersion((await getCinemaAssetById(v2Id))!);
+
+    const v2 = (await getCinemaAssetById(v2Id))!;
+    const v3 = (await getCinemaAssetById(v3Id))!;
+    expect(stackedVersionPosition({ canvas_x: 200, canvas_y: 100 }, 2)).toEqual({ x: 236, y: 136 });
+    expect(v2.canvas_x).toBe(236);
+    expect(v2.canvas_y).toBe(136);
+    expect(v3.canvas_x).toBe(272);
+    expect(v3.canvas_y).toBe(172);
   });
 
   it("groupAssetVersions groups siblings by version_group_id and sorts each stack by version_number", async () => {

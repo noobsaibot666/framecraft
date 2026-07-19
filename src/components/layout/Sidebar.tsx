@@ -223,9 +223,9 @@ export function Sidebar() {
       <aside
         className={cn(
           "flex flex-col shrink-0 overflow-hidden transition-[width] duration-300 ease-out",
-          collapsed ? "w-2" : "w-52"
+          collapsed ? "w-4" : "w-52"
         )}
-        style={{ borderRight: "var(--border-default)" }}
+        style={{ borderRight: collapsed ? "none" : "var(--border-default)" }}
         onMouseEnter={collapsed ? openDock : undefined}
         onMouseLeave={collapsed ? scheduleCloseDock : undefined}
       >

@@ -3,7 +3,7 @@
 // page's PARAMETERS panel (src/lib/providerParameters.ts is the shared
 // source of truth), but starting collapsed to a few core fields with a "+"
 // to reveal the rest, since this panel lives inside a much smaller card.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus, Minus } from "lucide-react";
 import {
   CORE_PARAM_FIELDS,
@@ -19,6 +19,7 @@ import {
   SD_SAMPLERS,
   STRUCTURED_PARAM_PROVIDERS,
   buildProviderParameters,
+  extractMJParamsFromText,
   restoreDalleParams,
   restoreMJParams,
   restoreSDParams,
@@ -33,6 +34,11 @@ interface Props {
   provider: Provider;
   parameters: Record<string, string | boolean> | undefined;
   onChange: (parameters: Record<string, string | boolean> | undefined) => void;
+  /** The live PROMPT textarea content — Midjourney `--flag value` pairs typed
+   * or pasted directly into the prompt get picked up here and mirrored into
+   * the fields below, so a pasted MJ prompt doesn't leave the parameters
+   * panel empty. */
+  promptText?: string;
 }
 
 function MiniSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
@@ -143,11 +149,31 @@ function SDFields({ p, set, expanded }: { p: SDParams; set: (k: keyof SDParams, 
   );
 }
 
-export function AssetParametersPanel({ provider, parameters, onChange }: Props) {
+export function AssetParametersPanel({ provider, parameters, onChange, promptText }: Props) {
   const [mj, setMj] = useState<MJParams>(() => ({ ...EMPTY_MJ, ...restoreMJParams(parameters ?? {}) }));
   const [dalle, setDalle] = useState<DalleParams>(() => ({ ...EMPTY_DALLE, ...restoreDalleParams(parameters ?? {}) }));
   const [sd, setSd] = useState<SDParams>(() => ({ ...EMPTY_SD, ...restoreSDParams(parameters ?? {}) }));
   const [expanded, setExpanded] = useState(false);
+
+  // Midjourney only — catches `--flag value` pairs typed or pasted straight
+  // into the prompt text and mirrors them into the fields, so a prompt
+  // brought in from elsewhere doesn't leave this panel looking empty. Only
+  // ever fills fields the text actually mentions (never clears one on a
+  // partial paste), and reveals the advanced fields if any of them landed
+  // outside the default core set.
+  useEffect(() => {
+    if (provider !== "midjourney" || !promptText) return;
+    const extracted = extractMJParamsFromText(promptText);
+    if (Object.keys(extracted).length === 0) return;
+    setMj((prev) => {
+      const next = { ...prev, ...extracted };
+      onChange(buildProviderParameters("midjourney", next, dalle, sd));
+      return next;
+    });
+    const core = new Set(CORE_PARAM_FIELDS.midjourney);
+    if (Object.keys(extracted).some((k) => !core.has(k))) setExpanded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptText, provider]);
 
   if (!STRUCTURED_PARAM_PROVIDERS.includes(provider)) {
     return (

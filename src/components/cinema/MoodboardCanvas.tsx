@@ -1,12 +1,14 @@
 import { useRef, useState } from "react";
 import { useDrag, useGesture } from "@use-gesture/react";
-import { Lock, Maximize2, Minus, Plus, RotateCcw, Star, X } from "lucide-react";
+import { LayoutGrid, Lock, Maximize2, Minus, Plus, RotateCcw, Star, X } from "lucide-react";
 import { useShortcut } from "@/lib/shortcuts";
+import { computeGridPosition, groupAssetVersions, stackedVersionPosition } from "@/lib/cinemaAssets";
 import type { CinemaAsset, CinemaFolder } from "@/types";
 
 const CARD_W = 160;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
+const CONNECTOR_COLOR = "rgba(56,183,200,0.55)"; // cyan — matches the app's "connected/locked" accent
 
 interface Props {
   assets: CinemaAsset[];
@@ -20,8 +22,10 @@ function clamp(v: number, min: number, max: number) {
 }
 
 /** One draggable card. Owns its own drag gesture so it never fights the canvas's
- * own pan gesture — it stops propagation on the first drag event so the canvas
- * background (bound separately) never sees it. */
+ * own pan gesture — the pan gesture is bound to a separate background element
+ * that isn't an ancestor of any card (see `panCatcherRef` below), so a card's
+ * pointer events can never bubble into it no matter how either gesture library
+ * schedules its listeners. */
 function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, onTap }: {
   asset: CinemaAsset;
   folderColor: string;
@@ -78,6 +82,11 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
             <Lock size={8} />
           </span>
         )}
+        {asset.version_number > 1 && (
+          <span className="absolute top-1 right-1 px-1 py-0.5 rounded-sm bg-black/70 font-mono text-[8px] text-cyan">
+            V{asset.version_number}
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-between gap-1">
         <span className="font-mono text-[9px] tracking-widest uppercase truncate" style={{ color: folderColor }}>{asset.tag}</span>
@@ -94,6 +103,7 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const panCatcherRef = useRef<HTMLDivElement>(null);
 
   const folderColor = (folderId: string) => folders.find((f) => f.id === folderId)?.accent_color ?? "rgba(255,255,255,0.3)";
   const folderName = (folderId: string) => folders.find((f) => f.id === folderId)?.name ?? "";
@@ -107,11 +117,11 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
 
   const setZoom = (next: number) => setView((v) => ({ ...v, zoom: clamp(next, MIN_ZOOM, MAX_ZOOM) }));
 
+  // Wheel/pinch are fine to bind at the outer canvas level — a card has no
+  // wheel handler of its own, so there's nothing for them to conflict with,
+  // unlike the drag-to-pan gesture below.
   useGesture(
     {
-      onDragStart: () => setPanning(true),
-      onDrag: ({ offset: [ox, oy] }) => setView((v) => ({ ...v, panX: ox, panY: oy })),
-      onDragEnd: () => setPanning(false),
       // Plain wheel/trackpad scroll pans the canvas (Figma/Miro convention) — it
       // must NOT change zoom, which is the exact bug being fixed here. Ctrl+wheel
       // (trackpad pinch is reported by browsers as ctrl+wheel) is intercepted by
@@ -143,8 +153,30 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
     {
       target: canvasRef,
       eventOptions: { passive: false },
-      drag: { filterTaps: true, from: () => [view.panX, view.panY] },
       pinch: { scaleBounds: { min: MIN_ZOOM, max: MAX_ZOOM }, from: () => [view.zoom, 0] },
+    }
+  );
+
+  // Drag-to-pan is bound to a dedicated background element (panCatcherRef)
+  // instead of the outer canvas — that element sits behind the cards and,
+  // critically, is a *sibling* of the cards layer, not an ancestor of it. A
+  // card's own drag can only ever hit elements in its own ancestor chain, so
+  // it is now structurally impossible for a card drag to also reach this
+  // gesture (previously both were bound to the same canvasRef, and a card's
+  // event.stopPropagation() inside its drag handler wasn't reliably winning
+  // the race against @use-gesture's own listener registration on the
+  // ancestor — the two gestures fired together, panning the whole canvas by
+  // roughly the drag distance *in addition to* moving the dragged card,
+  // which is what made every thumbnail look like it was moving in lockstep).
+  useDrag(
+    ({ active, offset: [ox, oy] }) => {
+      setPanning(active);
+      setView((v) => ({ ...v, panX: ox, panY: oy }));
+    },
+    {
+      target: panCatcherRef,
+      filterTaps: true,
+      from: () => [view.panX, view.panY],
     }
   );
 
@@ -158,22 +190,66 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
     setLightboxId(assetId);
   };
 
+  // Snaps every asset back into a clean layout — one grid slot per version
+  // stack (not per asset), so a stack's siblings stay clustered together
+  // instead of scattering across the grid.
+  const handleAutoAlign = () => {
+    const groups = groupAssetVersions(assets);
+    const next: Record<string, { x: number; y: number }> = {};
+    groups.forEach((group, groupIndex) => {
+      const rootSlot = computeGridPosition(groupIndex);
+      group.forEach((asset) => {
+        const { x, y } = stackedVersionPosition({ canvas_x: rootSlot.x, canvas_y: rootSlot.y }, asset.version_number);
+        next[asset.id] = { x, y };
+        onPositionChange(asset.id, x, y);
+      });
+    });
+    setPositions((prev) => ({ ...prev, ...next }));
+  };
+
   const lightboxAsset = assets.find((a) => a.id === lightboxId);
   useShortcut("escape", () => setLightboxId(null), !!lightboxAsset);
 
+  // Version-stack connector lines — one segment between each consecutive
+  // pair of siblings in a stack, drawn behind the cards. Only ever reads the
+  // *settled* position (not a card's live in-progress drag offset), so
+  // dragging one node never drags the others: the line simply redraws once
+  // the drag ends, same as any other position change.
+  const connectorSegments = groupAssetVersions(assets)
+    .filter((group) => group.length > 1)
+    .flatMap((group) =>
+      group.slice(1).map((asset, i) => {
+        const from = positionFor(group[i]);
+        const to = positionFor(asset);
+        const center = (p: { x: number; y: number }) => ({ x: p.x + CARD_W / 2, y: p.y + CARD_W / 2 });
+        return { key: asset.id, from: center(from), to: center(to) };
+      })
+    );
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-end gap-1.5">
-        <button type="button" onClick={() => setZoom(view.zoom - 0.15)} className="text-muted hover:text-cyan transition-precise" title="Zoom out">
-          <Minus size={13} />
+      <div className="flex items-center justify-between gap-1.5">
+        <button
+          type="button"
+          onClick={handleAutoAlign}
+          disabled={assets.length === 0}
+          className="flex items-center gap-1.5 font-mono text-[10px] text-muted hover:text-cyan tracking-widest uppercase transition-precise disabled:opacity-30"
+          title="Snap all thumbnails into a clean grid"
+        >
+          <LayoutGrid size={12} /> Auto-Align
         </button>
-        <span className="font-mono text-[10px] text-muted w-10 text-center tabular-nums">{Math.round(view.zoom * 100)}%</span>
-        <button type="button" onClick={() => setZoom(view.zoom + 0.15)} className="text-muted hover:text-cyan transition-precise" title="Zoom in">
-          <Plus size={13} />
-        </button>
-        <button type="button" onClick={() => setView({ zoom: 1, panX: 24, panY: 24 })} className="text-muted hover:text-cyan transition-precise" title="Reset view">
-          <RotateCcw size={12} />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={() => setZoom(view.zoom - 0.15)} className="text-muted hover:text-cyan transition-precise" title="Zoom out">
+            <Minus size={13} />
+          </button>
+          <span className="font-mono text-[10px] text-muted w-10 text-center tabular-nums">{Math.round(view.zoom * 100)}%</span>
+          <button type="button" onClick={() => setZoom(view.zoom + 0.15)} className="text-muted hover:text-cyan transition-precise" title="Zoom in">
+            <Plus size={13} />
+          </button>
+          <button type="button" onClick={() => setView({ zoom: 1, panX: 24, panY: 24 })} className="text-muted hover:text-cyan transition-precise" title="Reset view">
+            <RotateCcw size={12} />
+          </button>
+        </div>
       </div>
 
       <div
@@ -186,23 +262,38 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
             No assets yet — create one from a folder to see it here.
           </div>
         ) : (
-          <div
-            className="absolute top-0 left-0"
-            style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`, transformOrigin: "0 0" }}
-          >
-            {assets.map((asset) => (
-              <AssetCard
-                key={asset.id}
-                asset={asset}
-                folderColor={folderColor(asset.folder_id)}
-                folderName={folderName(asset.folder_id)}
-                zoom={view.zoom}
-                position={positionFor(asset)}
-                onDragEnd={(x, y) => handleAssetDragEnd(asset.id, x, y)}
-                onTap={() => handleAssetTap(asset.id)}
-              />
-            ))}
-          </div>
+          <>
+            <div ref={panCatcherRef} className="absolute inset-0" />
+            <div
+              className="absolute top-0 left-0"
+              style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`, transformOrigin: "0 0" }}
+            >
+              <svg className="absolute top-0 left-0 overflow-visible pointer-events-none" width={0} height={0}>
+                {connectorSegments.map((seg) => (
+                  <line
+                    key={seg.key}
+                    x1={seg.from.x} y1={seg.from.y}
+                    x2={seg.to.x} y2={seg.to.y}
+                    stroke={CONNECTOR_COLOR}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                  />
+                ))}
+              </svg>
+              {assets.map((asset) => (
+                <AssetCard
+                  key={asset.id}
+                  asset={asset}
+                  folderColor={folderColor(asset.folder_id)}
+                  folderName={folderName(asset.folder_id)}
+                  zoom={view.zoom}
+                  position={positionFor(asset)}
+                  onDragEnd={(x, y) => handleAssetDragEnd(asset.id, x, y)}
+                  onTap={() => handleAssetTap(asset.id)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 

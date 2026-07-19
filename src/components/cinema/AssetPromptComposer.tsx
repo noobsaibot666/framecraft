@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Copy, GitFork, ImageUp, Lock, Pencil, Sparkles, Star, Library, Unlock } from "lucide-react";
+import { Check, CheckCircle2, Copy, GitFork, ImageUp, Lock, Pencil, Sparkles, Star, Library, Unlink, Unlock } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { RatingDisplay } from "@/components/ui/RatingDisplay";
 import { AssetParametersPanel } from "./AssetParametersPanel";
@@ -34,6 +34,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
   const [provider, setProvider] = useState<Provider>(asset.provider ?? project.image_provider ?? "midjourney");
   const [parameters, setParameters] = useState(asset.prompt_parameters);
   const [draftNonce, setDraftNonce] = useState(0);
+  const [bypassContext, setBypassContext] = useState(false);
   const [rating, setRating] = useState(asset.rating);
   const [feedback, setFeedback] = useState(asset.feedback ?? "");
   const [modelId, setModelId] = useState(() => resolveModelPreference(project.script_model)?.id ?? AI_MODELS[0].id);
@@ -122,7 +123,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
     if (!instruction.trim()) { toast("Describe what you want first", "error"); return; }
     setDrafting(true);
     try {
-      const previous = await getPreviousVersion(asset);
+      const previous = bypassContext ? undefined : await getPreviousVersion(asset);
       const draft = await draftAssetPrompt({
         folderKind: folder.kind,
         folderName: folder.name,
@@ -131,6 +132,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
         assetTitle: title,
         instruction,
         provider,
+        bypassContext,
         previousAttempt: previous?.prompt_text
           ? { promptText: previous.prompt_text, rating: previous.rating, feedback: previous.feedback }
           : undefined,
@@ -302,7 +304,19 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
           className="px-3 py-2 font-mono text-[12.5px] leading-relaxed text-white placeholder:text-dim bg-transparent rounded-sm focus:outline-none resize-none"
           style={{ border: "1px solid rgba(255,255,255,0.16)" }}
         />
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setBypassContext((v) => !v)}
+            title="Send only the text typed above — skip the script excerpt and folder guidance the AI normally gets as context"
+            className={cn(
+              "flex items-center gap-1 h-7 px-2 rounded-sm font-mono text-[9.5px] tracking-widest uppercase transition-precise",
+              bypassContext ? "text-cyan border border-cyan/50 bg-cyan/10" : "text-muted border border-white/16 hover:text-cyan hover:border-cyan/40"
+            )}
+          >
+            <Unlink size={10} /> Exact Text Only
+          </button>
+          <div className="flex-1" />
           <ModelSelector value={modelId} onChange={setModelId} />
           <Button variant="primary" size="xs" onClick={handleDraft} disabled={drafting || !instruction.trim()}>
             <Sparkles size={11} /> {drafting ? "Drafting…" : "Generate Prompt"}
@@ -332,7 +346,7 @@ export function AssetPromptComposer({ asset, folder, project, onChange, onSelect
         />
       </div>
 
-      <AssetParametersPanel key={draftNonce} provider={provider} parameters={parameters} onChange={setParameters} />
+      <AssetParametersPanel key={draftNonce} provider={provider} parameters={parameters} onChange={setParameters} promptText={promptText} />
 
       <div className="flex flex-col gap-1.5">
         <label className="system-label">GENERATED IMAGE</label>

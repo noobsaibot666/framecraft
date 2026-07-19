@@ -310,6 +310,20 @@ export async function getPreviousVersion(asset: CinemaAsset): Promise<CinemaAsse
   return siblings.find((a) => (a.version_group_id ?? a.id) === groupId && a.version_number === asset.version_number - 1);
 }
 
+/** Diagonal cascade distance (Moodboard canvas px) between one version and the next in a stack. */
+export const VERSION_STACK_OFFSET = 36;
+
+/**
+ * Where a version should sit on the Moodboard canvas relative to its stack's
+ * root — a small diagonal cascade so siblings read as one cluster instead of
+ * landing wherever the next free grid slot happens to be. Used both when a
+ * new version is first created and by the Moodboard's Auto-Align.
+ */
+export function stackedVersionPosition(root: { canvas_x: number; canvas_y: number }, versionNumber: number): { x: number; y: number } {
+  const step = Math.max(0, versionNumber - 1) * VERSION_STACK_OFFSET;
+  return { x: root.canvas_x + step, y: root.canvas_y + step };
+}
+
 const TRAILING_VERSION_RE = /\s+V\d+$/i;
 const TRAILING_TAG_VERSION_RE = /_v\d+$/i;
 
@@ -323,13 +337,11 @@ const TRAILING_TAG_VERSION_RE = /_v\d+$/i;
  * once it's actually part of a stack.
  */
 export async function createAssetVersion(source: CinemaAsset): Promise<string> {
-  const [folderAssets, projectAssets] = await Promise.all([
-    getAssetsForFolder(source.folder_id),
-    getAssetsForProject(source.project_id),
-  ]);
+  const folderAssets = await getAssetsForFolder(source.folder_id);
   const groupId = source.version_group_id ?? source.id;
   const siblings = folderAssets.filter((a) => (a.version_group_id ?? a.id) === groupId);
   const nextVersionNumber = Math.max(...siblings.map((a) => a.version_number), source.version_number) + 1;
+  const root = siblings.find((a) => a.version_number === 1) ?? source;
 
   if (nextVersionNumber === 2 && !TRAILING_VERSION_RE.test(source.title)) {
     await updateCinemaAsset(source.id, { title: `${source.title} V${source.version_number}` });
@@ -344,7 +356,7 @@ export async function createAssetVersion(source: CinemaAsset): Promise<string> {
     candidateTag = `${baseTag}_v${n}`;
   }
 
-  const { x, y } = computeGridPosition(projectAssets.length);
+  const { x, y } = stackedVersionPosition(root, nextVersionNumber);
   return createCinemaAsset({
     project_id: source.project_id,
     folder_id: source.folder_id,

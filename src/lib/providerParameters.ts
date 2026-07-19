@@ -100,6 +100,44 @@ export function restoreMJParams(pp: Record<string, unknown>): MJParams {
     exp:   Boolean(pp.exp),
   };
 }
+/**
+ * Reads `--flag value` / `--flag` pairs directly out of raw Midjourney
+ * prompt text (typed or pasted straight from Discord/another tool) and
+ * returns just the fields it actually found — never a full MJParams object,
+ * so callers can merge onto existing state without wiping fields the text
+ * doesn't mention. Accepts both short (`--s`) and long (`--stylize`) forms
+ * where Midjourney supports both; `\s+` right after the short form keeps
+ * `--s 250` from also matching inside `--style`/`--sw`/`--sv`/`--stop`.
+ */
+export function extractMJParamsFromText(text: string): Partial<MJParams> {
+  const result: Partial<MJParams> = {};
+  const value = (re: RegExp) => text.match(re)?.[1];
+  const has = (re: RegExp) => re.test(text);
+
+  const v = value(/--v(?:ersion)?\s+(\S+)/i); if (v) result.model_version = v;
+  const q = value(/--q(?:uality)?\s+(\S+)/i); if (q) result.quality = q;
+  const s = value(/--s(?:tylize)?\s+(\d+)/i); if (s) result.stylize = s;
+  const c = value(/--c(?:haos)?\s+(\d+)/i); if (c) result.chaos = c;
+  const w = value(/--w(?:eird)?\s+(\d+)/i); if (w) result.weird = w;
+  const style = value(/--style\s+(\S+)/i); if (style) result.style = style;
+  const sw = value(/--sw\s+(\d+)/i); if (sw) result.sw = sw;
+  const sv = value(/--sv\s+(\d+)/i); if (sv) result.sv = sv;
+  const seed = value(/--seed\s+(\d+)/i); if (seed) result.seed = seed;
+  const zoom = value(/--zoom\s+([\d.]+)/i); if (zoom) result.zoom = zoom;
+  const stop = value(/--stop\s+(\d+)/i); if (stop) result.stop = stop;
+  const repeat = value(/--repeat\s+(\d+)/i); if (repeat) result.repeat = repeat;
+  const no = value(/--no\s+([^-]+?)(?=\s+--|-{1,2}exp\b|\s*$)/i); if (no?.trim()) result.no_prompt = no.trim();
+
+  if (has(/--raw\b/i)) result.raw = true;
+  if (has(/--hd\b/i)) result.hd = true;
+  if (has(/--tile\b/i)) result.tile = true;
+  if (has(/--fast\b/i)) result.fast = true;
+  if (has(/--relax\b/i)) result.relax = true;
+  if (has(/-{1,2}exp\b/i)) result.exp = true;
+
+  return result;
+}
+
 export function restoreDalleParams(pp: Record<string, unknown>): DalleParams {
   return {
     size:    String(pp.size    ?? ""),

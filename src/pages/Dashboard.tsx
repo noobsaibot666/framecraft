@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp, FolderKanban, ArrowRight, ListChecks, Wand2, Upload, CheckSquare, ChevronDown, FolderPlus } from "lucide-react";
+import { Plus, Star, Clock, BookMarked, ImageOff, Search, AlertCircle, Zap, TrendingUp, FolderKanban, ArrowRight, ListChecks, Wand2, Upload, CheckSquare, ChevronDown, FolderPlus, Clapperboard } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,9 +11,19 @@ import { useDashboardStore } from "@/stores/useDashboardStore";
 import { getRecentResults, getRecentWins, getResultStats, getTopTags, getPromptsWithoutResultsCount, getProviderStats } from "@/lib/db";
 import { getDashboardHealth, getWeeklyActivity, type ProductionHealth, type DayActivity, EMPTY_HEALTH } from "@/lib/dashboardHealth";
 import { getSuggestionAcceptanceStats, type SuggestionAcceptanceStat } from "@/lib/aiSuggestionFeedback";
+import { getCinemaProjects } from "@/lib/cinemaProjects";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
-import { formatDate } from "@/lib/utils";
-import type { Prompt, Result } from "@/types";
+import { formatDate, cn } from "@/lib/utils";
+import type { Prompt, Result, CinemaProject } from "@/types";
+
+const CINEMA_STATUS_DOT: Record<CinemaProject["status"], string> = {
+  draft: "bg-readable",
+  scripting: "bg-cyan",
+  assets: "bg-amber",
+  scenes: "bg-amber",
+  complete: "bg-white",
+  archived: "bg-white/20",
+};
 
 const SUGGESTION_TOOL_LABEL: Record<SuggestionAcceptanceStat["tool"], string> = {
   analyze_prompt: "Prompt Advisor",
@@ -163,6 +173,35 @@ function ResultThumb({ result, promptId }: { result: Result & { prompt_title: st
   );
 }
 
+function CinemaProjectCard({ project, onClick }: { project: CinemaProject; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex flex-col gap-2 rounded-card overflow-hidden text-left transition-precise hover:-translate-y-0.5"
+      style={{ border: "var(--border-default)", background: "var(--surface-card)" }}
+    >
+      <div className="w-full aspect-video flex items-center justify-center overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
+        {project.thumbnail_data ? (
+          <img src={project.thumbnail_data} alt={project.title} className="w-full h-full object-cover" />
+        ) : (
+          <Clapperboard size={20} className="text-white/20" />
+        )}
+      </div>
+      <div className="flex flex-col gap-1 px-3 pb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", CINEMA_STATUS_DOT[project.status])} />
+          <span className="font-sans text-[13px] text-white truncate">{project.title}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[9px] text-readable tracking-widest uppercase">{project.status}</span>
+          <span className="font-mono text-[9px] text-dim/50">{project.asset_count ?? 0} assets</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function FirstRunGuide({ onCraft, onImport }: { onCraft: () => void; onImport: () => void }) {
   const steps = [
     {
@@ -248,6 +287,7 @@ export function Dashboard() {
   const [health, setHealth] = useState<ProductionHealth>(EMPTY_HEALTH);
   const [suggestionStats, setSuggestionStats] = useState<SuggestionAcceptanceStat[]>([]);
   const [weeklyActivity, setWeeklyActivity] = useState<DayActivity[]>([]);
+  const [cinemaProjects, setCinemaProjects] = useState<CinemaProject[]>([]);
   const [search, setSearch] = useState("");
   const [recentPromptsOpen, setRecentPromptsOpen] = useState(true);
 
@@ -261,6 +301,15 @@ export function Dashboard() {
   useEffect(() => { getDashboardHealth().then(setHealth).catch(console.error); }, []);
   useEffect(() => { getSuggestionAcceptanceStats().then(setSuggestionStats).catch(console.error); }, []);
   useEffect(() => { getWeeklyActivity().then(setWeeklyActivity).catch(console.error); }, []);
+  useEffect(() => { getCinemaProjects().then(setCinemaProjects).catch(console.error); }, []);
+
+  // getCinemaProjects() already returns updated_at DESC with per-project
+  // folder/asset/scene/shot counts attached, so both "recent" and the
+  // aggregate stats below are free — no extra query needed.
+  const recentCinemaProjects = cinemaProjects.slice(0, 4);
+  const activeCinemaProjectCount = cinemaProjects.filter((p) => p.status !== "complete" && p.status !== "archived").length;
+  const totalCinemaAssets = cinemaProjects.reduce((sum, p) => sum + (p.asset_count ?? 0), 0);
+  const totalCinemaScenes = cinemaProjects.reduce((sum, p) => sum + (p.scene_count ?? 0), 0);
 
   const q = search.trim().toLowerCase();
   const recentPrompts = q
@@ -438,6 +487,31 @@ export function Dashboard() {
                     </div>
                   </div>
                 </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Cinema Studio */}
+        {cinemaProjects.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="system-label flex items-center gap-1.5"><Clapperboard size={10} /> CINEMA STUDIO</span>
+              <div className="flex-1 h-px bg-white/10" />
+              <button type="button" onClick={() => navigate("/cinema-studio")}
+                className="font-mono text-[8px] uppercase tracking-widest text-dim/50 hover:text-white flex items-center gap-1 transition-precise">
+                View all <ArrowRight size={8} />
+              </button>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <HealthChip label="PROJECTS" value={cinemaProjects.length} unit="total" />
+              <HealthChip label="ACTIVE" value={activeCinemaProjectCount} unit="in progress" />
+              <HealthChip label="ASSETS" value={totalCinemaAssets} unit="created" />
+              <HealthChip label="SCENES" value={totalCinemaScenes} unit="planned" />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {recentCinemaProjects.map((p) => (
+                <CinemaProjectCard key={p.id} project={p} onClick={() => navigate(`/cinema-studio/${p.id}/script`)} />
               ))}
             </div>
           </div>

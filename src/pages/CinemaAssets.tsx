@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Copy, Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Lock, Pipette, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Lock, Pipette, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
@@ -90,6 +90,7 @@ export function CinemaAssets() {
   const [viewMode, setViewMode] = useState<"composer" | "canvas">("composer");
   const [projectAssets, setProjectAssets] = useState<CinemaAsset[]>([]);
   const [canvasFolderFilter, setCanvasFolderFilter] = useState<string>("all");
+  const [moodboardFiltersOpen, setMoodboardFiltersOpen] = useState(true);
 
   const [creatingUnder, setCreatingUnder] = useState<string | null | undefined>(undefined);
   const [newName, setNewName] = useState("");
@@ -379,8 +380,26 @@ export function CinemaAssets() {
       }
     >
       {viewMode === "canvas" ? (
-        <div className="flex flex-col gap-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => setMoodboardFiltersOpen((v) => !v)}
+              className="flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase text-blue hover:text-white transition-precise shrink-0"
+            >
+              <ChevronDown size={11} className={cn("transition-transform duration-200", moodboardFiltersOpen ? "" : "-rotate-90")} />
+              Filters
+            </button>
+            <button
+              type="button"
+              onClick={handleExportAssets}
+              disabled={exporting || canvasAssets.every((a) => !a.file_data)}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-sm font-mono text-[10px] tracking-widest uppercase transition-precise border border-blue/50 text-blue bg-blue/10 hover:bg-blue/16 hover:border-blue/70 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              <Download size={11} /> {exporting ? "Exporting…" : `Export (${canvasAssets.filter((a) => !!a.file_data).length})`}
+            </button>
+          </div>
+          {moodboardFiltersOpen && (
             <div className="flex flex-col gap-2 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
@@ -420,16 +439,7 @@ export function CinemaAssets() {
                 );
               })}
             </div>
-            <Button
-              variant="accent"
-              size="xs"
-              onClick={handleExportAssets}
-              disabled={exporting || canvasAssets.every((a) => !a.file_data)}
-              className="shrink-0"
-            >
-              <Download size={11} /> {exporting ? "Exporting…" : `Export (${canvasAssets.filter((a) => !!a.file_data).length})`}
-            </Button>
-          </div>
+          )}
           <MoodboardCanvas assets={canvasAssets} folders={folders} onPositionChange={handleCanvasPositionChange} />
         </div>
       ) : (
@@ -557,7 +567,7 @@ export function CinemaAssets() {
               </div>
 
               {assets.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-start gap-2 overflow-x-auto pb-2 -mx-1 px-1">
                   {groupAssetVersions(assets).map((group) => {
                     const groupKey = group[0].version_group_id ?? group[0].id;
                     const active = group.find((v) => v.id === selectedAssetId) ?? group[group.length - 1];
@@ -566,7 +576,7 @@ export function CinemaAssets() {
                         key={groupKey}
                         onClick={() => setSelectedAssetId(active.id)}
                         className={cn(
-                          "group relative flex flex-col gap-2 p-3 rounded-sm border text-left cursor-pointer transition-precise",
+                          "group relative flex flex-col gap-2 p-3 rounded-sm border text-left cursor-pointer transition-precise w-40 shrink-0",
                           selectedAssetId === active.id ? "border-cyan/55 bg-cyan/10" : "border-white/12 hover:border-white/30"
                         )}
                       >
@@ -680,7 +690,7 @@ export function CinemaAssets() {
                   <span className="font-mono text-[9px] text-muted tracking-widest uppercase">{selectedAsset.provider ?? "—"}</span>
                 </div>
               </div>
-              <p className="font-mono text-[11px] leading-relaxed text-readable whitespace-pre-wrap max-h-64 overflow-y-auto">
+              <p className="font-mono text-[11px] leading-relaxed text-readable whitespace-pre-wrap max-h-128 overflow-y-auto">
                 {formatPromptWithParameters(selectedAsset.provider ?? "other", selectedAsset.prompt_text, selectedAsset.prompt_parameters)}
               </p>
               <Button variant="ghost" size="xs" onClick={() => handleCopySelectedPrompt(selectedAsset)} className="self-end">

@@ -8,7 +8,17 @@ import type { CinemaAsset, CinemaFolder } from "@/types";
 const CARD_W = 160;
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 2.5;
-const CONNECTOR_COLOR = "rgba(56,183,200,0.55)"; // cyan — matches the app's "connected/locked" accent
+const CONNECTOR_COLOR = "#2D7FF9"; // blue — the Moodboard's own accent (view toggle, Export)
+
+/** Smooth cubic-bezier "S-curve" between two node centers, React-Flow-style —
+ * horizontally-biased control points so even near-vertically-stacked nodes
+ * (the common case here) still read as a real bend, not a straight line with
+ * rounded ends. */
+function bezierPath(from: { x: number; y: number }, to: { x: number; y: number }): string {
+  const dist = Math.hypot(to.x - from.x, to.y - from.y);
+  const curvature = Math.max(dist * 0.5, 40);
+  return `M ${from.x} ${from.y} C ${from.x + curvature} ${from.y}, ${to.x - curvature} ${to.y}, ${to.x} ${to.y}`;
+}
 
 interface Props {
   assets: CinemaAsset[];
@@ -26,7 +36,7 @@ function clamp(v: number, min: number, max: number) {
  * that isn't an ancestor of any card (see `panCatcherRef` below), so a card's
  * pointer events can never bubble into it no matter how either gesture library
  * schedules its listeners. */
-function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, onTap }: {
+function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, onTap, onLiveMove, showVersionBadge }: {
   asset: CinemaAsset;
   folderColor: string;
   folderName: string;
@@ -34,6 +44,14 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
   position: { x: number; y: number };
   onDragEnd: (x: number, y: number) => void;
   onTap: () => void;
+  /** Fires on every frame of an active drag (and once more with `null` when it
+   * ends) — lets the parent redraw connector lines in step with the card
+   * instead of only once the drag settles. */
+  onLiveMove?: (pos: { x: number; y: number } | null) => void;
+  /** True once this asset is actually part of a multi-version stack (2+
+   * siblings) — every version in that stack gets a badge, including V1, so
+   * the numbering reads consistently instead of only V2+ looking versioned. */
+  showVersionBadge: boolean;
 }) {
   const [live, setLive] = useState<{ x: number; y: number } | null>(null);
 
@@ -43,8 +61,10 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
       event.preventDefault();
       if (active) {
         setLive({ x: ox, y: oy });
+        onLiveMove?.({ x: ox, y: oy });
       } else {
         setLive(null);
+        onLiveMove?.(null);
         if (tap) onTap();
         else onDragEnd(ox, oy);
       }
@@ -82,7 +102,7 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
             <Lock size={8} />
           </span>
         )}
-        {asset.version_number > 1 && (
+        {showVersionBadge && (
           <span className="absolute top-1 right-1 px-1 py-0.5 rounded-sm bg-black/70 font-mono text-[8px] text-cyan">
             V{asset.version_number}
           </span>
@@ -100,6 +120,10 @@ function AssetCard({ asset, folderColor, folderName, zoom, position, onDragEnd, 
 export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAsset }: Props) {
   const [view, setView] = useState({ zoom: 1, panX: 24, panY: 24 });
   const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
+  // In-progress drag positions, keyed by asset id — separate from `positions`
+  // (which only updates once a drag settles) purely so connector lines can
+  // track a card in real time without affecting anything else's render.
+  const [liveOverrides, setLiveOverrides] = useState<Record<string, { x: number; y: number }>>({});
   const [lightboxId, setLightboxId] = useState<string | null>(null);
   const [panning, setPanning] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -114,6 +138,19 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
   // which would otherwise be unable to tell "never positioned" apart from
   // "the user dragged it to exactly (0,0)".
   const positionFor = (asset: CinemaAsset) => positions[asset.id] ?? { x: asset.canvas_x, y: asset.canvas_y };
+  /** Same as positionFor, but prefers an in-progress drag position — used only
+   * by the connector lines so they follow a card while it's being dragged. */
+  const livePositionFor = (asset: CinemaAsset) => liveOverrides[asset.id] ?? positionFor(asset);
+
+  const handleAssetLiveMove = (assetId: string, pos: { x: number; y: number } | null) => {
+    setLiveOverrides((prev) => {
+      if (pos) return { ...prev, [assetId]: pos };
+      if (!(assetId in prev)) return prev;
+      const next = { ...prev };
+      delete next[assetId];
+      return next;
+    });
+  };
 
   const setZoom = (next: number) => setView((v) => ({ ...v, zoom: clamp(next, MIN_ZOOM, MAX_ZOOM) }));
 
@@ -210,21 +247,22 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
   const lightboxAsset = assets.find((a) => a.id === lightboxId);
   useShortcut("escape", () => setLightboxId(null), !!lightboxAsset);
 
-  // Version-stack connector lines — one segment between each consecutive
-  // pair of siblings in a stack, drawn behind the cards. Only ever reads the
-  // *settled* position (not a card's live in-progress drag offset), so
-  // dragging one node never drags the others: the line simply redraws once
-  // the drag ends, same as any other position change.
-  const connectorSegments = groupAssetVersions(assets)
-    .filter((group) => group.length > 1)
-    .flatMap((group) =>
-      group.slice(1).map((asset, i) => {
-        const from = positionFor(group[i]);
-        const to = positionFor(asset);
-        const center = (p: { x: number; y: number }) => ({ x: p.x + CARD_W / 2, y: p.y + CARD_W / 2 });
-        return { key: asset.id, from: center(from), to: center(to) };
-      })
-    );
+  // Version-stack connector lines — one curved segment between each
+  // consecutive pair of siblings in a stack, drawn behind the cards. Reads
+  // the *live* drag position when a node is being moved, so the curve bends
+  // with the card in real time — nodes stay fully independent (dragging one
+  // never repositions the other), the line just tracks whichever endpoint is
+  // currently moving.
+  const versionGroups = groupAssetVersions(assets).filter((group) => group.length > 1);
+  const versionedAssetIds = new Set(versionGroups.flatMap((group) => group.map((a) => a.id)));
+  const connectorSegments = versionGroups.flatMap((group) =>
+    group.slice(1).map((asset, i) => {
+      const center = (p: { x: number; y: number }) => ({ x: p.x + CARD_W / 2, y: p.y + CARD_W / 2 });
+      const from = center(livePositionFor(group[i]));
+      const to = center(livePositionFor(asset));
+      return { key: asset.id, path: bezierPath(from, to), from, to };
+    })
+  );
 
   return (
     <div className="flex flex-col gap-2">
@@ -268,16 +306,28 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
               className="absolute top-0 left-0"
               style={{ transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`, transformOrigin: "0 0" }}
             >
-              <svg className="absolute top-0 left-0 overflow-visible pointer-events-none" width={0} height={0}>
+              {/* A 0×0 SVG relying on overflow:visible to draw its off-box content
+                  doesn't reliably paint in this environment (confirmed via live
+                  testing — the path has a correct, non-zero bounding rect but
+                  nothing is actually painted). Explicit, generously large
+                  dimensions fix it; no viewBox means 1 unit stays 1px, so the
+                  existing pixel-coordinate paths/circles are unaffected. */}
+              <svg className="absolute top-0 left-0 pointer-events-none" width={8000} height={8000}>
+                <defs>
+                  <filter id="moodboard-connector-glow" x="-60%" y="-60%" width="220%" height="220%">
+                    <feGaussianBlur stdDeviation="3" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
                 {connectorSegments.map((seg) => (
-                  <line
-                    key={seg.key}
-                    x1={seg.from.x} y1={seg.from.y}
-                    x2={seg.to.x} y2={seg.to.y}
-                    stroke={CONNECTOR_COLOR}
-                    strokeWidth={1.5}
-                    strokeDasharray="4 3"
-                  />
+                  <g key={seg.key} filter="url(#moodboard-connector-glow)">
+                    <path d={seg.path} stroke={CONNECTOR_COLOR} strokeWidth={2} strokeLinecap="round" fill="none" opacity={0.75} />
+                    <circle cx={seg.from.x} cy={seg.from.y} r={3} fill={CONNECTOR_COLOR} />
+                    <circle cx={seg.to.x} cy={seg.to.y} r={3} fill={CONNECTOR_COLOR} />
+                  </g>
                 ))}
               </svg>
               {assets.map((asset) => (
@@ -290,6 +340,8 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
                   position={positionFor(asset)}
                   onDragEnd={(x, y) => handleAssetDragEnd(asset.id, x, y)}
                   onTap={() => handleAssetTap(asset.id)}
+                  onLiveMove={(pos) => handleAssetLiveMove(asset.id, pos)}
+                  showVersionBadge={versionedAssetIds.has(asset.id)}
                 />
               ))}
             </div>
@@ -307,7 +359,7 @@ export function MoodboardCanvas({ assets, folders, onPositionChange, onSelectAss
             type="button"
             onClick={() => setLightboxId(null)}
             title="Close (Esc)"
-            className="absolute top-6 right-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/8 text-white/70 hover:bg-white/16 hover:text-white transition-precise"
+            className="absolute top-16 right-6 flex items-center justify-center w-10 h-10 rounded-full bg-white/8 text-white/70 hover:bg-white/16 hover:text-white transition-precise"
           >
             <X size={18} />
           </button>

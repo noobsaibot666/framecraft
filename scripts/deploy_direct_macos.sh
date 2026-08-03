@@ -19,11 +19,12 @@
 
 set -euo pipefail
 
-# Pin by SHA-1 fingerprint if you have more than one "Developer ID
-# Application: ... (RD7UU4Z3D2)" cert in the login keychain (Darkwave's own
-# script hit exactly this ambiguity) — run
-# `security find-identity -v -p codesigning` and replace this placeholder.
-IDENTITY="Developer ID Application: Nudson Alan Terrinha Alves (RD7UU4Z3D2)"
+# Pinned by SHA-1 fingerprint, not by name: the login keychain has two
+# "Developer ID Application: ... (RD7UU4Z3D2)" certs (shared across every
+# project under this Apple Developer Team, same ones Darkwave uses) — this
+# one is valid until 2031; the other, issued more recently, expires in
+# 2027. Matching by name would be ambiguous between the two.
+IDENTITY="2FDD1878C9570F69A38D4231D9E6FC37E92D537F"
 KEYCHAIN_PROFILE="framecraft-notary"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -38,7 +39,12 @@ echo "▶  Framecraft v${VERSION} — Direct Distribution (macOS)"
 echo "─────────────────────────────────────────────────────"
 
 echo "[1/5] Building (direct-dist, unsandboxed, Developer ID identity)..."
-APPLE_SIGNING_IDENTITY="$IDENTITY" npx tauri build \
+# TAURI_SIGNING_PRIVATE_KEY_PATH makes tauri-plugin-updater's build hook
+# write a real Ed25519 signature (Framecraft_x.y.z_aarch64.dmg.sig)
+# alongside the DMG — needed for releases-meta/framecraft.json below.
+APPLE_SIGNING_IDENTITY="$IDENTITY" \
+TAURI_SIGNING_PRIVATE_KEY_PATH="$PROJECT_ROOT/secrets/framecraft-updater.key" \
+npx tauri build \
   --features direct-dist \
   --config src-tauri/tauri.direct.conf.json
 

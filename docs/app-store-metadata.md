@@ -5,8 +5,10 @@ Ready-to-paste copy for the Mac App Store listing, sized to Apple's actual limit
 ## App name (30 char limit)
 
 ```
-Framecraft
+Framecraft — AI Studio
 ```
+
+("Framecraft" alone was already taken by another developer on the App Store — this is the App Store *listing* name only; bundle ID, product name, and branding everywhere else stay "Framecraft".)
 
 ## Subtitle (30 char limit)
 
@@ -100,17 +102,15 @@ Initial release.
 
 Genuinely blocking, as of this writing:
 
-- **Bundle ID registration** — `com.alan.framecraft` not yet registered with Apple.
-- **App Store Connect record** — doesn't exist yet; needed before any build can be attached to a version.
-- **Provisioning profile** — `src-tauri/embedded.provisionprofile` doesn't exist yet (needs the bundle ID registered first).
-- **Screenshots** — one real screenshot exists (Dashboard, `public/assets/images/store/framecraft/framecraft-screenshot-dashboard.png` in `web_three`, used on the storefront). App Store Connect wants Mac screenshots at 1280×800 or 2880×1800 — resize/recapture before uploading there; more than one is recommended but not required.
-- **Docs site deploy** — Privacy/EULA/Support/Licensing pages are written and build clean locally, but not yet pushed to the live NAS mount, so the URLs above 404 until that happens.
-- **App Privacy questionnaire, age rating, pricing tier** — dashboard-only, not started.
-- **Signing certificates** — no "3rd Party Mac Developer Application/Installer" certs confirmed present for this project yet (same Team RD7UU4Z3D2 as Darkwave/CD Suite — reuse if already issued for that team, otherwise request new ones).
+- **Attach the build in App Store Connect** — uploaded successfully (Delivery UUID `924f280c-bbdc-4fe8-a0de-dcdf52e1285c`, 2026-08-03), but still needs to be selected on the version page once it finishes processing, then submitted for review.
+- **App Privacy questionnaire, age rating, pricing tier** — confirm these are filled in before submitting.
 
 Not blocking, already resolved:
 
+- Bundle ID `com.alan.framecraft` registered, App Store Connect record created (listing name "Framecraft — AI Studio" — "Framecraft" alone was already taken).
+- Provisioning profile downloaded and embedded; signing certs (3rd Party Mac Developer Application/Installer, Team RD7UU4Z3D2) reused from the Darkwave/CD Suite submissions.
+- `scripts/mac_sign_and_package_mas.sh` run successfully — `builds/Framecraft_SUBMISSION.pkg` built, signed, and uploaded via `altool`.
 - Sandboxed + direct-sale dual-build config (`tauri.mas.conf.json` / `tauri.direct.conf.json`), entitlements, and `Info.plist` export-compliance key all in place.
 - Direct-sale licensing (Ed25519 + HWID + 14-day trial, `src-tauri/src/license.rs`) and security-scoped bookmarks for sandboxed "portable" libraries (`src-tauri/src/library_bookmark.rs`) implemented and unit-tested.
-- Licensing server knows about Framecraft (`web_three/licensing-server/products.js`), a real Stripe product + €29 price exist, and the storefront listing is live.
-- `scripts/mac_sign_and_package_mas.sh` / `scripts/deploy_direct_macos.sh` ready to run once certs + provisioning profile exist.
+- Licensing server knows about Framecraft (`web_three/licensing-server/products.js`), a real Stripe product + €29 price exist, the storefront listing is live, and all endpoints verified working in production.
+- Docs site (Privacy/EULA/Support/Licensing pages) deployed and live at docs.alan-design.com/framecraft/.

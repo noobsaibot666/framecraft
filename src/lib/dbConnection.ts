@@ -1,4 +1,5 @@
-import { getActiveLibrarySelection, getActiveSqliteUrl, resolveLibraryPaths } from "./libraryConfig";
+import { getActiveLibrarySelection, getActiveSqliteUrl, resolveLibraryPaths, setSelectedLibraryPath } from "./libraryConfig";
+import { activateLibraryBookmarkNative } from "./libraryNative";
 import { createNativeSqliteDatabase } from "./nativeSqlite";
 import { startThumbnailMigration } from "./thumbnailMigration";
 
@@ -123,6 +124,24 @@ export async function getFramecraftDb(): Promise<any> {
 
   const selection = getActiveLibrarySelection();
   if (selection.path) {
+    // Mac App Store build only: regain security-scoped access to a
+    // "portable" library's folder before the first native SQLite touch
+    // this process — the Rust side then holds that access for the rest of
+    // the process's life (see library_bookmark.rs), so this only needs to
+    // run once per launch, not on every call. No-ops (resolves to "")
+    // everywhere else: appData mode, direct-dist build, non-macOS.
+    if (!_db && selection.mode === "portable" && selection.bookmark) {
+      const resolvedPath = await activateLibraryBookmarkNative(selection.bookmark).catch(() => "");
+      if (resolvedPath && resolvedPath !== selection.path) {
+        // Self-heal: an SMB/NAS share can remount under a different
+        // /Volumes/… path than last session — the bookmark still resolves,
+        // but every other command reading this stored path string as-is
+        // would otherwise keep pointing at the stale mount.
+        setSelectedLibraryPath(resolvedPath);
+        selection.path = resolvedPath;
+      }
+    }
+
     const dbPath = resolveLibraryPaths(selection.path).dbPath;
     if (!_db || _dbUrl !== dbPath) {
       _db = createNativeSqliteDatabase(dbPath);

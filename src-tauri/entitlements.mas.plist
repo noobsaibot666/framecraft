@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for any Mac App Store submission. -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+
+    <!-- Framecraft's "appData" library mode never leaves the app's own
+         sandbox container, so it needs nothing extra. "Portable" mode has
+         the user explicitly pick a .framecraftlib folder (Tauri dialog
+         plugin) rather than scanning arbitrary paths, so this plus the
+         bookmark entitlement below is the whole sandboxed file-access
+         story: grant access to what was picked, remember it across
+         launches via a security-scoped bookmark (implemented — see
+         src/security_scoped_bookmark.rs / src/library_bookmark.rs). -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
+    <key>com.apple.developer.team-identifier</key>
+    <string>RD7UU4Z3D2</string>
+    <key>com.apple.application-identifier</key>
+    <string>RD7UU4Z3D2.com.alan.framecraft</string>
+</dict>
+</plist>

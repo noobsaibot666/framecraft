@@ -2,6 +2,11 @@ export const DEFAULT_DB_NAME = "framecraft.db";
 export const DEFAULT_SQLITE_URL = `sqlite:${DEFAULT_DB_NAME}`;
 export const FRAMECRAFT_LIBRARY_EXTENSION = ".framecraftlib";
 export const LIBRARY_PATH_STORAGE_KEY = "framecraft_library_path";
+// Mac App Store build only — a security-scoped bookmark for the current
+// portable library folder (see src-tauri/src/library_bookmark.rs). Stored
+// alongside the path itself; empty/absent on the direct-dist build and on
+// non-macOS, since neither ever mints one.
+export const LIBRARY_BOOKMARK_STORAGE_KEY = "framecraft_library_bookmark";
 
 export type LibraryMode = "appData" | "portable";
 
@@ -14,6 +19,7 @@ export interface LibraryStorage {
 export interface ActiveLibrarySelection {
   mode: LibraryMode;
   path: string | null;
+  bookmark: string | null;
 }
 
 export interface LibraryPaths {
@@ -105,11 +111,25 @@ export function setSelectedLibraryPath(path: string, storage = getBrowserStorage
 
 export function clearSelectedLibraryPath(storage = getBrowserStorage()): void {
   storage?.removeItem(LIBRARY_PATH_STORAGE_KEY);
+  storage?.removeItem(LIBRARY_BOOKMARK_STORAGE_KEY);
+}
+
+export function getSelectedLibraryBookmark(storage = getBrowserStorage()): string | null {
+  const bookmark = storage?.getItem(LIBRARY_BOOKMARK_STORAGE_KEY)?.trim();
+  return bookmark ? bookmark : null;
+}
+
+export function setSelectedLibraryBookmark(bookmark: string, storage = getBrowserStorage()): void {
+  const normalized = bookmark.trim();
+  if (!normalized) return;
+  storage?.setItem(LIBRARY_BOOKMARK_STORAGE_KEY, normalized);
 }
 
 export function getActiveLibrarySelection(storage = getBrowserStorage()): ActiveLibrarySelection {
   const path = getSelectedLibraryPath(storage);
-  return path ? { mode: "portable", path } : { mode: "appData", path: null };
+  return path
+    ? { mode: "portable", path, bookmark: getSelectedLibraryBookmark(storage) }
+    : { mode: "appData", path: null, bookmark: null };
 }
 
 export function getActiveLibraryPaths(appDataDir: string, storage = getBrowserStorage()): LibraryPaths {

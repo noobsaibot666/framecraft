@@ -6,6 +6,10 @@ mod library_package;
 mod native_sqlite;
 mod portable_sqlite;
 mod fetch_image;
+mod license;
+mod library_bookmark;
+#[cfg(all(target_os = "macos", not(feature = "direct-dist")))]
+mod security_scoped_bookmark;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -252,8 +256,9 @@ pub fn run() {
         },
     ];
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(library_lock::ActiveLockState::default())
+        .manage(library_bookmark::BookmarkAccessState::default())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -262,7 +267,14 @@ pub fn run() {
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:framecraft.db", migrations)
                 .build(),
-        )
+        );
+
+    // MAS build relies entirely on Apple's own updater — this plugin only
+    // makes sense for the direct-sale channel.
+    #[cfg(feature = "direct-dist")]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             library_lock::acquire_library_lock_native,
             library_lock::refresh_library_lock_native,
@@ -283,6 +295,13 @@ pub fn run() {
             native_sqlite::native_sqlite_select,
             fetch_image::fetch_image_as_data_url,
             fetch_image::compress_image_from_bytes,
+            license::get_hwid,
+            license::get_license_status,
+            license::activate_license,
+            license::recover_license_key,
+            license::init_trial,
+            library_bookmark::create_library_bookmark,
+            library_bookmark::activate_library_bookmark,
         ])
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {

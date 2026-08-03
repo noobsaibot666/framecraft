@@ -26,7 +26,7 @@ const STAGED_RESULT = {
 function deps(mode: "portable" | "appData", valid = true): SharedImportDeps {
   return {
     getLibraryState: vi.fn(async () => ({
-      selection: { mode, path: mode === "portable" ? "/lib/Work.framecraftlib" : null },
+      selection: { mode, path: mode === "portable" ? "/lib/Work.framecraftlib" : null, bookmark: null },
       paths: resolveLibraryPaths("/lib/Work.framecraftlib"),
       validation: mode === "portable" ? { ok: valid, errors: valid ? [] : ["Missing inbox directory"] } : null,
       nativeAvailable: true,

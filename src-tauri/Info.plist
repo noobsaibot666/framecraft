@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Only network traffic is HTTPS/TLS calls to the AI provider APIs
+         (see tauri.conf.json's CSP) plus, in the direct-dist build,
+         Ed25519 signature verification of the license/update payloads —
+         no custom encryption of user data. Same exemption basis as
+         Darkwave/CD Suite. -->
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+</dict>
+</plist>

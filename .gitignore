@@ -26,6 +26,11 @@ dist-ssr
 # Tauri build output (Rust target dir is large)
 src-tauri/target/
 
+# Signing secrets and local build artifacts — never committed
+secrets/
+builds/
+src-tauri/embedded.provisionprofile
+
 # TypeScript build cache
 *.tsbuildinfo
 src-tauri/src/main_test.rs

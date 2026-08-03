@@ -110,7 +110,7 @@ describe("libraryConfig defaults", () => {
   it("uses app-data paths and sqlite URL when no portable library is selected", async () => {
     const storage = createStorage();
 
-    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null });
+    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null, bookmark: null });
     expect(getActiveLibraryPaths("/Users/alan/AppData", storage)).toEqual(resolveLibraryPaths("/Users/alan/AppData"));
     await expect(getActiveSqliteUrl(storage)).resolves.toBe(DEFAULT_SQLITE_URL);
   });
@@ -124,6 +124,7 @@ describe("libraryConfig defaults", () => {
     expect(getActiveLibrarySelection(storage)).toEqual({
       mode: "portable",
       path: "/Volumes/NAS/Client.framecraftlib",
+      bookmark: null,
     });
     expect(getActiveLibraryPaths("/Users/alan/AppData", storage)).toEqual(
       resolveLibraryPaths("/Volumes/NAS/Client.framecraftlib")
@@ -139,7 +140,7 @@ describe("libraryConfig defaults", () => {
 
     clearSelectedLibraryPath(storage);
 
-    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null });
+    expect(getActiveLibrarySelection(storage)).toEqual({ mode: "appData", path: null, bookmark: null });
     expect(storage.data[LIBRARY_PATH_STORAGE_KEY]).toBeUndefined();
   });
 });

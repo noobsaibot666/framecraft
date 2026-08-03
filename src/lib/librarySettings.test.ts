@@ -18,8 +18,10 @@ vi.mock("@tauri-apps/api/path", () => ({ appDataDir: mocks.appDataDir }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(), save: mocks.save }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ revealItemInDir: vi.fn() }));
 vi.mock("./libraryNative", () => ({
+  activateLibraryBookmarkNative: vi.fn(async () => ""),
   backupLibraryPackageNative: mocks.backup,
   copyLibraryPackageNative: mocks.copy,
+  createLibraryBookmarkNative: vi.fn(async () => ""),
   createLibraryPackageNative: vi.fn(),
   inspectLibraryPackageNative: mocks.inspect,
   mergeLibraryPackageNative: vi.fn(),

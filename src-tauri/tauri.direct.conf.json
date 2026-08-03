@@ -1,0 +1,16 @@
+{
+  "identifier": "com.alan.framecraft.direct",
+  "bundle": {
+    "macOS": {
+      "entitlements": "entitlements.direct.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJBNkY0MEQyODkwOTM1RDgKUldUWU5RbUowa0J2dXFxcTZJM29lOGVycTNrNzZCQ1Q3Q0I3QW9uaGNqZ1lYcjcxeWdWeU90Ym0K",
+      "endpoints": [
+        "https://alan-design.com/licensing/framecraft/updates/{{target}}/{{arch}}/{{current_version}}"
+      ]
+    }
+  }
+}

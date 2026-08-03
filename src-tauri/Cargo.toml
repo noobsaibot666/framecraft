@@ -23,15 +23,41 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["backup"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json"] }
 base64 = "0.22"
 image = "0.25"
 once_cell = "1"
 tauri-plugin-http = "2.5.9"
 
+# direct-dist only (see src/license.rs) — kept optional so the Mac App
+# Store build's dependency tree (and binary) carries none of this at all.
+ed25519-dalek = { version = "2", optional = true }
+machine-uid = { version = "0.3", optional = true }
+keyring = { version = "3", features = ["apple-native"], optional = true }
+# The MAS build relies entirely on Apple's own updater — this plugin only
+# makes sense for the direct-sale channel.
+tauri-plugin-updater = { version = "2", optional = true }
+
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 libc = "0.2"
+
+# Used only by src/security_scoped_bookmark.rs, itself cfg-gated to
+# `not(feature = "direct-dist")` (the MAS build) — Cargo has no way to
+# combine a target-cfg with a feature-cfg on a dependency line, so this
+# crate is present in the direct-dist macOS build's dependency graph too,
+# just never called there.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSURL", "NSError", "NSString", "NSData", "NSArray"] }
+
+[features]
+direct-dist = [
+  "dep:ed25519-dalek",
+  "dep:machine-uid",
+  "dep:keyring",
+  "dep:tauri-plugin-updater",
+]

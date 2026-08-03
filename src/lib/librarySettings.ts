@@ -6,6 +6,7 @@ import {
   getActiveLibraryPaths,
   getActiveLibrarySelection,
   isFramecraftLibraryPath,
+  setSelectedLibraryBookmark,
   setSelectedLibraryPath,
   type ActiveLibrarySelection,
   type LibraryPaths,
@@ -15,6 +16,7 @@ import type { LibraryMergeReport, LibraryValidationResult } from "./libraryPacka
 import {
   backupLibraryPackageNative,
   copyLibraryPackageNative,
+  createLibraryBookmarkNative,
   createLibraryPackageNative,
   inspectLibraryPackageNative,
   mergeLibraryPackageNative,
@@ -68,6 +70,16 @@ export async function selectValidatedLibrary(
     throw new Error(validation.errors.join(", ") || "Library validation failed.");
   }
   setSelectedLibraryPath(path, deps.storage);
+
+  // Mac App Store build only: `path` was just handed to us by a native
+  // dialog (open()/save()), which is exactly the moment the sandbox grants
+  // scoped access to it — the only moment a security-scoped bookmark can be
+  // minted. No-ops (returns "") on the direct-dist build and on non-macOS.
+  if (isTauri()) {
+    const bookmark = await createLibraryBookmarkNative(path).catch(() => "");
+    if (bookmark) setSelectedLibraryBookmark(bookmark, deps.storage);
+  }
+
   return { path, restartRequired: true };
 }
 

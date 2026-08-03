@@ -37,7 +37,7 @@ tauri-plugin-http = "2.5.9"
 # Store build's dependency tree (and binary) carries none of this at all.
 ed25519-dalek = { version = "2", optional = true }
 machine-uid = { version = "0.3", optional = true }
-keyring = { version = "3", features = ["apple-native"], optional = true }
+keyring = { version = "3", features = ["apple-native", "windows-native"], optional = true }
 # The MAS build relies entirely on Apple's own updater — this plugin only
 # makes sense for the direct-sale channel.
 tauri-plugin-updater = { version = "2", optional = true }

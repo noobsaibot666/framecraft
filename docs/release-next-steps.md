@@ -1,7 +1,9 @@
 # Framecraft — Release Next Steps
 
-Two remaining pieces: closing out the Mac App Store submission, and standing up the
-Windows direct-sale build. This doc is the runbook for both.
+**Status (2026-08-04): both platforms are fully built, signed, deployed, and
+verified live.** The only thing left in the whole release is Apple's App Review
+decision on the Mac App Store submission — nothing actionable left on either
+platform below. Kept as a historical runbook.
 
 ---
 

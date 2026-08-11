@@ -6,6 +6,18 @@
     <key>com.apple.security.app-sandbox</key>
     <true/>
 
+    <!-- Required even though Framecraft's UI is loaded from the app's own
+         bundle via the tauri:// custom protocol, not a real network fetch:
+         WKWebView's process model (its WebContent/Networking XPC helpers)
+         needs this entitlement just to spin up under App Sandbox. Without
+         it the webview fails to render anything — a permanently blank,
+         frozen window on launch — which is what Apple's review rejection
+         (Guideline 2.1(a), "frozen with blank page upon launch") described.
+         Also needed for the AI-provider calls Settings/CraftPrompt make
+         directly to api.anthropic.com / api.openai.com / api.deepseek.com. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+
     <!-- Framecraft's "appData" library mode never leaves the app's own
          sandbox container, so it needs nothing extra. "Portable" mode has
          the user explicitly pick a .framecraftlib folder (Tauri dialog

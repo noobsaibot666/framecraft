@@ -76,9 +76,11 @@ Dev mode (Vite browser) uses in-memory `_dev*` stores. Vitest runs in dev mode �
 
 ## App icon generation (macOS)
 
-- Use `sips` for PNG resizing (built-in, no ImageMagick needed)
-- Use `iconutil` for `.icns` — iconset file names **must** be `icon_16x16.png`, not `icon_16.png`
-- Use Python struct for `.ico` — Pillow's `ICO` save produces a broken file (574 bytes); write the binary header manually
+- **Source art (`src/assets/icon/framecraft.png`) must fill its canvas edge-to-edge — never pad or inset it before generating icon sizes.** This has been a recurring mistake: the art already has the rounded-square/squircle shape baked in at full bleed, so adding a transparent margin around it (e.g. "shrink to ~71% content" to mimic older macOS icon conventions) double-insets it and produces a visible grey/blank border in the Dock/Finder. Before regenerating, check with `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` and visually confirm the art touches all four edges. Only add padding if the source is genuinely a bare glyph with no background shape — ask the user first rather than assuming a percentage.
+- `npx tauri icon src/assets/icon/framecraft.png -o src-tauri/icons` regenerates the full desktop set (icns/ico/PNGs/Windows tiles) from one source in one step — but it also writes `ios/` and `android/` subfolders this desktop-only project doesn't use and a stray `64x64.png` not referenced by `tauri.conf.json`; delete those after running it. Cross-check the output against `tauri.conf.json`'s `bundle.icon` array (currently `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`).
+- Manual fallback: use `sips` for PNG resizing (built-in, no ImageMagick needed)
+- Manual fallback: use `iconutil` for `.icns` — iconset file names **must** be `icon_16x16.png`, not `icon_16.png`
+- Manual fallback: use Python struct for `.ico` — Pillow's `ICO` save produces a broken file (574 bytes); write the binary header manually
 
 ---
 

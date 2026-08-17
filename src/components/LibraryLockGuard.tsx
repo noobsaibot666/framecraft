@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, FolderOpen, HardDrive, RefreshCw } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { Button } from "@/components/ui/Button";
-import { getLibrarySettingsState } from "@/lib/librarySettings";
+import {
+  formatLibraryActionError,
+  getLibrarySettingsState,
+  openLibraryFromDialog,
+  useLocalAppDataLibrary,
+} from "@/lib/librarySettings";
 import {
   LibraryStartupCancelledError,
   PortableLibraryCleanupError,
@@ -40,6 +45,8 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
   const attemptGeneration = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
   const [state, setState] = useState<LockState>({ status: "checking" });
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const coordinator = useRef<ReturnType<typeof createPortableLibraryStartupCoordinator> | null>(null);
 
   if (!coordinator.current) {
@@ -158,6 +165,37 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
     return promise;
   }, [acquire]);
 
+  const handleUseLocalLibrary = useCallback(() => {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      useLocalAppDataLibrary();
+      void acquire(false).finally(() => {
+        if (mounted.current) setSwitching(false);
+      });
+    } catch (error) {
+      if (mounted.current) {
+        setSwitchError(formatLibraryActionError(error));
+        setSwitching(false);
+      }
+    }
+  }, [acquire, switching]);
+
+  const handleChooseDifferentLibrary = useCallback(() => {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    void openLibraryFromDialog()
+      .then((result) => (result ? acquire(false) : undefined))
+      .catch((error) => {
+        if (mounted.current) setSwitchError(formatLibraryActionError(error));
+      })
+      .finally(() => {
+        if (mounted.current) setSwitching(false);
+      });
+  }, [acquire, switching]);
+
   useEffect(() => {
     mounted.current = true;
     void acquire();
@@ -183,6 +221,15 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
     };
   }, [acquire]);
 
+  const escapeActions = (
+    <LibraryEscapeActions
+      disabled={switching}
+      error={switchError}
+      onUseLocal={handleUseLocalLibrary}
+      onChooseDifferent={handleChooseDifferentLibrary}
+    />
+  );
+
   if (state.status === "checking") return <LockScreen title="Checking Library Lock" message="Checking active library access..." />;
   if (state.status === "conflict") {
     return (
@@ -190,6 +237,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
         title="Library In Use"
         message={`This library is locked by ${state.lock.user} on ${state.lock.machine}. Close it there before continuing.`}
         action={<Button variant="ghost" size="sm" onClick={() => acquire(false)}><RefreshCw size={10} /> Check Again</Button>}
+        secondary={escapeActions}
       />
     );
   }
@@ -199,6 +247,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
         title="Stale Library Lock"
         message={`Last lock update was ${new Date(state.lock.updated_at).toLocaleString()}. Take over only if no other machine is using it.`}
         action={<Button variant="ghost" size="sm" onClick={() => acquire(true)}><RefreshCw size={10} /> Take Over Lock</Button>}
+        secondary={escapeActions}
       />
     );
   }
@@ -208,10 +257,20 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
         title="Library Lock Cleanup Failed"
         message={state.message}
         action={<Button variant="ghost" size="sm" onClick={retryCleanup}><RefreshCw size={10} /> Retry Cleanup</Button>}
+        secondary={escapeActions}
       />
     );
   }
-  if (state.status === "error") return <LockScreen title="Library Lock Error" message={state.message} />;
+  if (state.status === "error") {
+    return (
+      <LockScreen
+        title="Library Lock Error"
+        message={state.message}
+        action={<Button variant="ghost" size="sm" onClick={() => acquire(false)}><RefreshCw size={10} /> Retry</Button>}
+        secondary={escapeActions}
+      />
+    );
+  }
   return <>{children}</>;
 }
 
@@ -235,7 +294,17 @@ function showCleanupError(
   });
 }
 
-function LockScreen({ title, message, action }: { title: string; message: string; action?: ReactNode }) {
+function LockScreen({
+  title,
+  message,
+  action,
+  secondary,
+}: {
+  title: string;
+  message: string;
+  action?: ReactNode;
+  secondary?: ReactNode;
+}) {
   return (
     <div className="min-h-full bg-void flex items-center justify-center p-6">
       <div className="max-w-md w-full flex flex-col gap-4 p-5 rounded-card"
@@ -248,7 +317,35 @@ function LockScreen({ title, message, action }: { title: string; message: string
           </div>
         </div>
         {action}
+        {secondary}
       </div>
+    </div>
+  );
+}
+
+function LibraryEscapeActions({
+  disabled,
+  error,
+  onUseLocal,
+  onChooseDifferent,
+}: {
+  disabled: boolean;
+  error: string | null;
+  onUseLocal: () => void;
+  onChooseDifferent: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+      <p className="font-mono text-[9px] uppercase tracking-widest text-muted/70">Still stuck?</p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="muted" size="sm" onClick={onUseLocal} disabled={disabled}>
+          <HardDrive size={10} /> Use Local Library
+        </Button>
+        <Button variant="muted" size="sm" onClick={onChooseDifferent} disabled={disabled}>
+          <FolderOpen size={10} /> Choose Different Library
+        </Button>
+      </div>
+      {error && <p className="font-mono text-[10px] text-red/80">{error}</p>}
     </div>
   );
 }

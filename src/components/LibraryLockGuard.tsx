@@ -78,6 +78,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
 
     const attempt = ++attemptGeneration.current;
     setState({ status: "checking" });
+    setSwitchError(null);
     const promise = (async () => {
       try {
         if (!isTauri()) {
@@ -146,6 +147,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
 
     const attempt = ++attemptGeneration.current;
     setState({ status: "checking" });
+    setSwitchError(null);
     const promise = (async () => {
       try {
         await coordinator.current!.cleanup();
@@ -236,7 +238,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Library In Use"
         message={`This library is locked by ${state.lock.user} on ${state.lock.machine}. Close it there before continuing.`}
-        action={<Button variant="ghost" size="sm" onClick={() => acquire(false)}><RefreshCw size={10} /> Check Again</Button>}
+        action={<Button variant="ghost" size="sm" disabled={switching} onClick={() => acquire(false)}><RefreshCw size={10} /> Check Again</Button>}
         secondary={escapeActions}
       />
     );
@@ -246,7 +248,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Stale Library Lock"
         message={`Last lock update was ${new Date(state.lock.updated_at).toLocaleString()}. Take over only if no other machine is using it.`}
-        action={<Button variant="ghost" size="sm" onClick={() => acquire(true)}><RefreshCw size={10} /> Take Over Lock</Button>}
+        action={<Button variant="ghost" size="sm" disabled={switching} onClick={() => acquire(true)}><RefreshCw size={10} /> Take Over Lock</Button>}
         secondary={escapeActions}
       />
     );
@@ -256,7 +258,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Library Lock Cleanup Failed"
         message={state.message}
-        action={<Button variant="ghost" size="sm" onClick={retryCleanup}><RefreshCw size={10} /> Retry Cleanup</Button>}
+        action={<Button variant="ghost" size="sm" disabled={switching} onClick={retryCleanup}><RefreshCw size={10} /> Retry Cleanup</Button>}
         secondary={escapeActions}
       />
     );
@@ -266,7 +268,7 @@ export function LibraryLockGuard({ children }: { children: ReactNode }) {
       <LockScreen
         title="Library Lock Error"
         message={state.message}
-        action={<Button variant="ghost" size="sm" onClick={() => acquire(false)}><RefreshCw size={10} /> Retry</Button>}
+        action={<Button variant="ghost" size="sm" disabled={switching} onClick={() => acquire(false)}><RefreshCw size={10} /> Retry</Button>}
         secondary={escapeActions}
       />
     );

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
-import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle, Bookmark } from "lucide-react";
+import { Scan, Copy, Check, AlertTriangle, Upload, ArrowRight, Tag, Settings, ShieldAlert, Shuffle, Bookmark, ChevronDown } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -85,6 +85,7 @@ export function ImageAnalyzer() {
   const { create } = usePromptStore();
 
   const [selectedModel, setSelectedModel] = useState<AIModel>(() => pickVisionModel() ?? AI_MODELS[0]);
+  const [modelOpen, setModelOpen] = useState(false);
   const apiKey = getApiKey(selectedModel.provider);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -267,31 +268,42 @@ export function ImageAnalyzer() {
             </div>
           )}
 
-          {/* Model picker */}
+          {/* Model picker — collapsed by default; selected model stays in
+              the header so the provider list doesn't dominate the column */}
           <div className="flex flex-col gap-1.5">
-            <span className="font-mono text-[10px] tracking-widest uppercase text-readable">MODEL</span>
-            <div className="flex flex-col gap-2">
-              {[{ id: "anthropic" as const, label: "ANTHROPIC" }, { id: "openai" as const, label: "OPENAI" }].map(({ id, label }) => {
-                const models = AI_MODELS.filter((m) => m.provider === id);
-                return (
-                  <div key={id} className="flex flex-col gap-1">
-                    <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{label}</span>
-                    {models.map((m) => (
-                      <button key={m.id} type="button"
-                        onClick={() => setSelectedModel(m)}
-                        className={cn(
-                          "flex items-center justify-between px-3 py-2.5 rounded-sm text-left transition-precise",
-                          selectedModel.id === m.id ? "accent-selected" : "text-readable hover:text-cyan"
-                        )}
-                        style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
-                        <span className="font-mono text-[12px]">{m.label}</span>
-                        <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{m.tier}</span>
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
+            <button type="button" onClick={() => setModelOpen((v) => !v)}
+              className="flex items-center justify-between gap-3 py-1 text-left">
+              <span className="font-mono text-[10px] tracking-widest uppercase text-readable shrink-0">MODEL</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="font-mono text-[12px] text-soft-white truncate">{selectedModel.label}</span>
+                <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70 shrink-0">{selectedModel.tier}</span>
+                <ChevronDown size={12} className={cn("shrink-0 text-readable transition-precise", modelOpen && "rotate-180")} />
+              </span>
+            </button>
+            {modelOpen && (
+              <div className="flex flex-col gap-2 pt-1">
+                {[{ id: "anthropic" as const, label: "ANTHROPIC" }, { id: "openai" as const, label: "OPENAI" }].map(({ id, label }) => {
+                  const models = AI_MODELS.filter((m) => m.provider === id);
+                  return (
+                    <div key={id} className="flex flex-col gap-1">
+                      <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{label}</span>
+                      {models.map((m) => (
+                        <button key={m.id} type="button"
+                          onClick={() => { setSelectedModel(m); setModelOpen(false); }}
+                          className={cn(
+                            "flex items-center justify-between px-3 py-2.5 rounded-sm text-left transition-precise",
+                            selectedModel.id === m.id ? "accent-selected" : "text-readable hover:text-cyan"
+                          )}
+                          style={{ border: selectedModel.id === m.id ? "1px solid rgba(255,255,255,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
+                          <span className="font-mono text-[12px]">{m.label}</span>
+                          <span className="font-mono text-[9px] tracking-widest uppercase text-readable/70">{m.tier}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <Button
@@ -334,14 +346,14 @@ export function ImageAnalyzer() {
             </div>
           )}
           {!result && !analyzing && !error && (
-            <div className="flex flex-col items-center justify-center h-48 gap-3">
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-center">
               <Scan size={28} className="text-cyan" />
-              <span className="font-mono text-[13px] text-readable">Drop an image and click Analyze to reconstruct its prompt.</span>
+              <span className="font-mono text-[13px] text-readable max-w-xs">Drop an image and click Analyze to reconstruct its prompt.</span>
             </div>
           )}
 
           {analyzing && (
-            <div className="flex flex-col items-center justify-center h-48 gap-3">
+            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
               <div className="w-5 h-5 border border-white/20 border-t-white/60 rounded-full animate-spin" />
               <span className="font-mono text-[13px] text-readable">Sending to vision model...</span>
             </div>

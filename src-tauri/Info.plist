@@ -10,7 +10,7 @@
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <!-- macOS 26+ reads the appearance-aware (light/dark/tinted) app icon from
          the AppIcon entry in Contents/Resources/Assets.car, which is compiled
          from src/assets/icon/AppIcon.icon by scripts/build_appicon_assets.sh

@@ -22,21 +22,26 @@ export function PageContainer({
     <div className={cn("flex flex-col min-h-full w-full", className)} {...props}>
       {(title || action) && (
         <div className="w-full shrink-0" style={{ borderBottom: "var(--border-default)" }}>
-          <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-6 px-10 py-7">
-            <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+          {/* flex-wrap + gap-y: when the action cluster can't fit beside the
+              title it drops to its own full-width line instead of
+              overflowing the header (which <main>'s overflow-x-hidden would
+              otherwise clip). basis-64 keeps the title column from
+              collapsing to nothing before that wrap happens. */}
+          <div className="max-w-screen-2xl mx-auto flex flex-wrap items-center justify-between gap-x-6 gap-y-4 px-10 py-7">
+            <div className="flex flex-col gap-1.5 min-w-0 flex-1 basis-64">
               {title && (
                 <h1 className="font-sans text-[17px] font-semibold text-white tracking-[0.03em] uppercase truncate" title={title}>
                   {title}
                 </h1>
               )}
               {subtitle && (
-                <span className="system-label text-[12px] text-readable">{subtitle}</span>
+                <span className="system-label text-[12px] text-readable truncate" title={subtitle}>{subtitle}</span>
               )}
               {description && (
                 <p className="font-mono text-[12px] text-muted leading-relaxed max-w-2xl">{description}</p>
               )}
             </div>
-            {action && <div className="shrink-0 ml-6">{action}</div>}
+            {action && <div className="shrink-0 ml-auto">{action}</div>}
           </div>
         </div>
       )}

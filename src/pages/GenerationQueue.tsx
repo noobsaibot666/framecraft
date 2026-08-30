@@ -324,7 +324,7 @@ export function GenerationQueue() {
       title="Generation Queue"
       subtitle={projectId ? "PROJECT FILTER ACTIVE" : "PENDING PROMPT BATCH"}
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <input
             ref={bulkFileRef}
             type="file"
@@ -359,8 +359,8 @@ export function GenerationQueue() {
       }
     >
       {showAdd && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
-          <div className="w-[640px] max-h-[72vh] flex flex-col gap-4 p-6 rounded-card" style={{ border: "var(--border-default)", background: "var(--color-panel)" }}>
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-160 max-h-[72vh] flex flex-col gap-4 p-6 rounded-card" style={{ border: "var(--border-default)", background: "var(--color-panel)" }}>
             <div className="flex items-center justify-between">
               <span className="system-label">ADD PROMPTS</span>
               <button type="button" className="text-muted hover:text-white" onClick={() => setShowAdd(false)}><X size={14} /></button>

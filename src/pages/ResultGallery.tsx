@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CheckSquare, Download, ImageOff, Layers, Search, Square, Star, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CheckSquare, Download, ImageOff, Layers, Search, Square, Star, Trash2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { useImageDisplaySrc } from "@/lib/useImageDisplaySrc";
@@ -351,7 +351,7 @@ export function ResultGallery() {
     <PageContainer
       title="Results"
       subtitle="ALL OUTPUT"
-      description="Score, mark winners, and correct results here — this is what trains the app's token quality and recommendation signals."
+      description="Score and correct results — this trains the app's suggestions."
       action={
         <div className="flex items-center gap-2">
           <Button
@@ -391,76 +391,65 @@ export function ResultGallery() {
               style={{ border: "var(--border-default)" }}
             />
           </div>
-          <SlidersHorizontal size={13} className="text-readable shrink-0" />
-
-          {/* Filter */}
-          <div className="flex items-center gap-1">
-            {FILTER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setFilter(opt.value)}
-                className={cn(
-                  "px-3 py-1.5 rounded-sm font-mono text-[11px] uppercase tracking-widest transition-precise",
-                  filter === opt.value
-                    ? "text-white bg-cyan/15"
-                    : "text-readable hover:text-white hover:bg-white/5"
-                )}
-                style={{ border: filter === opt.value ? "1px solid rgba(56,183,200,0.55)" : "var(--border-default)" }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-4 bg-white/16" />
-
-          {/* Sort */}
+          {/* Status filter — collapses All / Winners / Failed / Unreviewed
+              into one control so the row isn't a wall of buttons */}
           <select
-            value={sort}
-            onChange={(e) => setSort(e.target.value as GallerySort)}
-            className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as GalleryFilter)}
+            className="h-8 px-2 font-mono text-[11px] uppercase tracking-widest text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
             style={{ border: "var(--border-default)" }}
           >
-            {SORT_OPTIONS.map((opt) => (
+            {FILTER_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value} className="bg-panel text-white">{opt.label}</option>
             ))}
           </select>
 
-          {/* Provider */}
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
-            style={{ border: "var(--border-default)" }}
-          >
-            <option value="" className="bg-panel text-white">All Providers</option>
-            {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
-              <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")} className="bg-panel text-white">{p}</option>
-            ))}
-          </select>
+          {/* Sort / provider / rating / count grouped on the right */}
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as GallerySort)}
+              className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+              style={{ border: "var(--border-default)" }}
+            >
+              {SORT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-panel text-white">{opt.label}</option>
+              ))}
+            </select>
 
-          <div className="w-px h-4 bg-white/16" />
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              className="h-8 px-2 font-mono text-[11px] text-soft-white bg-transparent rounded-sm focus:outline-none focus:border-cyan/50"
+              style={{ border: "var(--border-default)" }}
+            >
+              <option value="" className="bg-panel text-white">All Providers</option>
+              {SUPPORTED_CREATIVE_PROVIDERS.map((p) => (
+                <option key={p} value={p.toLowerCase().replace(/\s+/g, "_")} className="bg-panel text-white">{p}</option>
+              ))}
+            </select>
 
-          {/* Score filter */}
-          <div className="flex items-center gap-1">
-            {([0, 3, 4, 5] as const).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setMinScore(n)}
-                className={cn(
-                  "px-2.5 py-1 rounded-sm font-mono text-[10px] uppercase tracking-widest transition-precise",
-                  minScore === n ? "text-white bg-amber/15" : "text-readable hover:text-white hover:bg-white/5"
-                )}
-                style={{ border: minScore === n ? "1px solid rgba(223,168,58,0.6)" : "var(--border-default)" }}
-              >
-                {n === 0 ? "Any ★" : `${n}+★`}
-              </button>
-            ))}
+            <div className="w-px h-4 bg-white/16" />
+
+            <div className="flex items-center gap-1">
+              {([0, 3, 4, 5] as const).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setMinScore(n)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-sm font-mono text-[10px] uppercase tracking-widest transition-precise",
+                    minScore === n ? "text-white bg-amber/15" : "text-readable hover:text-white hover:bg-white/5"
+                  )}
+                  style={{ border: minScore === n ? "1px solid rgba(223,168,58,0.6)" : "var(--border-default)" }}
+                >
+                  {n === 0 ? "Any ★" : `${n}+★`}
+                </button>
+              ))}
+            </div>
+
+            <span className="font-mono text-[10px] text-muted">{displayResults.length} result{displayResults.length !== 1 ? "s" : ""}</span>
           </div>
-
-          <span className="ml-auto font-mono text-[10px] text-muted">{displayResults.length} result{displayResults.length !== 1 ? "s" : ""}</span>
         </div>
 
         {/* Batch action bar */}

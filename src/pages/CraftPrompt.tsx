@@ -2327,7 +2327,7 @@ export function CraftPrompt() {
       title={isEdit ? "Edit Prompt" : "Prompt Craft"}
       subtitle={projectContext ? `PROMPT CRAFT - ${projectContext.title}` : isEdit ? `EDITING VERSION ${originalVersion} — UPDATE OR FORK NEW VERSION` : "BUILD A PROVIDER-READY PROMPT"}
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(projectId ? `/projects/${projectId}` : isEdit && id ? `/library/${id}` : "/library")}>
             <ArrowLeft size={11} /> {projectId ? "Project" : isEdit ? "Cancel" : "Library"}
           </Button>
@@ -2589,7 +2589,7 @@ export function CraftPrompt() {
                     />
                   </div>
                 ))}
-                <div className="col-span-2 flex flex-col gap-1.5">
+                <div className="col-span-full flex flex-col gap-1.5">
                   <label className="system-label text-[12px] text-muted">REALISM NOTES</label>
                   <input
                     value={fields.realism}
@@ -3591,7 +3591,7 @@ export function CraftPrompt() {
               open={sectionOpen.inspirations}
               onOpenChange={setSectionOpenFor("inspirations")}
             >
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2">
                 {projectRefs.map((ref) => (
                   <button
                     key={ref.id}

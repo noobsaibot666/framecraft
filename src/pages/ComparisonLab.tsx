@@ -80,11 +80,13 @@ const TYPE_SECTIONS: { label: string; types: ComparisonType[] }[] = [
   { label: "Creative Direction", types: ["reference_result", "direction_result", "sref_sref"] },
 ];
 
-function ComparisonTypeButton({ typeId, selected, onSelect, wrapperClassName }: {
+function ComparisonTypeButton({ typeId, selected, onSelect, wrapperClassName, compact = false }: {
   typeId: ComparisonType;
   selected: boolean;
   onSelect: () => void;
   wrapperClassName?: string;
+  /** Dense horizontal chip for the in-session type switcher (vs. the tall card on the create screen). */
+  compact?: boolean;
 }) {
   const type = getComparisonDefinition(typeId);
   const Icon = TYPE_ICON[typeId];
@@ -94,13 +96,16 @@ function ComparisonTypeButton({ typeId, selected, onSelect, wrapperClassName }: 
         type="button"
         onClick={onSelect}
         className={cn(
-          "flex flex-1 flex-col items-center gap-2 px-3 py-3.5 rounded-sm text-center transition-precise",
+          "flex rounded-sm transition-precise",
+          compact
+            ? "items-center gap-1.5 px-2.5 py-1.5 text-left"
+            : "flex-1 flex-col items-center gap-2 px-3 py-3.5 text-center",
           selected ? "bg-cyan/10 text-white" : "text-readable hover:text-white hover:bg-white/5"
         )}
         style={{ border: selected ? "1px solid rgba(56,183,200,0.5)" : "var(--border-dim)" }}
       >
-        <Icon size={16} className={selected ? "text-cyan" : "text-readable/70"} />
-        <span className="font-mono text-[10px] tracking-wide leading-tight">{type.label}</span>
+        <Icon size={compact ? 12 : 16} className={cn("shrink-0", selected ? "text-cyan" : "text-readable/70")} />
+        <span className={cn("font-mono tracking-wide leading-tight", compact ? "text-[9px]" : "text-[10px]")}>{type.label}</span>
       </button>
     </Tooltip>
   );
@@ -1141,14 +1146,15 @@ export function ComparisonLab() {
         {/* Type toggle bar (Phase 187) */}
         <div className="flex flex-col gap-2">
           <span className="system-label">Comparison Type</span>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {COMPARISON_TYPES.map((type) => (
               <ComparisonTypeButton
                 key={type.id}
                 typeId={type.id}
                 selected={comparisonType === type.id}
                 onSelect={() => handleChangeType(type.id)}
-                wrapperClassName="relative flex w-24"
+                compact
+                wrapperClassName="relative flex"
               />
             ))}
           </div>
@@ -1303,8 +1309,8 @@ export function ComparisonLab() {
         </div>
 
         <div className={cn(
-          "grid gap-7 min-w-0",
-          showPicker ? "grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)]" : "grid-cols-1",
+          "grid gap-6 min-w-0",
+          showPicker ? "grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)]" : "grid-cols-1",
         )}>
 
         {/* Left: result picker */}
@@ -1354,10 +1360,10 @@ export function ComparisonLab() {
         )}
 
         {/* Main: comparison grid */}
-        <div className="flex-1 min-w-0">
+        <div className="flex flex-col gap-6 min-w-0">
           <div className={cn(
-            "grid gap-5",
-            layout === "2up" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4"
+            "grid gap-6",
+            layout === "2up" ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-2 2xl:grid-cols-4"
           )}>
             {displaySlots.map((slot, i) =>
               slot ? (

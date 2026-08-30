@@ -4,19 +4,50 @@ Local-first Tauri 2 desktop app for AI image/video prompt engineering. React 19 
 
 ---
 
-## Every release updates the self-served store too
+## Release delivery loop — all three channels, every time
 
-The self-served store (`alan-design.com/#/store`) is managed by a separate project, **Store Manager** (`/Users/alan/_localDEV/_creative/_store_manager`), not by anything in this repo. It's a real, running system (TrueNAS, always-on) with its own watch → review → publish pipeline — see its own `CLAUDE.md` and `docs/runbook.md` before touching it.
+A Framecraft release is not "done" until **all three** channels carry the same version: **(1) App Store** (via Transporter → App Store Connect), **(2) Store Manager** (the storefront's publish pipeline), **(3) the live storefront + licensing server** (`alan-design.com`). Nothing syncs these automatically — a release that stops after Transporter leaves the direct-sale channel selling the previous DMG under the same listing. Standing rule: whenever asked to "build for the App Store" / "raise the version", drive the whole loop.
 
-**Whenever a direct-sale version ships, it must also be published through Store Manager**, or the storefront keeps selling a stale build under the same listing. Nothing syncs this automatically.
+### Step 0 — version bump (one commit, four files)
 
-1. Run `bash scripts/deploy_direct_macos.sh` as usual — it builds, signs, notarizes, and staples, same as before. It does **not** copy the DMG into `licensing-server/releases/` anymore; the script's own final output tells you the Store Manager ingest path to use instead.
-2. Drop a `manifest.json` (see Store Manager's `docs/manifest-schema.md`) + the DMG into `/Volumes/Gaia/04_DEV/store-manager/ingest/Apps/framecraft/<version>/` — filename must be the fixed `Framecraft.dmg`, not version-suffixed, since `products.js`'s existing `framecraft` entry already points at that literal path and a republish of an already-registered slug leaves that file untouched (no-op), so the manifest's declared filename has to already match it.
-3. Within ~30s it appears in Store Manager's dashboard Inbox (`http://192.168.178.146:5180`) as `pending_review`. **A human reviews it — Dry-run first, then Publish. Don't script around this step**; it's a deliberate gate since Publish touches live Stripe records and rewrites `web_three`'s registry files.
-4. Confirm the dry-run says "reusing existing price" (Framecraft's existing Stripe product/price, `prod_V0Qaw4oUtqkKgN` / `price_1U0Pj9CsCSs3k4X1b8i25dz6`, is already seeded into Store Manager's database) — not creating a new one.
-5. Follow the deploy checklist Store Manager prints after Publish. See Store Manager's `docs/runbook.md` § "TrueNAS (production)" for known gotchas (git LFS not on the TrueNAS host PATH, the staging clone's `safe.directory` requirement, the real deploy path being `store-manager/app/` not `store-manager/`, and backend deploys to `web_three` being rsync-from-the-Mac via `deploy.sh`, never git-on-TrueNAS).
+`src-tauri/tauri.conf.json` `version`, `src-tauri/Cargo.toml` `version`, `package.json` `version` (marketing / `CFBundleShortVersionString`), **and** `CFBundleVersion` in `src-tauri/Info.plist` (the build number App Store Connect / Transporter key on — must be strictly higher than any prior upload). `Cargo.lock`'s `framecraft` entry follows on the next build; commit it too. A new App Store submission generally needs both a new marketing version *and* a new build number.
 
-This is entirely separate from the updater-manifest signing step (`TAURI_SIGNING_PRIVATE_KEY_PATH`, `releases-meta/framecraft.json`) — that powers the in-app auto-updater and isn't something Store Manager knows about or manages. Keep doing that step exactly as before; it doesn't change.
+### Step 1 — App Store `.pkg` (Claude builds; user uploads)
+
+`bash scripts/mac_sign_and_package_mas.sh` → `builds/Framecraft_SUBMISSION.pkg` (sandboxed, `com.alan.framecraft`, re-signed with `3rd Party Mac Developer Application` + `Installer`, `embedded.provisionprofile` embedded). Verify the **payload inside the `.pkg`** (a later `deploy_direct_macos.sh` run overwrites `target/release/bundle/macos/Framecraft.app`): `pkgutil --expand`, then check `CFBundleShortVersionString` / `CFBundleVersion`, `LSApplicationCategoryType` present, `ITSAppUsesNonExemptEncryption=false`, **no `get-task-allow`** in the signed entitlements, and the profile has **no `ProvisionedDevices`** (= distribution, not development). Then the user drags the `.pkg` into Transporter and sets the version + build in App Store Connect. Claude cannot do the Transporter/ASC part (Apple credentials).
+
+### Step 2 — direct DMG → Store Manager ingest (Claude builds + drops)
+
+`bash scripts/deploy_direct_macos.sh` → builds `--features direct-dist` with `TAURI_SIGNING_PRIVATE_KEY_PATH=secrets/framecraft-updater.key`, signs (Developer ID), notarizes (`notarytool --wait`), staples. Then create `/Volumes/Gaia/04_DEV/store-manager/ingest/Apps/framecraft/<version>/` containing:
+
+- the DMG copied to the **fixed name `Framecraft.dmg`** (not version-suffixed — `licensing-server/products.js`'s `framecraft` entry points at that literal path, and the manifest's declared filename must match it),
+- `manifest.json` (schema: Store Manager's `docs/manifest-schema.md`) — `productSlug: "framecraft"`, `category: "Apps"`, `fulfillment: "license"`, `version` = this release, `files.macos: "Framecraft.dmg"`, a `changelog`, `notifyExisting` (default `false`; set `true` only if existing buyers should get the "new version" email). Windows: only list `files.windows` if a matching `Framecraft.exe` for **this** version is also being dropped — otherwise macOS-only, and Windows joins this version's folder later.
+
+Write `manifest.json` with the Write tool, not a shell heredoc — the SMB mount fails heredoc redirects intermittently.
+
+### Step 3 — Dry-run → Publish (ALWAYS the user)
+
+Within ~30s the drop shows in the dashboard Inbox (`http://192.168.178.146:5180`) as `pending_review`. **The user runs Dry-run, then Publish — never scripted around.** Deliberate gate: Publish touches live Stripe and rewrites `web_three` registry files (`src/data/storeProducts.json`, `licensing-server/products.js`, `server.js`'s `ALLOWED_PRICE_IDS`). The dry-run must say **"reusing existing price"** — Framecraft's Stripe product/price `prod_V0Qaw4oUtqkKgN` / `price_1U0Pj9CsCSs3k4X1b8i25dz6` is already seeded — not creating a new one. `storeProducts.json`'s `framecraft` entry has **no version field**; the storefront is version-agnostic and simply serves whatever `actual/Framecraft.dmg` the pipeline last wrote, so a version bump needs no hand-edit of that file.
+
+### Step 4 — ship the `web_three` edits + deploy
+
+Published on the **TrueNAS** instance (the normal one), the `web_three` edits land in the NAS **staging clone** `/Volumes/Gaia/04_DEV/store-manager/web_three_staging/`, **not** the Mac checkout `/Users/alan/_localDEV/web_three`, and the DMG is copied to the real releases tree server-side. Claude can: read the staging clone's diff (reads over the SMB mount are safe; *writes* — `checkout`/`reset` — are not, do those over SSH on TrueNAS), port the same edits into the Mac `web_three` checkout, `git add`/`commit`/`git push` from the Mac (push from the Mac always — TrueNAS host has no `git-lfs` on PATH and its pre-push hook aborts).
+
+The deploy itself is **user-run**: no passwordless SSH key to `alan@192.168.178.146` exists from the Mac (`Permission denied (publickey)`), and the scripts prompt interactively for SSH + sudo passwords. Because `licensing-server/products.js` + `server.js` change, it needs the **full** deploy, not frontend-only:
+
+```bash
+cd /Users/alan/_localDEV/web_three && bash deploy.sh
+```
+
+(`bash deploy.sh` = frontend + backend; `npm run deploy:fast` / `bash deploy.sh --frontend-only` would miss the `licensing-server` changes.) It self-verifies `website-api`, `licensing-server`, and `/licensing/health` before exiting 0.
+
+### Step 5 — verify the loop is closed
+
+`curl -I https://alan-design.com` (expect `HTTP/2 200`), `curl -s https://alan-design.com/licensing/health` (expect `{"status":"active"}`), and confirm the storefront download's size/date matches the new `Framecraft_<version>_aarch64.dmg`. App Store side: the build appears in App Store Connect after processing, then Add for Review → Submit.
+
+### Separate, unchanged: the updater manifest
+
+The in-app auto-updater's Ed25519 signing (`TAURI_SIGNING_PRIVATE_KEY_PATH`, `releases-meta/framecraft.json`) is **not** something Store Manager knows about or manages — it's its own step. Note `scripts/deploy_direct_macos.sh` as configured does **not** emit a `.dmg.sig` (the direct config produces no updater artifacts) and this repo has no `releases-meta/` tree; if a release needs an updater-manifest bump, that is still a manual step done as before. `secrets/framecraft-updater.key` is gitignored and hand-copied only — never paste it into chat or email.
 
 ---
 

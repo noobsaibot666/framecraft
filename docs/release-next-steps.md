@@ -1,9 +1,16 @@
 # Framecraft — Release Next Steps
 
+> **Superseded for the recurring release flow.** The current end-to-end
+> delivery loop (version bump → App Store `.pkg` via Transporter → Store
+> Manager ingest → Dry-run/Publish → `web_three` deploy → verify) lives in
+> **`CLAUDE.md` § "Release delivery loop — all three channels, every time"**.
+> Follow that. The steps below are the **0.1.0 first-release** record and a
+> still-useful reference for Windows one-time toolchain setup; the
+> storefront/licensing-server steps here (§6–9) predate Store Manager and
+> the rsync-only `web_three/deploy.sh` rule — don't run them as written.
+
 **Status (2026-08-04): both platforms are fully built, signed, deployed, and
-verified live.** The only thing left in the whole release is Apple's App Review
-decision on the Mac App Store submission — nothing actionable left on either
-platform below. Kept as a historical runbook.
+verified live.** Kept as a historical runbook.
 
 ---
 

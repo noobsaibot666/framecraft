@@ -365,8 +365,8 @@ export function SREFLibrary() {
             <button key={t} type="button"
               onClick={() => { setTab(t); setShowAdd(false); }}
               className={cn("font-mono text-[9px] tracking-widest uppercase px-3 py-1.5 rounded-sm transition-precise",
-                tab === t ? "text-white" : "text-dim hover:text-muted")}
-              style={{ border: tab === t ? "var(--border-strong)" : "var(--border-dim)", background: tab === t ? "rgba(255,255,255,0.05)" : "transparent" }}>
+                tab === t ? "text-cyan" : "text-dim hover:text-muted")}
+              style={{ border: tab === t ? "1px solid rgba(56,183,200,0.55)" : "var(--border-dim)", background: tab === t ? "rgba(56,183,200,0.10)" : "transparent" }}>
               {t === "srefs" ? `SREFs (${srefs.length})` : `Profiles (${profiles.length})`}
             </button>
           ))}

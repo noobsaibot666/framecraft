@@ -103,7 +103,7 @@ function PromptCardThumb({ src }: { src: string }) {
   const { src: displaySrc, onError } = useImageDisplaySrc(src);
   if (!displaySrc) return null;
   return (
-    <div className="w-full h-32 rounded-sm overflow-hidden mb-1 -mt-1 relative">
+    <div className="w-full h-44 rounded-sm overflow-hidden mb-1 -mt-1 relative">
       {isVideoPath(src)
         ? <video src={displaySrc} muted playsInline preload="metadata" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />
         : <img src={displaySrc} alt="" referrerPolicy="no-referrer" onError={onError} loading="lazy" decoding="async" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-precise" />}
@@ -151,7 +151,7 @@ function PendingThumbnail({ onRetry }: { onRetry: () => Promise<void> }) {
       onClick={handleClick}
       disabled={retrying}
       title="Thumbnail failed to load — click to retry"
-      className="w-full h-32 rounded-sm mb-1 -mt-1 flex flex-col items-center justify-center gap-1.5 transition-precise hover:border-cyan/40"
+      className="w-full h-44 rounded-sm mb-1 -mt-1 flex flex-col items-center justify-center gap-1.5 transition-precise hover:border-cyan/40"
       style={{ border: "1px dashed rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.02)" }}
     >
       <RefreshCw size={13} className={cn("text-dim/50", retrying && "animate-spin")} />

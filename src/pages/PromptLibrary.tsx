@@ -91,10 +91,10 @@ const STATUS_FILTER_OPTIONS = [
 function LibraryStat({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
     <div
-      className="flex min-w-30 flex-col gap-1 rounded-[6px] px-4 py-3"
+      className="flex min-w-0 flex-col gap-1 rounded-[6px] px-4 py-3"
       style={{ border: accent ? "1px solid rgba(56,183,200,0.38)" : "var(--border-default)", background: accent ? "rgba(56,183,200,0.08)" : "rgba(255,255,255,0.045)" }}
     >
-      <span className="font-mono text-[18px] font-medium leading-none text-white tabular-nums">{value}</span>
+      <span className="block truncate font-mono text-[18px] font-medium leading-none text-white tabular-nums" title={String(value)}>{value}</span>
       <span className="font-mono text-[10px] uppercase tracking-widest text-readable">{label}</span>
     </div>
   );
@@ -756,31 +756,31 @@ export function PromptLibrary() {
       }
     >
       <div className="mb-8 flex flex-col gap-5 rounded-card p-5" style={{ border: "var(--border-default)", background: "var(--surface-card)" }}>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[7px] border border-cyan/35 bg-cyan/8 text-cyan">
-              <Sparkles size={18} />
-            </div>
-            <div className="flex min-w-0 flex-col gap-2">
-              <span className="font-sans text-[18px] font-semibold text-white">Library overview</span>
-              <span className="font-mono text-[13px] leading-relaxed text-readable">
-                Scan saved prompts by quality, provider, result coverage, and reuse potential.
-              </span>
-            </div>
+        {/* Header and stats are stacked, not a justified flex-row: the
+            description and the stat cluster have very different natural
+            heights, so sharing a row with xl:items-center left the short
+            header floating mid-column with large empty gaps, and
+            justify-between let the description starve the stats into 3
+            wrapped rows. A full-width responsive grid below the header
+            keeps the cards aligned and the title anchored at the top. */}
+        <div className="flex min-w-0 items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[7px] border border-cyan/35 bg-cyan/8 text-cyan">
+            <Sparkles size={18} />
           </div>
-          {/* flex-wrap, not a rigid grid-cols-5 — the fixed 5-column grid
-              forced each 120px-min-width card into a track as narrow as
-              89px whenever this row shared space with the description text
-              beside it (any viewport in the xl:flex-row range), causing the
-              cards to overlap instead of shrinking. Wrapping is safe here:
-              cards reflow onto a second line instead of overlapping. */}
-          <div className="flex flex-wrap gap-3">
-            <LibraryStat label="Prompts" value={metrics.total} accent />
-            <LibraryStat label="Winners" value={metrics.winners} />
-            <LibraryStat label="Recipes" value={metrics.recipes} />
-            <LibraryStat label="Results" value={metrics.resultCount} />
-            <LibraryStat label="Top provider" value={metrics.topProvider?.toUpperCase() ?? "-"} />
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="font-sans text-[18px] font-semibold text-white">Library overview</span>
+            <span className="font-mono text-[13px] leading-relaxed text-readable">
+              Scan saved prompts by quality, provider, result coverage, and reuse potential.
+            </span>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <LibraryStat label="Prompts" value={metrics.total} accent />
+          <LibraryStat label="Winners" value={metrics.winners} />
+          <LibraryStat label="Recipes" value={metrics.recipes} />
+          <LibraryStat label="Results" value={metrics.resultCount} />
+          <LibraryStat label="Top provider" value={metrics.topProvider?.toUpperCase() ?? "-"} />
         </div>
 
         <div className="flex flex-col gap-3">

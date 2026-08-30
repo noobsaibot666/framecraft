@@ -180,10 +180,10 @@ export function ProjectExport() {
         </Button>
       }
     >
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
 
         {/* Left: settings */}
-        <div className="w-[260px] shrink-0 flex flex-col gap-5">
+        <div className="w-full shrink-0 flex flex-col gap-5 lg:w-65">
 
           {/* Project stats */}
           <div className="flex flex-col gap-0">

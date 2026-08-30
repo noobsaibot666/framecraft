@@ -236,7 +236,7 @@ function ComparePanel({ a, b }: { a: VersionNode; b: VersionNode }) {
               const aVal = String((a[fieldKey] as string | number | undefined) ?? "—");
               const bVal = String((b[fieldKey] as string | number | undefined) ?? "—");
               return (
-                <div key={field} className="grid grid-cols-[100px_1fr_1fr] gap-3 items-start">
+                <div key={field} className="grid grid-cols-[100px_minmax(0,1fr)_minmax(0,1fr)] gap-3 items-start">
                   <span className="font-mono text-[8px] text-dim/50 tracking-widest uppercase pt-0.5">
                     {metaLabel[field] ?? field}
                   </span>
@@ -382,7 +382,7 @@ export function LineageView() {
         </div>
       )}
 
-      <div className={cn("grid gap-6", compareMode ? "grid-cols-[280px_1fr]" : "grid-cols-[280px_1fr]")}>
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
 
         {/* Left: version tree */}
         <div className="flex flex-col gap-2">

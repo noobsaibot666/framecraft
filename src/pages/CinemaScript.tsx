@@ -3,8 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, Copy, History, Sparkles, Wand2, X } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
-import { ProTipPanel } from "@/components/cinema/ProTipPanel";
+import { CinemaStageHeader } from "@/components/cinema/CinemaStageHeader";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { QualitySelector } from "@/components/ui/QualitySelector";
 import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
@@ -292,12 +291,7 @@ export function CinemaScript() {
     <PageContainer
       title={project.title}
       subtitle="SCRIPT STUDIO"
-      action={
-        <div className="flex items-center gap-3">
-          <CinemaStageTabs projectId={id} active="script" nextStage={project.script_status === "approved" ? "assets" : undefined} />
-          <ProTipPanel stage="script" />
-        </div>
-      }
+      action={<CinemaStageHeader projectId={id} active="script" nextStage={project.script_status === "approved" ? "assets" : undefined} />}
     >
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
         {/* Left column: idea + Q&A + model */}

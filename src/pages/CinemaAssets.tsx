@@ -3,8 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ChevronDown, Copy, Download, FolderTree as FolderTreeIcon, Image as ImageIcon, LayoutGrid, Layers, Lock, Pipette, Plus, Sparkles, SquareStack, Star, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
-import { ProTipPanel } from "@/components/cinema/ProTipPanel";
+import { CinemaStageHeader } from "@/components/cinema/CinemaStageHeader";
 import { ScriptPreviewPanel } from "@/components/cinema/ScriptPreviewPanel";
 import { FolderTree } from "@/components/cinema/FolderTree";
 import { AssetPromptComposer } from "@/components/cinema/AssetPromptComposer";
@@ -357,31 +356,29 @@ export function CinemaAssets() {
     <PageContainer
       title={project.title}
       subtitle="ASSET PRODUCTION"
-      action={
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-sm border border-white/14 overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setViewMode("composer")}
-              className={cn("h-8 px-3 flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase transition-precise",
-                viewMode === "composer" ? "bg-cyan/10 text-cyan" : "text-readable hover:text-white")}
-            >
-              <SquareStack size={12} /> Composer
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("canvas")}
-              className={cn("h-8 px-3 flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase transition-precise",
-                viewMode === "canvas" ? "bg-blue/12 text-blue" : "text-readable hover:text-white")}
-            >
-              <LayoutGrid size={12} /> Moodboard
-            </button>
-          </div>
-          <CinemaStageTabs projectId={id} active="assets" />
-          <ProTipPanel stage="assets" provider={project.image_provider} />
-        </div>
-      }
+      action={<CinemaStageHeader projectId={id} active="assets" provider={project.image_provider} />}
     >
+      <div className="flex flex-col gap-4">
+        {/* Composer / Moodboard is a per-stage view toggle — kept in the body
+            so it doesn't sit in front of the Script / Assets / Scenes stepper */}
+        <div className="flex items-center self-start rounded-sm border border-white/14 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode("composer")}
+            className={cn("h-8 px-3 flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase transition-precise",
+              viewMode === "composer" ? "bg-cyan/10 text-cyan" : "text-readable hover:text-white")}
+          >
+            <SquareStack size={12} /> Composer
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("canvas")}
+            className={cn("h-8 px-3 flex items-center gap-1.5 font-mono text-[10px] tracking-widest uppercase transition-precise",
+              viewMode === "canvas" ? "bg-blue/12 text-blue" : "text-readable hover:text-white")}
+          >
+            <LayoutGrid size={12} /> Moodboard
+          </button>
+        </div>
       {viewMode === "canvas" ? (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
@@ -708,6 +705,7 @@ export function CinemaAssets() {
         </div>
       </div>
       )}
+      </div>
     </PageContainer>
   );
 }

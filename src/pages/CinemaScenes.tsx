@@ -3,8 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowDown, ArrowUp, CheckCircle2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { CinemaStageTabs } from "@/components/cinema/CinemaStageTabs";
-import { ProTipPanel } from "@/components/cinema/ProTipPanel";
+import { CinemaStageHeader } from "@/components/cinema/CinemaStageHeader";
 import { SceneTimeline } from "@/components/cinema/SceneTimeline";
 import { getCinemaProjectById, nextCinemaProjectStatus, updateCinemaProject } from "@/lib/cinemaProjects";
 import {
@@ -179,15 +178,7 @@ export function CinemaScenes() {
     <PageContainer
       title={project.title}
       subtitle="SCENE GENERATION"
-      action={
-        <div className="flex items-center gap-3">
-          <Button variant={project.status === "complete" ? "muted" : "accent"} size="xs" onClick={handleToggleComplete}>
-            <CheckCircle2 size={11} /> {project.status === "complete" ? "Reopen" : "Mark Complete"}
-          </Button>
-          <CinemaStageTabs projectId={id} active="scenes" />
-          <ProTipPanel stage="scenes" provider={project.video_provider} />
-        </div>
-      }
+      action={<CinemaStageHeader projectId={id} active="scenes" provider={project.video_provider} />}
     >
       <div className="flex flex-col gap-6">
           <div className="flex items-center gap-2">
@@ -207,6 +198,9 @@ export function CinemaScenes() {
             />
             <Button variant="ghost" size="xs" onClick={handleAddScene} disabled={!newTitle.trim()}>
               <Plus size={10} /> Add Scene
+            </Button>
+            <Button variant={project.status === "complete" ? "muted" : "accent"} size="xs" onClick={handleToggleComplete}>
+              <CheckCircle2 size={11} /> {project.status === "complete" ? "Reopen" : "Mark Complete"}
             </Button>
           </div>
 

@@ -90,7 +90,7 @@ Same deploy pattern as Darkwave/CD Suite's docs: rebuild locally (`npm run build
 store-assets/framecraft-appstore-icon-1024.png
 ```
 
-Generated from the real source art (`src/assets/icon/appicon.png`, 1254×1254), flattened onto an opaque `#0A0A0A` background (matches the app's own `--color-black`) and resized to exactly 1024×1024 — same squircle/padding proportions as the actual shipped bundle icon (`src-tauri/icons/icon.png`), just with the transparency required to be filled in since Apple's marketing icon can't carry an alpha channel. Give it a visual check before uploading.
+Generate from the current source art (`src/assets/icon/framecraft.png`, 1024×1024 Default appearance — the flat raster behind the Icon Composer document `src/assets/icon/AppIcon.icon`), flattened onto an opaque `#0A0A0A` background (matches the app's own `--color-black`), resized to exactly 1024×1024, alpha stripped (Apple's marketing icon can't carry one). Give it a visual check before uploading.
 
 ## What's-New text (first submission)
 

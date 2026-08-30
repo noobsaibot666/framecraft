@@ -74,13 +74,24 @@ Dev mode (Vite browser) uses in-memory `_dev*` stores. Vitest runs in dev mode �
 
 ---
 
-## App icon generation (macOS)
+## App icon generation
 
-- **Source art (`src/assets/icon/framecraft.png`) must fill its canvas edge-to-edge — never pad or inset it before generating icon sizes.** This has been a recurring mistake: the art already has the rounded-square/squircle shape baked in at full bleed, so adding a transparent margin around it (e.g. "shrink to ~71% content" to mimic older macOS icon conventions) double-insets it and produces a visible grey/blank border in the Dock/Finder. Before regenerating, check with `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` and visually confirm the art touches all four edges. Only add padding if the source is genuinely a bare glyph with no background shape — ask the user first rather than assuming a percentage.
-- `npx tauri icon src/assets/icon/framecraft.png -o src-tauri/icons` regenerates the full desktop set (icns/ico/PNGs/Windows tiles) from one source in one step — but it also writes `ios/` and `android/` subfolders this desktop-only project doesn't use and a stray `64x64.png` not referenced by `tauri.conf.json`; delete those after running it. Cross-check the output against `tauri.conf.json`'s `bundle.icon` array (currently `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`).
-- Manual fallback: use `sips` for PNG resizing (built-in, no ImageMagick needed)
-- Manual fallback: use `iconutil` for `.icns` — iconset file names **must** be `icon_16x16.png`, not `icon_16.png`
-- Manual fallback: use Python struct for `.ico` — Pillow's `ICO` save produces a broken file (574 bytes); write the binary header manually
+The icon has **two representations** that must be regenerated together whenever it changes:
+
+**1. Classic set (`src-tauri/icons/*`) — Windows, and macOS < 26.** Generated from the flat 1024 raster `src/assets/icon/framecraft.png` (the light/Default appearance):
+
+- `npx tauri icon src/assets/icon/framecraft.png -o src-tauri/icons` writes the full desktop set (icns/ico/PNGs/Windows `Square*Logo` tiles) in one step — but it also writes `ios/` and `android/` subfolders this desktop-only project doesn't use and a stray `64x64.png` not referenced by `tauri.conf.json`; delete those three after running it. Cross-check against `tauri.conf.json`'s `bundle.icon` array (`32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`).
+- **The flat raster (`framecraft.png`) and any hand-built PNG must fill the canvas edge-to-edge — no transparent margin.** Recurring past mistake: insetting the already-squircle art produces a grey Dock/Finder border. `sips -g pixelWidth -g pixelHeight -g hasAlpha <file>` + eyeball all four edges before regenerating. (This does **not** apply to the `.icon` bundle below — Icon Composer owns the mask there, and its exports legitimately have transparent corners.)
+- Windows has no light/dark icon variants — the `.ico` is always the Default appearance. That's expected, not a gap.
+
+**2. Appearance-aware `Assets.car` (`src-tauri/icons/Assets.car`) — macOS 26+ light / dark / tinted Dock icon.** Tauri only bundles a single-appearance `.icns`, so this is a separate compiled artifact:
+
+- Source: `src/assets/icon/AppIcon.icon/` — an Icon Composer document (vendored from Marketing's `01_Icons/ICONS.icon`). Layered (`icon.json` + `Assets/framecraft.svg`); Icon Composer derives dark/tinted automatically from the one definition.
+- `bash scripts/build_appicon_assets.sh` runs `actool` (Xcode 26+) on it → `src-tauri/icons/Assets.car` (contains `NSAppearanceNameAqua` / `NSAppearanceNameDarkAqua` / `ISAppearanceTintable` stacks) and refreshes `icon.icns` to match the light rendering. **Commit both outputs** — the Windows build machine has no `actool` and uses the committed `Assets.car` as-is.
+- Wired in without touching the deploy scripts: `bundle.macOS.files` in `tauri.conf.json` copies `icons/Assets.car` to `Contents/Resources/Assets.car` *before* `tauri build` signs the app, and `src-tauri/Info.plist` sets `CFBundleIconName = AppIcon`. macOS 26 prefers that; older macOS ignores it and uses `CFBundleIconFile` (`icon.icns`).
+- The current Icon Composer exports are iOS-proportioned (squircle fills more of the frame than a standard macOS icon), so the Dock icon sits slightly larger than neighbouring Mac apps. Acceptable for now; a macOS-appearance export from Icon Composer, or ~10% padding on `icon.icns` only, would normalize it.
+
+**Manual fallbacks** (classic set only): `sips` for PNG resizing (built-in); `iconutil` for `.icns` — iconset names **must** be `icon_16x16.png` not `icon_16.png`; Python `struct` for `.ico` — Pillow's `ICO` save produces a broken 574-byte file, write the header manually.
 
 ---
 

@@ -167,7 +167,7 @@ function ComparisonSlot({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-card overflow-hidden transition-precise relative",
+        "flex flex-col min-w-0 rounded-card overflow-hidden transition-precise relative",
         slot.isWinner && "ring-1 ring-amber/55",
         slot.isRejected && "opacity-50"
       )}
@@ -947,6 +947,10 @@ export function ComparisonLab() {
   const filledSlots = slots.filter(Boolean).length;
   const selectedResultIds = new Set(slots.filter(Boolean).map((s) => s!.result.result_id));
   const displaySlots = layout === "2up" ? slots.slice(0, 2) : slots;
+  // The left picker only renders with a project context or imported results.
+  // When it's absent the comparison grid must take the full width — otherwise
+  // it collapses into the (now empty) 340px picker track and the cards shrink.
+  const showPicker = availableResults.length > 0 || Boolean(projectId);
   const comparisonSummary = summarizeComparisonSlots(slots);
   const slotRoles = getComparisonRoles(comparisonType, displaySlots.length);
 
@@ -1298,10 +1302,13 @@ export function ComparisonLab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)] gap-7 min-w-0">
+        <div className={cn(
+          "grid gap-7 min-w-0",
+          showPicker ? "grid-cols-1 xl:grid-cols-[340px_minmax(0,1fr)]" : "grid-cols-1",
+        )}>
 
         {/* Left: result picker */}
-        {(availableResults.length > 0 || projectId) && (
+        {showPicker && (
           <div className="flex flex-col gap-5 min-w-0">
             <button
               type="button"

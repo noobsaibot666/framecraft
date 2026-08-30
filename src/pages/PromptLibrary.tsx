@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Search, Copy, Star, Trash2, ChevronDown, ChevronUp, LayoutGrid, LayoutList, ListPlus, Sparkles, ImageOff, CheckSquare, X, Download, RefreshCw, Upload } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Badge, ProviderBadge, RiskBadge } from "@/components/ui/Badge";
 import { DotMatrix } from "@/components/ui/DotMatrix";
 import { usePromptStore } from "@/stores/usePromptStore";
@@ -783,37 +782,22 @@ export function PromptLibrary() {
           <LibraryStat label="Top provider" value={metrics.topProvider?.toUpperCase() ?? "-"} />
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="relative xl:max-w-100">
-            <Search
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-readable pointer-events-none"
-            />
-            <Input
-              placeholder="Search prompts..."
-              className="pl-9 min-w-65"
-              value={searchVal}
-              onChange={(e) => handleSearch(e.target.value)}
-            />
-          </div>
-
-          {/* auto-fit wraps filters onto additional rows instead of overflowing
-              the viewport when the available width can't fit all 6 columns */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(128px,1fr))]">
-            <NativeSelect value={filters.provider ?? ""} onChange={(v) => setFilters({ provider: (v as Provider) || undefined })} options={PROVIDER_OPTIONS} />
-            <NativeSelect value={filters.category ?? ""} onChange={(v) => setFilters({ category: (v as Category) || undefined })} options={CATEGORY_OPTIONS} />
-            <NativeSelect value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
-            <NativeSelect value={filters.minRating != null ? String(filters.minRating) : ""} onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })} options={RATING_FILTER_OPTIONS} />
-            <NativeSelect value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""} onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })} options={AI_RISK_FILTER_OPTIONS} />
-            <NativeSelect
-              value={statusFilter}
-              onChange={(v) => setFilters({
-                isWinner: v === "winner" || undefined,
-                isFailed: v === "failed" || undefined,
-              })}
-              options={STATUS_FILTER_OPTIONS}
-            />
-          </div>
+        {/* auto-fit wraps filters onto additional rows instead of overflowing
+            the viewport when the available width can't fit all 6 columns */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(128px,1fr))]">
+          <NativeSelect value={filters.provider ?? ""} onChange={(v) => setFilters({ provider: (v as Provider) || undefined })} options={PROVIDER_OPTIONS} />
+          <NativeSelect value={filters.category ?? ""} onChange={(v) => setFilters({ category: (v as Category) || undefined })} options={CATEGORY_OPTIONS} />
+          <NativeSelect value={sortBy} onChange={(v) => setSortBy(v as SortOption)} options={SORT_OPTIONS} />
+          <NativeSelect value={filters.minRating != null ? String(filters.minRating) : ""} onChange={(v) => setFilters({ minRating: v ? Number(v) : undefined })} options={RATING_FILTER_OPTIONS} />
+          <NativeSelect value={filters.maxAiRisk != null ? String(filters.maxAiRisk) : ""} onChange={(v) => setFilters({ maxAiRisk: v ? Number(v) : undefined })} options={AI_RISK_FILTER_OPTIONS} />
+          <NativeSelect
+            value={statusFilter}
+            onChange={(v) => setFilters({
+              isWinner: v === "winner" || undefined,
+              isFailed: v === "failed" || undefined,
+            })}
+            options={STATUS_FILTER_OPTIONS}
+          />
         </div>
 
         {/* Clear All Filters */}
@@ -827,10 +811,25 @@ export function PromptLibrary() {
           </div>
         )}
 
-        {/* Tag filter chips */}
-        {(uniqueTags.length > 0 || noResultsOnly || originalsOnly) && (
-          <div className="flex flex-col gap-2">
+        {/* Search + tag filters — one compact row */}
+        <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-1.5">
+              <div className="relative">
+                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-dim/50 pointer-events-none" />
+                <input
+                  placeholder="Search…"
+                  value={searchVal}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="h-7 w-40 pl-6 pr-6 font-mono text-[10px] tracking-wide text-white placeholder:text-dim/50 bg-transparent rounded-sm focus:outline-none focus:border-white/30 transition-precise"
+                  style={{ border: "var(--border-dim)" }}
+                />
+                {searchVal && (
+                  <button type="button" onClick={() => handleSearch("")}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-dim/50 hover:text-white transition-precise">
+                    <X size={9} />
+                  </button>
+                )}
+              </div>
               <button type="button" onClick={() => setOriginalsOnly(!originalsOnly)}
                 className={cn("font-mono text-[10px] tracking-widest uppercase px-2 py-1 rounded-sm transition-precise flex items-center gap-1",
                   originalsOnly ? "text-white" : "text-dim/60 hover:text-muted")}
@@ -873,8 +872,7 @@ export function PromptLibrary() {
                 ))}
               </div>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Batch toolbar */}

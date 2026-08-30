@@ -542,7 +542,7 @@ export function ProjectBoard() {
         </div>
       )}
       {deliverables.length === 0 ? (
-        <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+        <div className="grid grid-cols-1 gap-5 items-start lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex flex-col items-center justify-center py-16 gap-3"
             style={{ border: "2px dashed rgba(215,25,33,0.18)", borderRadius: "8px", background: "rgba(215,25,33,0.025)" }}>
           <span className="font-mono text-[13px] text-red">Start with one planned deliverable.</span>

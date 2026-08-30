@@ -85,7 +85,7 @@ export function RecipeApply() {
         </Button>
       }
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(280px,360px)] gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
         <div className="flex flex-col gap-3">
           <span className="system-label">SLOTS</span>
           {slots.length === 0 ? (

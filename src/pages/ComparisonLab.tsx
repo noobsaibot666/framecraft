@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Fragment } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowLeft, Star, AlertTriangle, Check, X,
@@ -990,21 +990,28 @@ export function ComparisonLab() {
               <span className="font-mono text-[10.5px] text-dim/50">Pick what you're judging — hover an option to see what it's for.</span>
             </div>
 
-            <div className="flex flex-col gap-4">
-              {TYPE_SECTIONS.map((section) => (
-                <div key={section.label} className="flex flex-col gap-1.5">
-                  <span className="font-mono text-[9px] tracking-widest uppercase text-dim/45">{section.label}</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {section.types.map((typeId) => (
-                      <ComparisonTypeButton
-                        key={typeId}
-                        typeId={typeId}
-                        selected={comparisonType === typeId}
-                        onSelect={() => setComparisonType(typeId)}
-                      />
-                    ))}
-                  </div>
-                </div>
+            {/* One grid for every section so all option cards share a
+                column width and stay aligned. Section labels span the full
+                row; the two-card sections leave a trailing empty cell
+                rather than stretching their cards wider than the rest. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {TYPE_SECTIONS.map((section, i) => (
+                <Fragment key={section.label}>
+                  <span className={cn(
+                    "col-span-full font-mono text-[9px] tracking-widest uppercase text-dim/45",
+                    i > 0 && "mt-3"
+                  )}>
+                    {section.label}
+                  </span>
+                  {section.types.map((typeId) => (
+                    <ComparisonTypeButton
+                      key={typeId}
+                      typeId={typeId}
+                      selected={comparisonType === typeId}
+                      onSelect={() => setComparisonType(typeId)}
+                    />
+                  ))}
+                </Fragment>
               ))}
             </div>
 

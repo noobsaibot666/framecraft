@@ -402,7 +402,7 @@ export function SREFLibrary() {
         </div>
       ) : tab === "srefs" ? (
         filteredSREFs.length > 0 ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
             {filteredSREFs.map((sref) => (
               <SREFCard key={sref.id} sref={sref} onRatingChange={handleSREFRating} onDelete={handleDeleteSREF} />
             ))}
@@ -421,7 +421,7 @@ export function SREFLibrary() {
         )
       ) : (
         filteredProfiles.length > 0 ? (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
             {filteredProfiles.map((profile) => (
               <ProfileCard key={profile.id} profile={profile} onRatingChange={handleProfileRating} onDelete={handleDeleteProfile} />
             ))}

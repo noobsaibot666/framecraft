@@ -300,7 +300,7 @@ export function RecipeLibrary() {
           <span className="font-mono text-[10px] text-dim/40">No recipes match your filters.</span>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 2xl:grid-cols-3">
           {filtered.map((recipe) => (
             <RecipeCard
               key={recipe.id}
